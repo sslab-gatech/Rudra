@@ -1,10 +1,21 @@
 #![feature(rustc_private)]
 
+extern crate rustc;
 extern crate rustc_driver;
 extern crate rustc_interface;
 
+use rustc::hir::def_id::LOCAL_CRATE;
 use rustc_driver::Compilation;
 use rustc_interface::interface;
+
+// Insert rustc arguments at the beginning of the argument list that Crux wants to be
+// set per default, for maximal validation power.
+static CRUX_DEFAULT_ARGS: &[&str] = &[
+    "-Zalways-encode-mir",
+    "-Zmir-emit-retag",
+    "-Zmir-opt-level=0",
+    "--cfg=crux",
+];
 
 /// Returns the "default sysroot" that Crux will use if no `--sysroot` flag is set.
 /// Should be a compile-time constant.
@@ -37,14 +48,21 @@ impl CruxCompilerCalls {
 }
 
 impl rustc_driver::Callbacks for CruxCompilerCalls {
-    fn after_parsing(&mut self, _compiler: &interface::Compiler) -> Compilation {
-        println!("after parsing");
-        Compilation::Continue
-    }
-
-    fn after_analysis(&mut self, _compiler: &interface::Compiler) -> Compilation {
+    fn after_analysis(&mut self, compiler: &interface::Compiler) -> Compilation {
         println!("after analysis");
-        Compilation::Continue
+        compiler.session().abort_if_errors();
+
+        compiler.global_ctxt().unwrap().peek_mut().enter(|tcx| {
+            println!(
+                "Output file name: {}",
+                tcx.output_filenames(LOCAL_CRATE).filestem()
+            );
+            // TODO: print modules
+            // TODO: print functions
+        });
+        compiler.session().abort_if_errors();
+
+        Compilation::Stop
     }
 }
 
@@ -63,6 +81,9 @@ fn main() {
             rustc_args.push(sysroot);
         }
     }
+
+    // Finally, add the default flags all the way in the beginning, but after the binary name.
+    rustc_args.splice(1..1, CRUX_DEFAULT_ARGS.iter().map(ToString::to_string));
 
     dbg!(&rustc_args);
 
