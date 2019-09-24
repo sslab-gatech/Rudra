@@ -4,9 +4,12 @@ extern crate rustc;
 extern crate rustc_driver;
 extern crate rustc_interface;
 
-use rustc::hir::def_id::LOCAL_CRATE;
+mod syntax;
+
 use rustc_driver::Compilation;
 use rustc_interface::interface;
+
+use syntax::SyntaxVisitor;
 
 // Insert rustc arguments at the beginning of the argument list that Crux wants to be
 // set per default, for maximal validation power.
@@ -20,6 +23,7 @@ static CRUX_DEFAULT_ARGS: &[&str] = &[
 /// Returns the "default sysroot" that Crux will use if no `--sysroot` flag is set.
 /// Should be a compile-time constant.
 fn compile_time_sysroot() -> Option<String> {
+    // option_env! is replaced to a constant at compile time
     if option_env!("RUSTC_STAGE").is_some() {
         // This is being built as part of rustc, and gets shipped with rustup.
         // We can rely on the sysroot computation in librustc.
@@ -49,16 +53,15 @@ impl CruxCompilerCalls {
 
 impl rustc_driver::Callbacks for CruxCompilerCalls {
     fn after_analysis(&mut self, compiler: &interface::Compiler) -> Compilation {
-        println!("after analysis");
         compiler.session().abort_if_errors();
 
+        println!("Input file name: {}", compiler.input().source_name());
+        println!("Crate name: {}", compiler.crate_name().unwrap().peek_mut());
+
         compiler.global_ctxt().unwrap().peek_mut().enter(|tcx| {
-            println!(
-                "Output file name: {}",
-                tcx.output_filenames(LOCAL_CRATE).filestem()
-            );
-            // TODO: print modules
-            // TODO: print functions
+            let mut visitor = SyntaxVisitor::new(tcx);
+            visitor.collect_functions();
+            dbg!(visitor.vec());
         });
         compiler.session().abort_if_errors();
 

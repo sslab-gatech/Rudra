@@ -1,0 +1,55 @@
+Function rustc_driver::run_compiler(
+    at_args: &[String],
+    callbacks: &mut (dyn Callbacks + Send),
+    file_loader: Option<Box<dyn FileLoader + Send + Sync>>,
+    emitter: Option<Box<dyn Write + Send>>
+)
+
+
+Struct rustc_interface::interface::Compiler
+
+    pub fn session(&self) -> &Lrc<Session>
+
+    pub fn parse(&self) -> Result<&Query<Crate>>
+
+    pub fn global_ctxt(&self) -> Result<&Query<BoxedGlobalCtxt>>
+
+
+Struct rustc_interface::passes::BoxedGlobalCtxt
+
+    pub fn enter<F, R>(&mut self, f: F) -> R
+    where
+        F: for<'tcx> FnOnce(TyCtxt<'tcx>) -> R
+
+
+Struct rustc::ty::GlobalCtxt
+    queries: Queries<'tcx>
+
+    pub fn enter_local<F, R>(&'tcx self, f: F) -> R
+    where
+        F: FnOnce(TyCtxt<'tcx>) -> R,
+
+
+Struct rustc::ty::context::TyCtxt
+    The central data structure of the compiler. It stores references to the various arenas and also houses the results of the various compiler queries that have been performed. See the rustc guide for more details.
+
+    pub fn is_mir_available(self, key: DefId) -> bool
+
+    pub fn type_of(self, key: DefId) -> Ty<'tcx>
+
+    pub fn hir(self) -> &'tcx Map<'tcx>
+
+    pub fn optimized_mir(self, key: DefId) -> &'tcx Body<'tcx>
+
+    pub fn promoted_mir(self, key: DefId) -> &'tcx IndexVec<Promoted, Body<'tcx>>
+
+
+Struct rustc::hir::map::Map
+    Represents a mapping from NodeIds to AST elements and their parent NodeIds.
+
+    pub fn visit_item_likes_in_module<V>(&self, module: DefId, visitor: &mut V)
+    where
+        V: ItemLikeVisitor<'hir>,
+
+
+Trait rustc::hir::itemlikevisit::ItemLikeVisitor
