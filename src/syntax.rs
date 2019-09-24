@@ -2,16 +2,35 @@ use rustc::hir::{self, intravisit, ImplItemKind, ItemKind, TraitItemKind};
 use rustc::ty::TyCtxt;
 
 #[derive(Debug)]
-pub enum FunctionType {
-    FreeFn(hir::BodyId),
-    ProvidedTraitFn(hir::BodyId),
-    ImplFn(hir::BodyId),
+pub enum FunctionSignature {
+    FreeFn,
+    ProvidedTraitFn,
+    ImplFn,
+}
+
+#[derive(Debug)]
+pub struct FunctionMemo {
+    sig: FunctionSignature,
+    header: hir::FnHeader,
+    body_id: hir::BodyId,
+    contains_unsafe: bool,
+}
+
+impl FunctionMemo {
+    fn new(sig: FunctionSignature, header: hir::FnHeader, body_id: hir::BodyId) -> Self {
+        FunctionMemo {
+            sig,
+            header,
+            body_id,
+            contains_unsafe: false,
+        }
+    }
 }
 
 pub struct SyntaxVisitor<'tcx> {
     tcx: TyCtxt<'tcx>,
-    visiting: Option<(FunctionType, bool)>,
-    vec: Vec<(FunctionType, bool)>,
+    visiting: Option<FunctionMemo>,
+    vec: Vec<FunctionMemo>,
 }
 
 impl<'tcx> SyntaxVisitor<'tcx> {
@@ -31,7 +50,7 @@ impl<'tcx> SyntaxVisitor<'tcx> {
             .visit_all_item_likes(&mut self.as_deep_visitor());
     }
 
-    pub fn vec(&self) -> &Vec<(FunctionType, bool)> {
+    pub fn vec(&self) -> &Vec<FunctionMemo> {
         &self.vec
     }
 }
@@ -42,8 +61,12 @@ impl<'tcx> intravisit::Visitor<'tcx> for SyntaxVisitor<'tcx> {
     }
 
     fn visit_item(&mut self, item: &'tcx hir::Item) {
-        if let ItemKind::Fn(_decl, _header, _generics, body_id) = &item.node {
-            self.visiting = Some((FunctionType::FreeFn(body_id.clone()), false));
+        if let ItemKind::Fn(_decl, header, _generics, body_id) = &item.node {
+            self.visiting = Some(FunctionMemo::new(
+                FunctionSignature::FreeFn,
+                header.clone(),
+                body_id.clone(),
+            ));
         }
 
         intravisit::walk_item(self, item);
@@ -54,10 +77,14 @@ impl<'tcx> intravisit::Visitor<'tcx> for SyntaxVisitor<'tcx> {
     }
 
     fn visit_trait_item(&mut self, trait_item: &'tcx hir::TraitItem) {
-        if let TraitItemKind::Method(_method_sig, hir::TraitMethod::Provided(body_id)) =
+        if let TraitItemKind::Method(method_sig, hir::TraitMethod::Provided(body_id)) =
             &trait_item.node
         {
-            self.visiting = Some((FunctionType::ProvidedTraitFn(body_id.clone()), false));
+            self.visiting = Some(FunctionMemo::new(
+                FunctionSignature::ProvidedTraitFn,
+                method_sig.header.clone(),
+                body_id.clone(),
+            ));
         }
 
         intravisit::walk_trait_item(self, trait_item);
@@ -68,8 +95,12 @@ impl<'tcx> intravisit::Visitor<'tcx> for SyntaxVisitor<'tcx> {
     }
 
     fn visit_impl_item(&mut self, impl_item: &'tcx hir::ImplItem) {
-        if let ImplItemKind::Method(_method_sig, body_id) = &impl_item.node {
-            self.visiting = Some((FunctionType::ImplFn(body_id.clone()), false));
+        if let ImplItemKind::Method(method_sig, body_id) = &impl_item.node {
+            self.visiting = Some(FunctionMemo::new(
+                FunctionSignature::ImplFn,
+                method_sig.header.clone(),
+                body_id.clone(),
+            ));
         }
 
         intravisit::walk_impl_item(self, impl_item);
@@ -84,7 +115,7 @@ impl<'tcx> intravisit::Visitor<'tcx> for SyntaxVisitor<'tcx> {
             use hir::BlockCheckMode::*;
             match block.rules {
                 DefaultBlock => (),
-                UnsafeBlock(_) => visiting.1 = true,
+                UnsafeBlock(_) => visiting.contains_unsafe = true,
                 _ => panic!("push/pop unsafe should not exist"),
             }
         }
