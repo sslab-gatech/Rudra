@@ -9,5 +9,14 @@ Crux is a cross-language static checker for Rust
 rustup install toolchain nightly
 
 # Test your installation
-cargo run -- test.rs
+cargo run -- samples/example.rs
+```
+
+## Install to Cargo
+
+```
+cargo install [--debug] --path ./ --force --locked
+# Now these commands work
+crux ./test.rs  # for single file testing
+cargo crux  # for crate compilation
 ```

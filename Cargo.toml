@@ -2,8 +2,24 @@
 name = "crux"
 version = "0.1.0"
 authors = ["Yechan Bae <yechan@gatech.edu>"]
+default-run = "crux"
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+test = true
+doctest = false
+
+[[bin]]
+name = "crux"
+test = false
+doctest = false
+
+[[bin]]
+name = "cargo-crux"
+test = false
+doctest = false
+
 [dependencies]
+cargo_metadata = "0.8"
