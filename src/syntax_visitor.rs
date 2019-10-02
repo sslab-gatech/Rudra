@@ -1,5 +1,6 @@
 use rustc::hir::{self, intravisit, ImplItemKind, ItemKind, TraitItemKind};
 use rustc::ty::TyCtxt;
+use syntax::source_map::Span;
 
 #[derive(Debug)]
 pub enum FunctionSignature {
@@ -30,7 +31,8 @@ impl FunctionMemo {
 pub struct SyntaxVisitor<'tcx> {
     tcx: TyCtxt<'tcx>,
     visiting: Option<FunctionMemo>,
-    vec: Vec<FunctionMemo>,
+    functions: Vec<FunctionMemo>,
+    mods: Vec<Span>,
 }
 
 impl<'tcx> SyntaxVisitor<'tcx> {
@@ -38,7 +40,8 @@ impl<'tcx> SyntaxVisitor<'tcx> {
         SyntaxVisitor {
             tcx,
             visiting: None,
-            vec: Vec::new(),
+            functions: Vec::new(),
+            mods: Vec::new(),
         }
     }
 
@@ -50,8 +53,12 @@ impl<'tcx> SyntaxVisitor<'tcx> {
             .visit_all_item_likes(&mut self.as_deep_visitor());
     }
 
-    pub fn vec(&self) -> &Vec<FunctionMemo> {
-        &self.vec
+    pub fn functions(&self) -> &Vec<FunctionMemo> {
+        &self.functions
+    }
+
+    pub fn mods(&self) -> &Vec<Span> {
+        &self.mods
     }
 }
 
@@ -72,7 +79,7 @@ impl<'tcx> intravisit::Visitor<'tcx> for SyntaxVisitor<'tcx> {
         intravisit::walk_item(self, item);
 
         if let Some(v) = self.visiting.take() {
-            self.vec.push(v);
+            self.functions.push(v);
         }
     }
 
@@ -90,7 +97,7 @@ impl<'tcx> intravisit::Visitor<'tcx> for SyntaxVisitor<'tcx> {
         intravisit::walk_trait_item(self, trait_item);
 
         if let Some(v) = self.visiting.take() {
-            self.vec.push(v);
+            self.functions.push(v);
         }
     }
 
@@ -106,7 +113,7 @@ impl<'tcx> intravisit::Visitor<'tcx> for SyntaxVisitor<'tcx> {
         intravisit::walk_impl_item(self, impl_item);
 
         if let Some(v) = self.visiting.take() {
-            self.vec.push(v);
+            self.functions.push(v);
         }
     }
 
@@ -121,5 +128,9 @@ impl<'tcx> intravisit::Visitor<'tcx> for SyntaxVisitor<'tcx> {
         }
 
         intravisit::walk_block(self, block);
+    }
+
+    fn visit_mod(&mut self, _m: &'tcx hir::Mod, span: Span, _n: hir::HirId) {
+        self.mods.push(span);
     }
 }

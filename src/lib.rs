@@ -2,9 +2,11 @@
 
 extern crate rustc;
 extern crate rustc_driver;
+extern crate rustc_errors;
 extern crate rustc_interface;
+extern crate syntax;
 
-pub mod syntax;
+pub mod syntax_visitor;
 
 // Insert rustc arguments at the beginning of the argument list that Crux wants to be
 // set per default, for maximal validation power.

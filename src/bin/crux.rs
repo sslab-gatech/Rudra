@@ -2,12 +2,14 @@
 
 extern crate rustc;
 extern crate rustc_driver;
+extern crate rustc_errors;
 extern crate rustc_interface;
+extern crate syntax;
 
 use rustc_driver::Compilation;
 use rustc_interface::interface;
 
-use crux::syntax::SyntaxVisitor;
+use crux::syntax_visitor::SyntaxVisitor;
 use crux::{compile_time_sysroot, CRUX_DEFAULT_ARGS};
 
 struct CruxCompilerCalls {}
@@ -28,7 +30,15 @@ impl rustc_driver::Callbacks for CruxCompilerCalls {
         compiler.global_ctxt().unwrap().peek_mut().enter(|tcx| {
             let mut visitor = SyntaxVisitor::new(tcx);
             visitor.collect_functions();
-            dbg!(visitor.vec());
+
+            for span in visitor.mods().iter() {
+                let source_map = compiler.source_map();
+                println!(
+                    "{} - {}",
+                    source_map.span_to_string(span.clone()),
+                    source_map.span_to_snippet(span.clone()).unwrap()
+                );
+            }
         });
         compiler.session().abort_if_errors();
 

@@ -192,6 +192,7 @@ fn in_cargo_crux() {
             }
             s => {
                 println!("Target {}:{} is not supported", s, target.name);
+                continue;
             }
         }
 
