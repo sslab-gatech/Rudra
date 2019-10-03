@@ -6,7 +6,12 @@ extern crate rustc_errors;
 extern crate rustc_interface;
 extern crate syntax;
 
-pub mod syntax_visitor;
+mod hir_visitor;
+
+use rustc::ty::TyCtxt;
+use rustc_interface::interface::Compiler;
+
+use hir_visitor::{FunctionCollector, ModuleCollector};
 
 // Insert rustc arguments at the beginning of the argument list that Crux wants to be
 // set per default, for maximal validation power.
@@ -38,4 +43,21 @@ pub fn compile_time_sysroot() -> Option<String> {
             .expect("To build Crux without rustup, set the `RUST_SYSROOT` env var at build time")
             .to_owned(),
     })
+}
+
+pub fn analyze<'tcx>(compiler: &Compiler, tcx: TyCtxt<'tcx>) {
+    // collect functions in hir
+    let mut function_collector = FunctionCollector::new(&tcx);
+    function_collector.collect_functions();
+
+    // collect modules in hir
+    let mut module_collector = ModuleCollector::new(&tcx);
+    module_collector.collect_modules();
+
+    // print all mods
+    for span in module_collector.modules() {
+        let source_map = compiler.source_map();
+        println!("{}", source_map.span_to_string(span.clone()));
+        println!("{}", source_map.span_to_snippet(span.clone()).unwrap());
+    }
 }

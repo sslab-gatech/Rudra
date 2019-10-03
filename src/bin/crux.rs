@@ -7,10 +7,9 @@ extern crate rustc_interface;
 extern crate syntax;
 
 use rustc_driver::Compilation;
-use rustc_interface::interface;
+use rustc_interface::interface::Compiler;
 
-use crux::syntax_visitor::SyntaxVisitor;
-use crux::{compile_time_sysroot, CRUX_DEFAULT_ARGS};
+use crux::{analyze, compile_time_sysroot, CRUX_DEFAULT_ARGS};
 
 struct CruxCompilerCalls {}
 
@@ -21,24 +20,14 @@ impl CruxCompilerCalls {
 }
 
 impl rustc_driver::Callbacks for CruxCompilerCalls {
-    fn after_analysis(&mut self, compiler: &interface::Compiler) -> Compilation {
+    fn after_analysis(&mut self, compiler: &Compiler) -> Compilation {
         compiler.session().abort_if_errors();
 
         println!("Input file name: {}", compiler.input().source_name());
         println!("Crate name: {}", compiler.crate_name().unwrap().peek_mut());
 
         compiler.global_ctxt().unwrap().peek_mut().enter(|tcx| {
-            let mut visitor = SyntaxVisitor::new(tcx);
-            visitor.collect_functions();
-
-            for span in visitor.mods().iter() {
-                let source_map = compiler.source_map();
-                println!(
-                    "{} - {}",
-                    source_map.span_to_string(span.clone()),
-                    source_map.span_to_snippet(span.clone()).unwrap()
-                );
-            }
+            analyze(compiler, tcx);
         });
         compiler.session().abort_if_errors();
 

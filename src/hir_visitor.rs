@@ -28,20 +28,20 @@ impl FunctionMemo {
     }
 }
 
-pub struct SyntaxVisitor<'tcx> {
-    tcx: TyCtxt<'tcx>,
+// 'a: analyze function lifetime
+// 'tcx: TyCtxt lifetime
+pub struct FunctionCollector<'a, 'tcx> {
+    tcx: &'a TyCtxt<'tcx>,
     visiting: Option<FunctionMemo>,
     functions: Vec<FunctionMemo>,
-    mods: Vec<Span>,
 }
 
-impl<'tcx> SyntaxVisitor<'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>) -> Self {
-        SyntaxVisitor {
+impl<'a, 'tcx> FunctionCollector<'a, 'tcx> {
+    pub fn new(tcx: &'a TyCtxt<'tcx>) -> Self {
+        FunctionCollector {
             tcx,
             visiting: None,
             functions: Vec::new(),
-            mods: Vec::new(),
         }
     }
 
@@ -56,19 +56,15 @@ impl<'tcx> SyntaxVisitor<'tcx> {
     pub fn functions(&self) -> &Vec<FunctionMemo> {
         &self.functions
     }
-
-    pub fn mods(&self) -> &Vec<Span> {
-        &self.mods
-    }
 }
 
-impl<'tcx> intravisit::Visitor<'tcx> for SyntaxVisitor<'tcx> {
+impl<'a, 'tcx> intravisit::Visitor<'tcx> for FunctionCollector<'a, 'tcx> {
     fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, 'tcx> {
         intravisit::NestedVisitorMap::OnlyBodies(self.tcx.hir())
     }
 
     fn visit_item(&mut self, item: &'tcx hir::Item) {
-        if let ItemKind::Fn(_decl, header, _generics, body_id) = &item.node {
+        if let ItemKind::Fn(_decl, header, _generics, body_id) = &item.kind {
             self.visiting = Some(FunctionMemo::new(
                 FunctionSignature::FreeFn,
                 header.clone(),
@@ -85,7 +81,7 @@ impl<'tcx> intravisit::Visitor<'tcx> for SyntaxVisitor<'tcx> {
 
     fn visit_trait_item(&mut self, trait_item: &'tcx hir::TraitItem) {
         if let TraitItemKind::Method(method_sig, hir::TraitMethod::Provided(body_id)) =
-            &trait_item.node
+            &trait_item.kind
         {
             self.visiting = Some(FunctionMemo::new(
                 FunctionSignature::ProvidedTraitFn,
@@ -102,7 +98,7 @@ impl<'tcx> intravisit::Visitor<'tcx> for SyntaxVisitor<'tcx> {
     }
 
     fn visit_impl_item(&mut self, impl_item: &'tcx hir::ImplItem) {
-        if let ImplItemKind::Method(method_sig, body_id) = &impl_item.node {
+        if let ImplItemKind::Method(method_sig, body_id) = &impl_item.kind {
             self.visiting = Some(FunctionMemo::new(
                 FunctionSignature::ImplFn,
                 method_sig.header.clone(),
@@ -129,8 +125,43 @@ impl<'tcx> intravisit::Visitor<'tcx> for SyntaxVisitor<'tcx> {
 
         intravisit::walk_block(self, block);
     }
+}
 
-    fn visit_mod(&mut self, _m: &'tcx hir::Mod, span: Span, _n: hir::HirId) {
-        self.mods.push(span);
+// 'a: analyze function lifetime
+// 'tcx: TyCtxt lifetime
+pub struct ModuleCollector<'a, 'tcx> {
+    tcx: &'a TyCtxt<'tcx>,
+    modules: Vec<Span>,
+}
+
+impl<'a, 'tcx> ModuleCollector<'a, 'tcx> {
+    pub fn new(tcx: &'a TyCtxt<'tcx>) -> Self {
+        ModuleCollector {
+            tcx,
+            modules: Vec::new(),
+        }
+    }
+
+    pub fn collect_modules(&mut self) {
+        use intravisit::Visitor;
+        self.tcx
+            .hir()
+            .krate()
+            .visit_all_item_likes(&mut self.as_deep_visitor());
+    }
+
+    pub fn modules(&self) -> &Vec<Span> {
+        &self.modules
+    }
+}
+
+impl<'a, 'tcx> intravisit::Visitor<'tcx> for ModuleCollector<'a, 'tcx> {
+    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, 'tcx> {
+        intravisit::NestedVisitorMap::OnlyBodies(self.tcx.hir())
+    }
+
+    fn visit_mod(&mut self, m: &'tcx hir::Mod, span: Span, n: hir::HirId) {
+        self.modules.push(span);
+        intravisit::walk_mod(self, m, n);
     }
 }
