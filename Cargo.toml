@@ -21,5 +21,10 @@ name = "cargo-crux"
 test = false
 doctest = false
 
+[[bin]]
+name = "cargo-crux-update"
+test = false
+doctest = false
+
 [dependencies]
 cargo_metadata = "0.8"

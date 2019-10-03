@@ -20,6 +20,7 @@ cargo run -- samples/example.rs
 
 crux ./test.rs  # for single file testing
 cargo crux  # for crate compilation
+cargo crux-update  # wrapper for ./install-debug
 ```
 
 ## Baseline Algorithm
