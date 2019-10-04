@@ -9,7 +9,7 @@ extern crate syntax;
 mod hir_visitor;
 
 use rustc::ty::TyCtxt;
-use rustc_interface::interface::Compiler;
+use syntax::source_map::Span;
 
 use hir_visitor::{FunctionCollector, ModuleCollector};
 
@@ -45,7 +45,16 @@ pub fn compile_time_sysroot() -> Option<String> {
     })
 }
 
-pub fn analyze<'tcx>(compiler: &Compiler, tcx: TyCtxt<'tcx>) {
+fn print_span<'tcx>(tcx: &TyCtxt<'tcx>, span: &Span) {
+    let source_map = tcx.sess.source_map();
+    println!(
+        "{}\n{}\n",
+        source_map.span_to_string(span.clone()),
+        source_map.span_to_snippet(span.clone()).unwrap()
+    );
+}
+
+pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
     // collect functions in hir
     let mut function_collector = FunctionCollector::new(&tcx);
     function_collector.collect_functions();
@@ -54,14 +63,16 @@ pub fn analyze<'tcx>(compiler: &Compiler, tcx: TyCtxt<'tcx>) {
     let mut module_collector = ModuleCollector::new(&tcx);
     module_collector.collect_modules();
 
+    // collect DefId of all bodies
+    let body_owners: Vec<_> = tcx.body_owners().collect();
+    for def_id in body_owners.iter() {
+        print_span(&tcx, &tcx.def_span(*def_id));
+        assert!(tcx.is_mir_available(*def_id));
+    }
+
     // print all mods
     for span in module_collector.modules() {
-        let source_map = compiler.source_map();
-        println!(
-            "{} | {}",
-            source_map.span_to_string(span.clone()),
-            source_map.span_to_snippet(span.clone()).unwrap()
-        );
+        print_span(&tcx, span);
     }
 
     // print all crates

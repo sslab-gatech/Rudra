@@ -27,7 +27,7 @@ impl rustc_driver::Callbacks for CruxCompilerCalls {
         println!("Crate name: {}", compiler.crate_name().unwrap().peek_mut());
 
         compiler.global_ctxt().unwrap().peek_mut().enter(|tcx| {
-            analyze(compiler, tcx);
+            analyze(tcx);
         });
         compiler.session().abort_if_errors();
 
