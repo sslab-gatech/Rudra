@@ -57,7 +57,18 @@ pub fn analyze<'tcx>(compiler: &Compiler, tcx: TyCtxt<'tcx>) {
     // print all mods
     for span in module_collector.modules() {
         let source_map = compiler.source_map();
-        println!("{}", source_map.span_to_string(span.clone()));
-        println!("{}", source_map.span_to_snippet(span.clone()).unwrap());
+        println!(
+            "{} | {}",
+            source_map.span_to_string(span.clone()),
+            source_map.span_to_snippet(span.clone()).unwrap()
+        );
     }
+
+    // print all crates
+    let crates = tcx
+        .crates()
+        .iter()
+        .map(|krate| tcx.original_crate_name(krate.clone()))
+        .collect::<Vec<_>>();
+    println!("Crates: {:?}", crates);
 }
