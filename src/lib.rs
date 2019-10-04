@@ -1,3 +1,4 @@
+#![feature(box_patterns)]
 #![feature(rustc_private)]
 
 extern crate rustc;
@@ -6,11 +7,13 @@ extern crate rustc_errors;
 extern crate rustc_interface;
 extern crate syntax;
 
+mod call_graph;
 mod hir_visitor;
 
 use rustc::ty::TyCtxt;
 use syntax::source_map::Span;
 
+use call_graph::CallGraph;
 use hir_visitor::{FunctionCollector, ModuleCollector};
 
 // Insert rustc arguments at the beginning of the argument list that Crux wants to be
@@ -64,10 +67,12 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
     module_collector.collect_modules();
 
     // collect DefId of all bodies
+    let mut call_graph = CallGraph::new(&tcx);
+
     let body_owners: Vec<_> = tcx.body_owners().collect();
-    for def_id in body_owners.iter() {
-        print_span(&tcx, &tcx.def_span(*def_id));
-        assert!(tcx.is_mir_available(*def_id));
+    for def_id in body_owners.into_iter() {
+        print_span(&tcx, &tcx.def_span(def_id));
+        call_graph.traverse(def_id);
     }
 
     // print all mods
