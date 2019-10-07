@@ -56,7 +56,7 @@ fn main() {
 
     dbg!(&rustc_args);
 
-    rustc_driver::install_ice_hook();
+    rustc_driver::install_ice_hook(); // ICE : Internal Compilation Error
     let result = rustc_driver::catch_fatal_errors(move || {
         rustc_driver::run_compiler(&rustc_args, &mut CruxCompilerCalls::new(), None, None)
     })
