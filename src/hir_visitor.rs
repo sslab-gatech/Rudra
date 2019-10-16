@@ -28,16 +28,15 @@ impl FunctionMemo {
     }
 }
 
-// 'a: analyze function lifetime
 // 'tcx: TyCtxt lifetime
-pub struct FunctionCollector<'a, 'tcx> {
-    tcx: &'a TyCtxt<'tcx>,
+pub struct FunctionCollector<'tcx> {
+    tcx: TyCtxt<'tcx>,
     visiting: Option<FunctionMemo>,
     functions: Vec<FunctionMemo>,
 }
 
-impl<'a, 'tcx> FunctionCollector<'a, 'tcx> {
-    pub fn new(tcx: &'a TyCtxt<'tcx>) -> Self {
+impl<'tcx> FunctionCollector<'tcx> {
+    pub fn new(tcx: TyCtxt<'tcx>) -> Self {
         FunctionCollector {
             tcx,
             visiting: None,
@@ -58,7 +57,7 @@ impl<'a, 'tcx> FunctionCollector<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> intravisit::Visitor<'tcx> for FunctionCollector<'a, 'tcx> {
+impl<'tcx> intravisit::Visitor<'tcx> for FunctionCollector<'tcx> {
     fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, 'tcx> {
         intravisit::NestedVisitorMap::OnlyBodies(self.tcx.hir())
     }
@@ -127,15 +126,14 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for FunctionCollector<'a, 'tcx> {
     }
 }
 
-// 'a: analyze function lifetime
 // 'tcx: TyCtxt lifetime
-pub struct ModuleCollector<'a, 'tcx> {
-    tcx: &'a TyCtxt<'tcx>,
+pub struct ModuleCollector<'tcx> {
+    tcx: TyCtxt<'tcx>,
     modules: Vec<Span>,
 }
 
-impl<'a, 'tcx> ModuleCollector<'a, 'tcx> {
-    pub fn new(tcx: &'a TyCtxt<'tcx>) -> Self {
+impl<'a, 'tcx> ModuleCollector<'tcx> {
+    pub fn new(tcx: TyCtxt<'tcx>) -> Self {
         ModuleCollector {
             tcx,
             modules: Vec::new(),
@@ -155,7 +153,7 @@ impl<'a, 'tcx> ModuleCollector<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> intravisit::Visitor<'tcx> for ModuleCollector<'a, 'tcx> {
+impl<'tcx> intravisit::Visitor<'tcx> for ModuleCollector<'tcx> {
     fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, 'tcx> {
         intravisit::NestedVisitorMap::OnlyBodies(self.tcx.hir())
     }
