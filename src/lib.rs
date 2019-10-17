@@ -10,14 +10,12 @@ extern crate syntax;
 
 mod call_graph;
 mod context;
-mod hir_visitor;
 
 use rustc::ty::TyCtxt;
 use syntax::source_map::Span;
 
 use call_graph::CallGraph;
 pub use context::TyCtxtExt;
-use hir_visitor::{FunctionCollector, ModuleCollector};
 
 // Insert rustc arguments at the beginning of the argument list that Crux wants to be
 // set per default, for maximal validation power.
@@ -51,7 +49,7 @@ pub fn compile_time_sysroot() -> Option<String> {
     })
 }
 
-fn print_span<'tcx>(tcx: TyCtxt<'tcx>, span: &Span) {
+pub fn print_span<'tcx>(tcx: TyCtxt<'tcx>, span: &Span) {
     let source_map = tcx.sess.source_map();
     println!(
         "{}\n{}\n",
@@ -61,31 +59,10 @@ fn print_span<'tcx>(tcx: TyCtxt<'tcx>, span: &Span) {
 }
 
 pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
-    // collect functions in hir
-    let mut function_collector = FunctionCollector::new(tcx);
-    function_collector.collect_functions();
-
-    // collect modules in hir
-    let mut module_collector = ModuleCollector::new(tcx);
-    module_collector.collect_modules();
-
     // collect DefId of all bodies
     let call_graph = CallGraph::new(tcx);
     call_graph.print_mir_availability();
     for local_instance in call_graph.local_safe_fn_iter() {
         println!("{:?}", local_instance);
     }
-
-    // print all mods
-    for span in module_collector.modules() {
-        print_span(tcx, span);
-    }
-
-    // print all crates
-    let crates = tcx
-        .crates()
-        .iter()
-        .map(|krate| tcx.original_crate_name(krate.clone()))
-        .collect::<Vec<_>>();
-    println!("Crates: {:?}", crates);
 }
