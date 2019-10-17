@@ -72,6 +72,9 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
     // collect DefId of all bodies
     let call_graph = CallGraph::new(tcx);
     call_graph.print_mir_availability();
+    for local_instance in call_graph.local_safe_fn_iter() {
+        println!("{:?}", local_instance);
+    }
 
     // print all mods
     for span in module_collector.modules() {

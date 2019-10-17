@@ -20,10 +20,10 @@ impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
         }
 
         // https://doc.rust-lang.org/nightly/nightly-rustc/src/rustc_mir/interpret/eval_context.rs.html#293-318
-        let did = instance.def.def_id();
-        if did.is_local()
-            && self.has_typeck_tables(did)
-            && self.typeck_tables_of(did).tainted_by_errors
+        let def_id = instance.def.def_id();
+        if def_id.is_local()
+            && self.has_typeck_tables(def_id)
+            && self.typeck_tables_of(def_id).tainted_by_errors
         {
             // type check failure
             println!("Type check failed for an item: {:?}", &instance);
@@ -32,15 +32,17 @@ impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
 
         match instance.def {
             ty::InstanceDef::Item(_) => {
-                if self.is_mir_available(did) {
-                    Some(self.optimized_mir(did))
+                if self.is_mir_available(def_id) {
+                    Some(self.optimized_mir(def_id))
                 } else {
-                    // MIR is not available
                     println!("No MIR for an item: {:?}", &instance);
                     None
                 }
             }
-            _ => Some(self.instance_mir(instance.def)),
+            _ => {
+                // usually `real_drop_in_place`
+                Some(self.instance_mir(instance.def))
+            }
         }
     }
 }

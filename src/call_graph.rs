@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use rustc::hir::Unsafety;
 use rustc::mir::mono::MonoItem;
 use rustc::ty::{Instance, TyCtxt};
 use rustc_mir::monomorphize::collector::{collect_crate_mono_items, MonoItemCollectionMode};
@@ -50,8 +51,22 @@ impl<'tcx> CallGraph<'tcx> {
 
     pub fn print_mir_availability(&self) {
         for (&instance, _) in self.graph.iter() {
-            println!("Function: {:?}", instance.def.def_id());
-            self.tcx.find_fn(instance);
+            if let None = self.tcx.find_fn(instance) {
+                println!("MIR not available for {:?}", instance.def.def_id());
+            }
         }
+        println!("Len: {}", self.graph.len());
+    }
+
+    pub fn local_safe_fn_iter(&self) -> impl Iterator<Item = Instance<'tcx>> + '_ {
+        let tcx = self.tcx;
+        self.graph.iter().filter_map(move |(&instance, _)| {
+            let def_id = instance.def.def_id();
+            // check if it is local and safe function
+            if def_id.is_local() && instance.fn_sig(tcx).unsafety() == Unsafety::Normal {
+                return Some(instance);
+            }
+            None
+        })
     }
 }
