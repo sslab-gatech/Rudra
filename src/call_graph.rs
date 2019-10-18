@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rustc::hir::Unsafety;
 use rustc::mir::mono::MonoItem;
@@ -32,7 +32,7 @@ impl<'tcx> CallGraph<'tcx> {
                     (MonoItem::Fn(current_instance), &MonoItem::Fn(next_instance)) => {
                         result.add_edge(current_instance, next_instance);
                     }
-                    _ => (),
+                    _ => warn!("Unknown MonoItem {:?}", next_item),
                 }
             }
         });
@@ -68,5 +68,26 @@ impl<'tcx> CallGraph<'tcx> {
             }
             None
         })
+    }
+
+    /// A function that returns reachable instances starting from the provided instance.
+    /// If the given instance is not found in the call graph,
+    /// it will return a HashSet with a single element.
+    pub fn reachable_set(&self, instance: Instance<'tcx>) -> HashSet<Instance<'tcx>> {
+        let mut stack = vec![instance];
+        let mut result = HashSet::new();
+        result.insert(instance);
+
+        while let Some(cur) = stack.pop() {
+            if let Some(next_vec) = self.graph.get(&cur) {
+                for &next in next_vec.iter() {
+                    if result.insert(next) {
+                        stack.push(next);
+                    }
+                }
+            }
+        }
+
+        result
     }
 }

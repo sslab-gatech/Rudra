@@ -62,12 +62,13 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
             .hir()
             .def_path(local_instance.def.def_id())
             .to_string_no_crate();
-        trace!("{}", def_path_string);
 
         // TODO: remove this temporary setup
         if def_path_string == "::buffer[0]::{{impl}}[2]::from[0]" {
-            info!("{:?}", local_instance);
-            utils::print_mir(tcx, local_instance);
+            info!("Found {:?}", local_instance);
+            for &instance in call_graph.reachable_set(local_instance).iter() {
+                utils::print_mir(tcx, instance);
+            }
         }
     }
 }

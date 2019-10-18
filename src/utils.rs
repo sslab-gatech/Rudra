@@ -12,8 +12,11 @@ pub fn print_span<'tcx>(tcx: TyCtxt<'tcx>, span: &Span) {
 }
 
 pub fn print_mir<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) {
-    let stderr = std::io::stderr();
-    let mut handle = stderr.lock();
+    debug!("Printing MIR for {:?}", instance);
+
+    // TODO: support dump to another file, default to stdout
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
     if let Err(_) = write_mir_pretty(tcx, Some(instance.def.def_id()), &mut handle) {
         error!("Failed to print MIR for `{:?}`", instance.def.def_id());
     }
