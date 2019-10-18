@@ -13,9 +13,9 @@ extern crate log;
 
 mod call_graph;
 mod context;
+pub mod utils;
 
 use rustc::ty::TyCtxt;
-use syntax::source_map::Span;
 
 use call_graph::CallGraph;
 pub use context::TyCtxtExt;
@@ -52,20 +52,22 @@ pub fn compile_time_sysroot() -> Option<String> {
     })
 }
 
-pub fn print_span<'tcx>(tcx: TyCtxt<'tcx>, span: &Span) {
-    let source_map = tcx.sess.source_map();
-    println!(
-        "{}\n{}\n",
-        source_map.span_to_string(span.clone()),
-        source_map.span_to_snippet(span.clone()).unwrap()
-    );
-}
-
 pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
     // collect DefId of all bodies
     let call_graph = CallGraph::new(tcx);
     call_graph.print_mir_availability();
     for local_instance in call_graph.local_safe_fn_iter() {
         trace!("{:?}", local_instance);
+        let def_path_string = tcx
+            .hir()
+            .def_path(local_instance.def.def_id())
+            .to_string_no_crate();
+        trace!("{}", def_path_string);
+
+        // TODO: remove this temporary setup
+        if def_path_string == "::buffer[0]::{{impl}}[2]::from[0]" {
+            info!("{:?}", local_instance);
+            utils::print_mir(tcx, local_instance);
+        }
     }
 }
