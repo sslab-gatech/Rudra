@@ -15,7 +15,7 @@ impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
 
         // currently we don't handle any foreign item
         if self.is_foreign_item(instance.def_id()) {
-            println!("Unsupported foreign item: {:?}", &instance);
+            info!("Unsupported foreign item: {:?}", &instance);
             return None;
         }
 
@@ -26,7 +26,7 @@ impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
             && self.typeck_tables_of(def_id).tainted_by_errors
         {
             // type check failure
-            println!("Type check failed for an item: {:?}", &instance);
+            info!("Type check failed for an item: {:?}", &instance);
             return None;
         }
 
@@ -35,7 +35,7 @@ impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
                 if self.is_mir_available(def_id) {
                     Some(self.optimized_mir(def_id))
                 } else {
-                    println!("No MIR for an item: {:?}", &instance);
+                    info!("No MIR for an item: {:?}", &instance);
                     None
                 }
             }

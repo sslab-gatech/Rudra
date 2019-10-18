@@ -52,10 +52,10 @@ impl<'tcx> CallGraph<'tcx> {
     pub fn print_mir_availability(&self) {
         for (&instance, _) in self.graph.iter() {
             if let None = self.tcx.find_fn(instance) {
-                println!("MIR not available for {:?}", instance.def.def_id());
+                info!("MIR not available for {:?}", instance.def.def_id());
             }
         }
-        println!("Len: {}", self.graph.len());
+        info!("Found {} functions", self.graph.len());
     }
 
     pub fn local_safe_fn_iter(&self) -> impl Iterator<Item = Instance<'tcx>> + '_ {

@@ -28,3 +28,6 @@ doctest = false
 
 [dependencies]
 cargo_metadata = "0.8"
+dotenv = "0.14"
+env_logger = "0.7"
+log = "0.4"

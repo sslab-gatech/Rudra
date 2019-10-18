@@ -8,6 +8,9 @@ extern crate rustc_interface;
 extern crate rustc_mir;
 extern crate syntax;
 
+#[macro_use]
+extern crate log;
+
 mod call_graph;
 mod context;
 
@@ -63,6 +66,6 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
     let call_graph = CallGraph::new(tcx);
     call_graph.print_mir_availability();
     for local_instance in call_graph.local_safe_fn_iter() {
-        println!("{:?}", local_instance);
+        trace!("{:?}", local_instance);
     }
 }
