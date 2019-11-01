@@ -53,3 +53,6 @@ Struct rustc::hir::map::Map
 
 
 Trait rustc::hir::itemlikevisit::ItemLikeVisitor
+
+
+[src/call_graph.rs:68] msg = "Call into std::sync::Mutex::<std::vec::Vec<transport::Transport>>::lock -> std::sync::MutexGuard::<T>::new"???

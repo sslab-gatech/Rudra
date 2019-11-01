@@ -10,7 +10,7 @@ impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
     /// Try to find MIR function body with given Instance
     /// this is a combined version of MIRI's find_fn + Rust InterpCx's load_mir
     fn find_fn(&self, instance: Instance<'tcx>) -> Option<&'tcx mir::Body<'tcx>> {
-        // https://github.com/rust-lang/miri/blob/1037f69bf6dcf73dfbe06453336eeae61ba7c51f/src/shims/mod.rs#L14-L55
+        // https://github.com/rust-lang/miri/blob/1037f69bf6dcf73dfbe06453336eeae61ba7c51f/src/shims/mod.rs
         // TODO: apply hooks in rustc MIR evaluator
 
         // currently we don't handle any foreign item
@@ -19,7 +19,7 @@ impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
             return None;
         }
 
-        // https://doc.rust-lang.org/nightly/nightly-rustc/src/rustc_mir/interpret/eval_context.rs.html#293-318
+        // https://doc.rust-lang.org/nightly/nightly-rustc/src/rustc_mir/interpret/eval_context.rs.html
         let def_id = instance.def.def_id();
         if def_id.is_local()
             && self.has_typeck_tables(def_id)

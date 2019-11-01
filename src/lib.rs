@@ -57,7 +57,6 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
     let call_graph = CallGraph::new(tcx);
     call_graph.print_mir_availability();
     for local_instance in call_graph.local_safe_fn_iter() {
-        trace!("{:?}", local_instance);
         let def_path_string = tcx
             .hir()
             .def_path(local_instance.def.def_id())
