@@ -5,13 +5,13 @@ pub trait TyCtxtExt<'tcx> {
     fn find_fn(&self, instance: Instance<'tcx>) -> Option<&'tcx mir::Body<'tcx>>;
 }
 
-// TODO: use more fine-grained error handling than returning None
 impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
     /// Try to find MIR function body with given Instance
     /// this is a combined version of MIRI's find_fn + Rust InterpCx's load_mir
+    // TODO: use more fine-grained error handling than returning None
     fn find_fn(&self, instance: Instance<'tcx>) -> Option<&'tcx mir::Body<'tcx>> {
+        // TODO: apply hooks in rustc MIR evaluator based on this
         // https://github.com/rust-lang/miri/blob/1037f69bf6dcf73dfbe06453336eeae61ba7c51f/src/shims/mod.rs
-        // TODO: apply hooks in rustc MIR evaluator
 
         // currently we don't handle any foreign item
         if self.is_foreign_item(instance.def_id()) {
@@ -19,6 +19,7 @@ impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
             return None;
         }
 
+        // based on rustc InterpCx's load_mir
         // https://doc.rust-lang.org/nightly/nightly-rustc/src/rustc_mir/interpret/eval_context.rs.html
         let def_id = instance.def.def_id();
         if def_id.is_local()
@@ -35,7 +36,10 @@ impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
                 if self.is_mir_available(def_id) {
                     Some(self.optimized_mir(def_id))
                 } else {
-                    info!("No MIR for an item: {:?}", &instance);
+                    info!(
+                        "Skipping an item {:?}, no MIR available for this item",
+                        &instance
+                    );
                     None
                 }
             }

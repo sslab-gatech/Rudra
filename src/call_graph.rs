@@ -3,10 +3,9 @@ use std::collections::{HashMap, HashSet};
 use rustc::hir::Unsafety;
 use rustc::mir;
 use rustc::mir::mono::MonoItem;
-use rustc::ty::{Instance, ParamEnv, TyCtxt};
+use rustc::ty::{subst::SubstsRef, Instance, ParamEnv, TyCtxt};
 use rustc_mir::monomorphize::collector::{collect_crate_mono_items, MonoItemCollectionMode};
 
-use crate::utils;
 use crate::TyCtxtExt;
 
 type Graph<'tcx> = HashMap<Instance<'tcx>, Vec<Instance<'tcx>>>;
@@ -28,13 +27,11 @@ impl<'tcx> CallGraph<'tcx> {
         // collect all mono items in the crate
         let inlining_map = collect_crate_mono_items(tcx, MonoItemCollectionMode::Lazy).1;
         inlining_map.iter_accesses(|entry_mono_item, _| {
-            if entry_mono_item.is_instantiable(tcx) {
-                if let MonoItem::Fn(entry_instance) = entry_mono_item {
-                    entry.insert(entry_instance);
-                    CallGraph::traverse(tcx, entry_instance, &mut graph);
-                } else {
-                    warn!("Unhandled mono item: {:?}", entry_mono_item);
-                }
+            if let MonoItem::Fn(entry_instance) = entry_mono_item {
+                entry.insert(entry_instance);
+                CallGraph::traverse(tcx, entry_instance, &mut graph);
+            } else {
+                warn!("Unhandled mono item: {:?}", entry_mono_item);
             }
         });
 
@@ -45,38 +42,43 @@ impl<'tcx> CallGraph<'tcx> {
         }
     }
 
-    fn traverse(tcx: TyCtxt<'tcx>, start: Instance<'tcx>, graph: &mut Graph<'tcx>) {
+    fn traverse(tcx: TyCtxt<'tcx>, caller: Instance<'tcx>, graph: &mut Graph<'tcx>) {
         use std::collections::hash_map::Entry;
 
-        if let Entry::Vacant(entry) = graph.entry(start) {
+        if let Entry::Vacant(entry) = graph.entry(caller) {
             // early insert to prevent infinite recursion
             let vec = entry.insert(Vec::new());
-            if let Some(mir_body) = tcx.find_fn(start) {
-                utils::print_mir(tcx, start);
-                // remove the duplication and copy the result into the hashmap
-                // in most case, the number of callees are small enough that
-                // the cost of the linear lookup is smaller than using a hashmap
-                for instance in CallGraph::collect_all_calls(tcx, mir_body).into_iter() {
-                    if !vec.contains(&instance) {
-                        vec.push(instance);
+            if let Some(mir_body) = tcx.find_fn(caller) {
+                debug!("Instance: {:?}", caller);
+
+                for callee in
+                    CallGraph::collect_all_callees(tcx, caller.substs, mir_body).into_iter()
+                {
+                    // in most case, the number of callees are small enough that
+                    // the cost of the linear lookup is smaller than using a hashmap
+                    if !vec.contains(&callee) {
+                        vec.push(callee);
                     }
                 }
 
-                // clone to drop the reference to graph
+                // clone here to make the borrow checker happy with the recursive call
                 for next_instance in vec.clone().into_iter() {
-                    let msg = format!("Call into {} -> {}", start, next_instance);
-                    dbg!(msg);
+                    debug!("Call into {} -> {}", caller, next_instance);
                     CallGraph::traverse(tcx, next_instance, graph);
                 }
             } else {
-                warn!("MIR for `{:?}` is not available!", start);
+                warn!("MIR for `{:?}` is not available!", caller);
             }
         }
     }
 
     /// Collects all function calls inside MIR body.
     /// Note that the same function can appear multiple times in the result.
-    fn collect_all_calls(tcx: TyCtxt<'tcx>, body: &'tcx mir::Body<'tcx>) -> Vec<Instance<'tcx>> {
+    fn collect_all_callees(
+        tcx: TyCtxt<'tcx>,
+        caller_substs: SubstsRef<'tcx>,
+        body: &'tcx mir::Body<'tcx>,
+    ) -> Vec<Instance<'tcx>> {
         use mir::{Operand, TerminatorKind};
         use rustc::ty::TyKind;
 
@@ -90,12 +92,18 @@ impl<'tcx> CallGraph<'tcx> {
                 {
                     let func_ty = func.literal.ty;
                     match func_ty.kind {
-                        TyKind::FnDef(def_id, substs) => {
-                            dbg!(def_id, substs);
-                            // FIXME: this ParamEnv does not contain enough information
-                            if let Some(instance) =
-                                Instance::resolve(tcx, ParamEnv::reveal_all(), def_id, substs)
-                            {
+                        TyKind::FnDef(def_id, callee_substs) => {
+                            let replaced_substs = tcx.subst_and_normalize_erasing_regions(
+                                caller_substs,
+                                ParamEnv::reveal_all(),
+                                &callee_substs,
+                            );
+                            if let Some(instance) = Instance::resolve(
+                                tcx,
+                                ParamEnv::reveal_all(),
+                                def_id,
+                                replaced_substs,
+                            ) {
                                 result.push(instance);
                             }
                         }
@@ -110,13 +118,8 @@ impl<'tcx> CallGraph<'tcx> {
         result
     }
 
-    pub fn print_mir_availability(&self) {
-        for (&instance, _) in self.graph.iter() {
-            if let None = self.tcx.find_fn(instance) {
-                info!("MIR not available for {:?}", instance.def.def_id());
-            }
-        }
-        info!("Found {} functions", self.graph.len());
+    pub fn num_functions(&self) -> usize {
+        self.graph.len()
     }
 
     pub fn local_safe_fn_iter(&self) -> impl Iterator<Item = Instance<'tcx>> + '_ {

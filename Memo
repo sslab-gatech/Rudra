@@ -50,9 +50,3 @@ Struct rustc::hir::map::Map
     pub fn visit_item_likes_in_module<V>(&self, module: DefId, visitor: &mut V)
     where
         V: ItemLikeVisitor<'hir>,
-
-
-Trait rustc::hir::itemlikevisit::ItemLikeVisitor
-
-
-[src/call_graph.rs:68] msg = "Call into std::sync::Mutex::<std::vec::Vec<transport::Transport>>::lock -> std::sync::MutexGuard::<T>::new"???

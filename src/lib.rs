@@ -55,7 +55,11 @@ pub fn compile_time_sysroot() -> Option<String> {
 pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
     // collect DefId of all bodies
     let call_graph = CallGraph::new(tcx);
-    call_graph.print_mir_availability();
+    info!(
+        "Found {} functions in the call graph",
+        call_graph.num_functions()
+    );
+
     for local_instance in call_graph.local_safe_fn_iter() {
         let def_path_string = tcx
             .hir()
