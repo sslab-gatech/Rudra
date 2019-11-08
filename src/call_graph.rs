@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use rustc::hir::Unsafety;
 use rustc::mir;
 use rustc::mir::mono::MonoItem;
-use rustc::ty::{subst::SubstsRef, Instance, ParamEnv, TyCtxt};
+use rustc::ty::{subst::SubstsRef, Instance, TyCtxt};
 use rustc_mir::monomorphize::collector::{collect_crate_mono_items, MonoItemCollectionMode};
 
 use crate::TyCtxtExt;
@@ -93,17 +93,9 @@ impl<'tcx> CallGraph<'tcx> {
                     let func_ty = func.literal.ty;
                     match func_ty.kind {
                         TyKind::FnDef(def_id, callee_substs) => {
-                            let replaced_substs = tcx.subst_and_normalize_erasing_regions(
-                                caller_substs,
-                                ParamEnv::reveal_all(),
-                                &callee_substs,
-                            );
-                            if let Some(instance) = Instance::resolve(
-                                tcx,
-                                ParamEnv::reveal_all(),
-                                def_id,
-                                replaced_substs,
-                            ) {
+                            if let Some(instance) =
+                                tcx.monomorphic_resolve(def_id, callee_substs, caller_substs)
+                            {
                                 result.push(instance);
                             }
                         }

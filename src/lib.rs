@@ -11,14 +11,16 @@ extern crate syntax;
 #[macro_use]
 extern crate log;
 
+mod analyze;
 mod call_graph;
-mod context;
+mod ext;
 pub mod utils;
 
 use rustc::ty::TyCtxt;
 
+use analyze::Analyzer;
 use call_graph::CallGraph;
-pub use context::TyCtxtExt;
+pub use ext::TyCtxtExt;
 
 // Insert rustc arguments at the beginning of the argument list that Crux wants to be
 // set per default, for maximal validation power.
@@ -60,17 +62,27 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
         call_graph.num_functions()
     );
 
+    let mut analyzer = Analyzer::new(tcx);
+
     for local_instance in call_graph.local_safe_fn_iter() {
         let def_path_string = tcx
             .hir()
             .def_path(local_instance.def.def_id())
             .to_string_no_crate();
 
-        // TODO: remove this temporary setup
-        if def_path_string == "::buffer[0]::{{impl}}[2]::from[0]" {
+        // TODO: remove these temporary setups
+        if def_path_string == "::buffer[0]::{{impl}}[2]::from[0]"
+            || def_path_string == "::trivial[0]"
+        {
             info!("Found {:?}", local_instance);
             for &instance in call_graph.reachable_set(local_instance).iter() {
                 utils::print_mir(tcx, instance);
+            }
+
+            let result = analyzer.analyze(local_instance);
+            if result.is_err() {
+                // TODO: explain more about the failure
+                println!("Analyze failed...");
             }
         }
     }
