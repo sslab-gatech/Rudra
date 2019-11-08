@@ -95,7 +95,8 @@ impl AnalysisContext {
     pub fn enter_body<'tcx>(&mut self, body: &'tcx mir::Body<'tcx>) -> StepResult<'tcx> {
         if body.arg_count > 0 {
             return Err(AnalysisError::Unsupported(
-                "A function with argument is not supported yet".to_owned(),
+                "A function with arguments is not supported yet".to_owned(),
+                Some(body.span),
             ));
         }
 
