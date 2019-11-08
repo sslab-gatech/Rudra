@@ -4,6 +4,7 @@
 extern crate rustc;
 extern crate rustc_driver;
 extern crate rustc_errors;
+extern crate rustc_index;
 extern crate rustc_interface;
 extern crate rustc_mir;
 extern crate syntax;
@@ -80,9 +81,8 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
             }
 
             let result = analyzer.analyze(local_instance);
-            if result.is_err() {
-                // TODO: explain more about the failure
-                println!("Analyze failed...");
+            if let Err(e) = result {
+                println!("Analysis failed with error: {:?}", e);
             }
         }
     }
