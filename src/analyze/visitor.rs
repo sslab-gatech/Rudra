@@ -1,7 +1,7 @@
 use rustc::mir;
 use rustc::ty::{Instance, TyCtxt};
 
-use super::{AnalysisContext, AnalysisError, StepResult};
+use super::{AnalysisContext, AnalysisError, LocationContent, StepResult};
 use crate::TyCtxtExt;
 
 pub struct CruxVisitor {}
@@ -40,7 +40,7 @@ impl CruxVisitor {
                 Continuation::Goto(basic_block) => next_block = &body.basic_blocks()[basic_block],
                 Continuation::Return => break,
                 Continuation::Unimplemented => {
-                    return Err(AnalysisError::Unsupported(
+                    return Err(AnalysisError::Unimplemented(
                         "The function used unsupported continuation".to_owned(),
                         Some(body.span),
                     ))
@@ -72,11 +72,50 @@ impl CruxVisitor {
 
     fn visit_statement<'tcx>(
         &mut self,
-        tcx: TyCtxt<'tcx>,
+        _tcx: TyCtxt<'tcx>,
         acx: &mut AnalysisContext,
         statement: &mir::Statement<'tcx>,
     ) -> StepResult<'tcx> {
-        unimplemented!()
+        use mir::StatementKind::*;
+        match statement.kind {
+            Assign(box (ref dst, ref rvalue)) => {
+                use mir::Rvalue::*;
+                match rvalue {
+                    Use(ref operand) => acx.handle_assign(dst, operand)?,
+
+                    // this code doesn't consider borrow kind
+                    Ref(_, _, ref src) => acx.handle_ref(dst, src)?,
+
+                    BinaryOp(_, _, _) | CheckedBinaryOp(_, _, _) | UnaryOp(_, _) => {
+                        acx.update_location(acx.resolve_place(dst)?, LocationContent::Value)?;
+                    }
+
+                    // TODO: support more rvalue
+                    _ => {
+                        return Err(AnalysisError::Unimplemented(
+                            "Unimplemented rvalue".to_owned(),
+                            Some(statement.source_info.span),
+                        ))
+                    }
+                }
+            }
+
+            // TODO: take a look at stacked borrow model, then decide whether or not to implement this
+            Retag(_, _) => (),
+
+            // NOP
+            StorageLive(_) | StorageDead(_) | Nop => (),
+
+            // TODO: support more statements
+            _ => {
+                return Err(AnalysisError::Unimplemented(
+                    "Unimplemented statement".to_owned(),
+                    Some(statement.source_info.span),
+                ));
+            }
+        }
+
+        Ok(())
     }
 
     fn visit_terminator<'tcx>(
@@ -91,6 +130,7 @@ impl CruxVisitor {
 
             Return => Continuation::Return,
 
+            // TODO: support more terminators
             _ => Continuation::Unimplemented,
         };
         Ok(continuation)

@@ -11,6 +11,7 @@ use visitor::CruxVisitor;
 
 type LocationId = usize;
 
+#[derive(Clone, Debug)]
 pub enum LocationContent {
     Dead,
     Uninitialized,
@@ -45,7 +46,7 @@ pub struct Analyzer<'tcx> {
     tcx: TyCtxt<'tcx>,
 }
 
-// TODO: implement analysis
+// TODO: implement analysis summary
 pub struct AnalysisSummary {}
 
 impl AnalysisSummary {
@@ -88,14 +89,14 @@ impl AnalysisContext {
     }
 
     fn deallocate(&mut self, id: LocationId) {
-        let location = self.locations.get_mut(&id).expect("Invalid deallocation");
+        let location = self.lookup(id);
         *location = LocationContent::Dead;
     }
 
     pub fn enter_body<'tcx>(&mut self, body: &'tcx mir::Body<'tcx>) -> StepResult<'tcx> {
         if body.arg_count > 0 {
-            return Err(AnalysisError::Unsupported(
-                "A function with arguments is not supported yet".to_owned(),
+            return Err(AnalysisError::Unimplemented(
+                "Function arguments are not supported yet".to_owned(),
                 Some(body.span),
             ));
         }
@@ -133,8 +134,112 @@ impl AnalysisContext {
         Ok(())
     }
 
-    fn current_stack(&mut self) -> &mut Vec<LocationId> {
-        self.stack_frame.last_mut().expect("Stack underflow")
+    fn current_stack(&self) -> &Vec<LocationId> {
+        self.stack_frame.last().expect("Stack underflow")
+    }
+
+    pub fn lookup(&mut self, id: LocationId) -> &mut LocationContent {
+        self.locations
+            .get_mut(&id)
+            .expect("Invalid lookup location")
+    }
+
+    /// This function handles the update of the location.
+    /// If source and the destinations are both location sets,
+    /// it merges two sets based on points-to analysis.
+    /// Otherwise, it overwrites the destination.
+    /// Note that this function doesn't handle an update to the uninitialized value,
+    /// which happens in move semantics.
+    pub fn update_location<'tcx>(
+        &mut self,
+        id: LocationId,
+        content: LocationContent,
+    ) -> StepResult<'tcx> {
+        let location_ptr = self.lookup(id);
+
+        match (location_ptr, content) {
+            (LocationContent::Dead, _) => return Err(AnalysisError::WriteToDeadLocation),
+            (location_ptr @ LocationContent::Uninitialized, content) => *location_ptr = content,
+            (LocationContent::Value, LocationContent::Value) => (),
+            (
+                LocationContent::Locations(ref mut dst_locations),
+                LocationContent::Locations(ref src_locations),
+            ) => {
+                // TODO: use better points-to analysis such as Steensgard's algorithm
+                for location in src_locations.iter() {
+                    if !dst_locations.contains(location) {
+                        dst_locations.push(*location);
+                    }
+                }
+            }
+            (location_ptr, content @ LocationContent::Dead) => *location_ptr = content,
+            (location_ptr, content) => {
+                return Err(AnalysisError::Unimplemented(
+                    format!(
+                        "Unexpected merge between `{:?}` and `{:?}`",
+                        location_ptr, content
+                    ),
+                    None,
+                ))
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn resolve_place<'tcx>(
+        &self,
+        place: &mir::Place<'tcx>,
+    ) -> Result<LocationId, AnalysisError<'tcx>> {
+        if place.projection.is_empty() {
+            match place.base {
+                mir::PlaceBase::Local(local) => Ok(self.current_stack()[local.as_usize()]),
+                mir::PlaceBase::Static(_) => Err(AnalysisError::Unimplemented(
+                    format!("Static place base is not supported: {:?}", place),
+                    None,
+                )),
+            }
+        } else {
+            Err(AnalysisError::Unimplemented(
+                format!("Place projection is not supported: {:?}", place),
+                None,
+            ))
+        }
+    }
+
+    pub fn handle_assign<'tcx>(
+        &mut self,
+        dst: &mir::Place<'tcx>,
+        src: &mir::Operand<'tcx>,
+    ) -> StepResult<'tcx> {
+        let dst_id = self.resolve_place(dst)?;
+        match src {
+            mir::Operand::Copy(src) => {
+                let src_id = self.resolve_place(src)?;
+                let content = self.lookup(src_id).clone();
+                self.update_location(dst_id, content)?;
+            }
+            mir::Operand::Move(src) => {
+                let src_id = self.resolve_place(src)?;
+                let content = self
+                    .locations
+                    .insert(src_id, LocationContent::Uninitialized)
+                    .expect("Invalid move source");
+                self.update_location(dst_id, content)?;
+            }
+            mir::Operand::Constant(_) => self.update_location(dst_id, LocationContent::Value)?,
+        }
+        Ok(())
+    }
+
+    pub fn handle_ref<'tcx>(
+        &mut self,
+        dst: &mir::Place<'tcx>,
+        src: &mir::Place<'tcx>,
+    ) -> StepResult<'tcx> {
+        let dst_id = self.resolve_place(dst)?;
+        let src_id = self.resolve_place(src)?;
+        self.update_location(dst_id, LocationContent::Locations(vec![src_id]))
     }
 }
 
