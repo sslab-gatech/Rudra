@@ -100,9 +100,6 @@ impl CruxVisitor {
                 }
             }
 
-            // TODO: take a look at stacked borrow model, then decide whether or not to implement this
-            Retag(_, _) => (),
-
             // NOP
             StorageLive(_) | StorageDead(_) | Nop => (),
 

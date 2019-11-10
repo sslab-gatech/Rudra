@@ -25,12 +25,7 @@ pub use ext::TyCtxtExt;
 
 // Insert rustc arguments at the beginning of the argument list that Crux wants to be
 // set per default, for maximal validation power.
-pub static CRUX_DEFAULT_ARGS: &[&str] = &[
-    "-Zalways-encode-mir",
-    "-Zmir-emit-retag",
-    "-Zmir-opt-level=0",
-    "--cfg=crux",
-];
+pub static CRUX_DEFAULT_ARGS: &[&str] = &["-Zalways-encode-mir", "-Zmir-opt-level=0", "--cfg=crux"];
 
 /// Returns the "default sysroot" that Crux will use if no `--sysroot` flag is set.
 /// Should be a compile-time constant.
