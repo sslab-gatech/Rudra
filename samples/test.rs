@@ -1,4 +1,4 @@
-// cargo run -- --crate-type lib samples/test.rs >stdout 2>stderr
+// cargo run -- --crate-type lib samples/test.rs 2>stderr
 use std::mem::ManuallyDrop;
 use std::slice;
 

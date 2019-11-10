@@ -2,7 +2,7 @@ use rustc::ty::{Instance, InstanceDef, TyCtxt};
 use rustc_mir::util::write_mir_pretty;
 use syntax::source_map::Span;
 
-// TODO: support dump to another file, default to stdout
+// TODO: support dump to another file
 
 pub fn print_span<'tcx>(tcx: TyCtxt<'tcx>, span: &Span) {
     let source_map = tcx.sess.source_map();
@@ -19,8 +19,8 @@ pub fn print_mir<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) {
     match instance.def {
         InstanceDef::Item(_) => {
             if tcx.is_mir_available(instance.def.def_id()) {
-                let stdout = std::io::stdout();
-                let mut handle = stdout.lock();
+                let stderr = std::io::stderr();
+                let mut handle = stderr.lock();
                 if let Err(_) = write_mir_pretty(tcx, Some(instance.def.def_id()), &mut handle) {
                     error!(
                         "Cannot print MIR: error while printing `{:?}`",
