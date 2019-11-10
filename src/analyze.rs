@@ -124,8 +124,11 @@ impl AnalysisContext {
             }
         }
 
+        dbg!(&self.stack_frame);
+        dbg!(&self.locations);
+
         let return_id = self.current_stack()[0];
-        if self.locations[&return_id].is_valid_return_content(&self.locations) {
+        if !self.locations[&return_id].is_valid_return_content(&self.locations) {
             return Err(AnalysisError::InvalidReturnContent);
         }
 
@@ -191,20 +194,46 @@ impl AnalysisContext {
         &self,
         place: &mir::Place<'tcx>,
     ) -> Result<LocationId, AnalysisError<'tcx>> {
-        if place.projection.is_empty() {
-            match place.base {
-                mir::PlaceBase::Local(local) => Ok(self.current_stack()[local.as_usize()]),
-                mir::PlaceBase::Static(_) => Err(AnalysisError::Unimplemented(
+        let mut current = match place.base {
+            mir::PlaceBase::Local(local) => self.current_stack()[local.as_usize()],
+            mir::PlaceBase::Static(_) => {
+                return Err(AnalysisError::Unimplemented(
                     format!("Static place base is not supported: {:?}", place),
                     None,
-                )),
+                ))
             }
-        } else {
-            Err(AnalysisError::Unimplemented(
-                format!("Place projection is not supported: {:?}", place),
-                None,
-            ))
+        };
+
+        for projection_elem in place.projection.into_iter() {
+            use mir::ProjectionElem::*;
+            match projection_elem {
+                Deref => match self.locations.get(&current) {
+                    Some(LocationContent::Locations(ref location_vec)) => {
+                        if location_vec.len() != 1 {
+                            return Err(AnalysisError::Unimplemented(
+                                "Deref target may contain multiple locations".to_owned(),
+                                None,
+                            ));
+                        }
+                        current = location_vec[0];
+                    }
+                    _ => {
+                        return Err(AnalysisError::Unimplemented(
+                            "Deref projection is only supported on pointer types".to_owned(),
+                            None,
+                        ))
+                    }
+                },
+                _ => {
+                    return Err(AnalysisError::Unimplemented(
+                        format!("Unsupported place projection: {:?}", place),
+                        None,
+                    ))
+                }
+            }
         }
+
+        Ok(current)
     }
 
     pub fn handle_assign<'tcx>(

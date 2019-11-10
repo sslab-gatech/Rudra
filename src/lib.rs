@@ -19,7 +19,7 @@ pub mod utils;
 
 use rustc::ty::TyCtxt;
 
-use analyze::Analyzer;
+use analyze::{AnalysisError, Analyzer};
 use call_graph::CallGraph;
 pub use ext::TyCtxtExt;
 
@@ -81,8 +81,16 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
             }
 
             let result = analyzer.analyze(local_instance);
-            if let Err(e) = result {
-                println!("Analysis failed with error: {:?}", e);
+            match result {
+                Err(e @ AnalysisError::Unimplemented(_, _)) => {
+                    println!("Unsupported MIR pattern: {:?}", e);
+                }
+                Err(e) => {
+                    println!("Analysis failed with error: {:?}", e);
+                }
+                Ok(_) => {
+                    println!("No error found");
+                }
             }
         }
     }

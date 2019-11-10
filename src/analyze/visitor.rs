@@ -82,8 +82,8 @@ impl CruxVisitor {
                 use mir::Rvalue::*;
                 match rvalue {
                     Use(ref operand) => acx.handle_assign(dst, operand)?,
+                    Cast(_, ref operand, _) => acx.handle_assign(dst, operand)?,
 
-                    // this code doesn't consider borrow kind
                     Ref(_, _, ref src) => acx.handle_ref(dst, src)?,
 
                     BinaryOp(_, _, _) | CheckedBinaryOp(_, _, _) | UnaryOp(_, _) => {
@@ -91,9 +91,9 @@ impl CruxVisitor {
                     }
 
                     // TODO: support more rvalue
-                    _ => {
+                    rvalue => {
                         return Err(AnalysisError::Unimplemented(
-                            "Unimplemented rvalue".to_owned(),
+                            format!("Unimplemented rvalue `{:?}`", rvalue),
                             Some(statement.source_info.span),
                         ))
                     }
