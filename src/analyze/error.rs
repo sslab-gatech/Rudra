@@ -6,7 +6,7 @@ pub enum AnalysisError<'tcx> {
     NoMirForInstance(Instance<'tcx>),
     Unimplemented(String, Option<Span>),
     InfiniteLoop,
-    InvalidReturnContent,
+    InvalidReturnContent(String),
     WriteToDeadLocation,
 }
 

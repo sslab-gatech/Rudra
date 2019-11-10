@@ -20,28 +20,6 @@ pub enum LocationContent {
     Locations(Vec<LocationId>),
 }
 
-impl LocationContent {
-    pub fn is_valid_return_content(
-        &self,
-        location_map: &HashMap<LocationId, LocationContent>,
-    ) -> bool {
-        match self {
-            LocationContent::Dead | LocationContent::Uninitialized => false,
-            LocationContent::Value => true,
-            LocationContent::Locations(ref locations) => {
-                // TODO: recursive shape analysis?
-                locations
-                    .iter()
-                    .all(|location| match location_map.get(location) {
-                        None => false,
-                        Some(LocationContent::Dead) => false,
-                        _ => true,
-                    })
-            }
-        }
-    }
-}
-
 pub struct Analyzer<'tcx> {
     tcx: TyCtxt<'tcx>,
 }
@@ -128,13 +106,33 @@ impl AnalysisContext {
         dbg!(&self.locations);
 
         let return_id = self.current_stack()[0];
-        if !self.locations[&return_id].is_valid_return_content(&self.locations) {
-            return Err(AnalysisError::InvalidReturnContent);
-        }
-
+        self.check_return_content(return_id)?;
         self.stack_frame.pop();
 
         Ok(())
+    }
+
+    fn check_return_content<'tcx>(&self, id: LocationId) -> StepResult<'tcx> {
+        let content = &self.locations[&id];
+
+        match content {
+            LocationContent::Dead | LocationContent::Uninitialized => Err(
+                AnalysisError::InvalidReturnContent("Uninitialized value is returned".to_owned()),
+            ),
+            LocationContent::Value => Ok(()),
+            LocationContent::Locations(ref locations) => {
+                // TODO: recursive shape analysis?
+                for location in locations.iter() {
+                    if let LocationContent::Dead = self.locations[location] {
+                        return Err(AnalysisError::InvalidReturnContent(format!(
+                            "Return value may contain dangling location {}",
+                            location
+                        )));
+                    }
+                }
+                Ok(())
+            }
+        }
     }
 
     fn current_stack(&self) -> &Vec<LocationId> {
@@ -207,8 +205,8 @@ impl AnalysisContext {
         for projection_elem in place.projection.into_iter() {
             use mir::ProjectionElem::*;
             match projection_elem {
-                Deref => match self.locations.get(&current) {
-                    Some(LocationContent::Locations(ref location_vec)) => {
+                Deref => match self.locations[&current] {
+                    LocationContent::Locations(ref location_vec) => {
                         if location_vec.len() != 1 {
                             return Err(AnalysisError::Unimplemented(
                                 "Deref target may contain multiple locations".to_owned(),
