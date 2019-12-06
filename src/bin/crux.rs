@@ -56,11 +56,7 @@ fn main() {
     }
 
     // propagate arguments to rustc
-    let mut rustc_args = Vec::new();
-
-    for arg in std::env::args() {
-        rustc_args.push(arg);
-    }
+    let mut rustc_args: Vec<String> = std::env::args().collect();
 
     if let Some(sysroot) = compile_time_sysroot() {
         let sysroot_flag = "--sysroot";
