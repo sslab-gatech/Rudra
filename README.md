@@ -6,7 +6,7 @@ Crux is a cross-language static checker for Rust
 
 ```
 # Install Rust nightly toolchain
-rustup install toolchain nightly
+rustup toolchain install nightly --profile default --component rustc-dev
 
 # Test your installation
 cargo run -- samples/example.rs

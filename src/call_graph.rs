@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
-use rustc::hir::Unsafety;
 use rustc::mir;
 use rustc::mir::mono::MonoItem;
 use rustc::ty::{subst::SubstsRef, Instance, TyCtxt};
 use rustc_mir::monomorphize::collector::{collect_crate_mono_items, MonoItemCollectionMode};
+use syntax::ast::Unsafety;
 
 use crate::TyCtxtExt;
 
@@ -119,7 +119,9 @@ impl<'tcx> CallGraph<'tcx> {
         self.graph.iter().filter_map(move |(&instance, _)| {
             let def_id = instance.def.def_id();
             // check if it is local and safe function
-            if def_id.is_local() && instance.fn_sig(tcx).unsafety() == Unsafety::Normal {
+            if def_id.is_local()
+                && instance.monomorphic_ty(tcx).fn_sig(tcx).unsafety() == Unsafety::Normal
+            {
                 return Some(instance);
             }
             None
@@ -128,14 +130,14 @@ impl<'tcx> CallGraph<'tcx> {
 
     /// A function that returns reachable instances starting from the provided instance.
     /// If the given instance is not found in the call graph,
-    /// it will return a HashSet with a single element.
+    /// it will return an empty set.
     pub fn reachable_set(&self, instance: Instance<'tcx>) -> HashSet<Instance<'tcx>> {
         let mut stack = vec![instance];
         let mut result = HashSet::new();
-        result.insert(instance);
 
         while let Some(cur) = stack.pop() {
             if let Some(next_vec) = self.graph.get(&cur) {
+                result.insert(cur);
                 for &next in next_vec.iter() {
                     if result.insert(next) {
                         stack.push(next);

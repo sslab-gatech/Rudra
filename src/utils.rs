@@ -1,6 +1,6 @@
 use rustc::ty::{Instance, InstanceDef, TyCtxt};
 use rustc_mir::util::write_mir_pretty;
-use syntax::source_map::Span;
+use rustc_span::Span;
 
 // TODO: support dump to another file
 

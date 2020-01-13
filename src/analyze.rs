@@ -33,6 +33,7 @@ impl AnalysisSummary {
     }
 }
 
+#[derive(Debug)]
 pub struct AnalysisContext {
     id_counter: LocationId,
     locations: HashMap<LocationId, LocationContent>,

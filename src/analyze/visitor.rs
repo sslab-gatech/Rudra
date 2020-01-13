@@ -77,6 +77,7 @@ impl CruxVisitor {
         statement: &mir::Statement<'tcx>,
     ) -> StepResult<'tcx> {
         use mir::StatementKind::*;
+        dbg!(statement);
         match statement.kind {
             Assign(box (ref dst, ref rvalue)) => {
                 use mir::Rvalue::*;
@@ -111,6 +112,7 @@ impl CruxVisitor {
                 ));
             }
         }
+        dbg!(&acx);
 
         Ok(())
     }

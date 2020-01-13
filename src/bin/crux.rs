@@ -12,7 +12,7 @@ extern crate log;
 use std::env;
 
 use rustc_driver::Compilation;
-use rustc_interface::interface::Compiler;
+use rustc_interface::{interface::Compiler, Queries};
 
 use dotenv::dotenv;
 
@@ -27,13 +27,17 @@ impl CruxCompilerCalls {
 }
 
 impl rustc_driver::Callbacks for CruxCompilerCalls {
-    fn after_analysis(&mut self, compiler: &Compiler) -> Compilation {
+    fn after_analysis<'tcx>(
+        &mut self,
+        compiler: &Compiler,
+        queries: &'tcx Queries<'tcx>,
+    ) -> Compilation {
         compiler.session().abort_if_errors();
 
         info!("Input file name: {}", compiler.input().source_name());
-        info!("Crate name: {}", compiler.crate_name().unwrap().peek_mut());
+        info!("Crate name: {}", queries.crate_name().unwrap().peek_mut());
 
-        compiler.global_ctxt().unwrap().peek_mut().enter(|tcx| {
+        queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
             analyze(tcx);
         });
         compiler.session().abort_if_errors();

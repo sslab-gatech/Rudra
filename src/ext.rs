@@ -1,6 +1,6 @@
-use rustc::hir::def_id::DefId;
 use rustc::mir;
 use rustc::ty::{self, subst::SubstsRef, Instance, ParamEnv, TyCtxt};
+use rustc_hir::def_id::DefId;
 
 pub trait TyCtxtExt<'tcx> {
     fn find_fn(self, instance: Instance<'tcx>) -> Option<&'tcx mir::Body<'tcx>>;
@@ -52,7 +52,7 @@ impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
             }
             _ => {
                 // usually `real_drop_in_place`
-                Some(self.instance_mir(instance.def))
+                Some(&self.instance_mir(instance.def))
             }
         }
     }
