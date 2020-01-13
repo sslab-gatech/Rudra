@@ -87,6 +87,8 @@ impl CruxVisitor {
 
                     Ref(_, _, ref src) => acx.handle_ref(dst, src)?,
 
+                    AddressOf(_, ref src) => acx.handle_ref(dst, src)?,
+
                     BinaryOp(_, _, _) | CheckedBinaryOp(_, _, _) | UnaryOp(_, _) => {
                         acx.update_location(acx.resolve_place(dst)?, LocationContent::Value)?;
                     }
