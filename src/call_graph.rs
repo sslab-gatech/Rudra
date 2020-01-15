@@ -6,7 +6,7 @@ use rustc::ty::{subst::SubstsRef, Instance, TyCtxt};
 use rustc_mir::monomorphize::collector::{collect_crate_mono_items, MonoItemCollectionMode};
 use syntax::ast::Unsafety;
 
-use crate::TyCtxtExt;
+use crate::ext::*;
 
 type Graph<'tcx> = HashMap<Instance<'tcx>, Vec<Instance<'tcx>>>;
 
@@ -48,11 +48,11 @@ impl<'tcx> CallGraph<'tcx> {
         if let Entry::Vacant(entry) = graph.entry(caller) {
             // early insert to prevent infinite recursion
             let vec = entry.insert(Vec::new());
-            if let Some(mir_body) = tcx.find_fn(caller) {
+            if let Some(mir_body) = tcx.find_fn(caller).body() {
                 debug!("Instance: {:?}", caller);
 
                 for callee in
-                    CallGraph::collect_all_callees(tcx, caller.substs, mir_body).into_iter()
+                    CallGraph::collect_all_callees(tcx, caller.substs, &mir_body).into_iter()
                 {
                     // in most case, the number of callees are small enough that
                     // the cost of the linear lookup is smaller than using a hashmap
@@ -120,11 +120,12 @@ impl<'tcx> CallGraph<'tcx> {
             let def_id = instance.def.def_id();
             // check if it is local and safe function
             if def_id.is_local()
-                && instance.monomorphic_ty(tcx).fn_sig(tcx).unsafety() == Unsafety::Normal
+                && instance.monomorphic_ty(tcx).fn_unsafety(tcx) == Unsafety::Normal
             {
-                return Some(instance);
+                Some(instance)
+            } else {
+                None
             }
-            None
         })
     }
 

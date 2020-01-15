@@ -3,7 +3,7 @@ use rustc_span::Span;
 
 #[derive(Debug)]
 pub enum AnalysisError<'tcx> {
-    NoMirForInstance(Instance<'tcx>),
+    BodyNotAvailable(Instance<'tcx>),
     Unimplemented(String, Option<Span>),
     InfiniteLoop,
     InvalidReturnContent(String),

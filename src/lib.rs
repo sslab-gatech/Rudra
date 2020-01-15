@@ -15,15 +15,16 @@ extern crate syntax;
 extern crate log;
 
 mod analyze;
+mod body;
 mod call_graph;
-mod ext;
+pub mod ext;
 pub mod utils;
 
 use rustc::ty::TyCtxt;
 
 use analyze::{AnalysisError, Analyzer};
+pub use body::MirBody;
 use call_graph::CallGraph;
-pub use ext::TyCtxtExt;
 
 // Insert rustc arguments at the beginning of the argument list that Crux wants to be
 // set per default, for maximal validation power.

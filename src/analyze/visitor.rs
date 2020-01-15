@@ -2,7 +2,7 @@ use rustc::mir;
 use rustc::ty::{Instance, TyCtxt};
 
 use super::{AnalysisContext, AnalysisError, LocationContent, StepResult};
-use crate::TyCtxtExt;
+use crate::ext::*;
 
 pub struct CruxVisitor {}
 
@@ -27,7 +27,8 @@ impl CruxVisitor {
     ) -> StepResult<'tcx> {
         let body = tcx
             .find_fn(instance)
-            .ok_or_else(|| AnalysisError::NoMirForInstance(instance))?;
+            .body()
+            .ok_or_else(|| AnalysisError::BodyNotAvailable(instance))?;
 
         acx.enter_body(body)?;
 
