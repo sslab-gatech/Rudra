@@ -15,15 +15,14 @@ extern crate syntax;
 extern crate log;
 
 mod analyze;
-mod body;
 mod call_graph;
 pub mod ext;
+pub mod ir;
 pub mod utils;
 
 use rustc::ty::TyCtxt;
 
 use analyze::{AnalysisError, Analyzer};
-pub use body::MirBody;
 use call_graph::CallGraph;
 
 // Insert rustc arguments at the beginning of the argument list that Crux wants to be
@@ -71,7 +70,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
 
         // TODO: remove these temporary setups
         if def_path_string == "::buffer[0]::{{impl}}[2]::from[0]"
-            || def_path_string == "::trivial[0]"
+            || def_path_string.starts_with("::crux_test")
         {
             info!("Found {:?}", local_instance);
             for &instance in call_graph.reachable_set(local_instance).iter() {
@@ -79,6 +78,8 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
             }
 
             let result = analyzer.analyze(local_instance);
+
+            println!("Target {}", def_path_string);
             match result {
                 Err(e @ AnalysisError::Unimplemented(_, _)) => {
                     println!("Unsupported MIR pattern: {:?}", e);
