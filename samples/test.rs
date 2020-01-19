@@ -10,3 +10,13 @@ pub fn crux_test_tmp_var_uaf() {
     let ptr = CString::new("Hello, world!").unwrap().as_ptr();
     println!("First byte of the ptr is: {}", unsafe { *ptr });
 }
+
+#[derive(Debug)]
+struct MyStruct {
+    x: i32,
+    y: i32,
+}
+
+pub fn crux_test_struct() {
+    dbg!(MyStruct { x: 1, y: 2 });
+}

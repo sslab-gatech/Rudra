@@ -1,16 +1,7 @@
-pub mod translate;
-
+use rustc::mir;
 use rustc::ty::Ty;
 
-#[derive(Debug)]
-pub struct Statement<'tcx> {
-    kind: StatementKind<'tcx>,
-}
-
-#[derive(Debug)]
-pub enum StatementKind<'tcx> {
-    Dummy(&'tcx i32),
-}
+pub mod translate;
 
 #[derive(Debug)]
 pub struct Terminator<'tcx> {
@@ -19,12 +10,13 @@ pub struct Terminator<'tcx> {
 
 #[derive(Debug)]
 pub enum TerminatorKind<'tcx> {
+    Goto(usize),
     Dummy(&'tcx i32),
 }
 
 #[derive(Debug)]
 pub struct BasicBlock<'tcx> {
-    statements: Vec<Statement<'tcx>>,
+    statements: Vec<mir::Statement<'tcx>>,
     terminator: Terminator<'tcx>,
     is_cleanup: bool,
 }

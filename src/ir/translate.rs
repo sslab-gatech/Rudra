@@ -1,20 +1,25 @@
 use rustc::mir;
 use rustc::ty::{Instance, TyCtxt};
-use rustc_span::Span;
 
 use std::collections::HashMap;
 
 use crate::ext::*;
 use crate::ir;
 
+macro_rules! unsupported {
+    () => (return Err(TranslateError::Unsupported(String::new())));
+    ($($arg:tt)+) => (return Err(TranslateError::Unsupported(format!($($arg)+))));
+}
+
 #[derive(Debug, Clone)]
 pub enum TranslateError<'tcx> {
     BodyNotAvailable(Instance<'tcx>),
-    Unimplemented(String, Option<Span>),
+    Unsupported(String),
 }
 
 pub type TranslateResult<'tcx, T> = Result<T, TranslateError<'tcx>>;
 
+/// Maps Instance to MIR and cache the result.
 pub struct CruxTranslator<'tcx> {
     tcx: TyCtxt<'tcx>,
     cache: HashMap<Instance<'tcx>, TranslateResult<'tcx, ir::Body<'tcx>>>,
@@ -77,8 +82,8 @@ fn translate_basic_block<'tcx>(
     let statements = basic_block
         .statements
         .iter()
-        .map(|statement| translate_statement(statement))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|statement| statement.clone())
+        .collect::<Vec<_>>();
 
     let terminator = translate_terminator(
         basic_block
@@ -94,20 +99,21 @@ fn translate_basic_block<'tcx>(
     })
 }
 
-fn translate_statement<'tcx>(
-    statement: &mir::Statement<'tcx>,
-) -> TranslateResult<'tcx, ir::Statement<'tcx>> {
-    todo!()
-}
-
 fn translate_terminator<'tcx>(
     terminator: &mir::Terminator<'tcx>,
 ) -> TranslateResult<'tcx, ir::Terminator<'tcx>> {
-    todo!()
+    use mir::TerminatorKind::*;
+    Ok(ir::Terminator {
+        kind: match terminator.kind {
+            Goto { target } => ir::TerminatorKind::Goto(target.index()),
+            Call { .. } => todo!("implement call"),
+            _ => unsupported!("Unknown terminator: {:?}", terminator),
+        },
+    })
 }
 
 fn translate_local_decl<'tcx>(
     local_decl: &mir::LocalDecl<'tcx>,
 ) -> TranslateResult<'tcx, ir::LocalDecl<'tcx>> {
-    todo!()
+    Ok(ir::LocalDecl { ty: local_decl.ty })
 }
