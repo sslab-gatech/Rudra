@@ -2,7 +2,7 @@ use rustc::mir;
 use rustc::ty::{Instance, TyCtxt};
 
 use super::{AnalysisContext, AnalysisError, LocationContent, StepResult};
-use crate::ext::*;
+use crate::prelude::*;
 
 pub struct CruxVisitor {}
 

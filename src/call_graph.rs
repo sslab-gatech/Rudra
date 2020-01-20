@@ -1,110 +1,88 @@
 use std::collections::{HashMap, HashSet};
 
-use rustc::mir;
 use rustc::mir::mono::MonoItem;
-use rustc::ty::{subst::SubstsRef, Instance, TyCtxt};
+use rustc::ty::Instance;
 use rustc_mir::monomorphize::collector::{collect_crate_mono_items, MonoItemCollectionMode};
 use syntax::ast::Unsafety;
 
-use crate::ext::*;
+use crate::context;
+use crate::ir;
+use crate::prelude::*;
 
 type Graph<'tcx> = HashMap<Instance<'tcx>, Vec<Instance<'tcx>>>;
 
 // 'tcx: TyCtxt lifetime
-pub struct CallGraph<'tcx> {
-    tcx: TyCtxt<'tcx>,
+pub struct CallGraph<'ccx, 'tcx> {
+    ccx: context::CruxCtxt<'ccx, 'tcx>,
     // this HashSet contains local mono items, which will be starting points of our analysis
     _entry: HashSet<Instance<'tcx>>,
     // this HashMap contains a call graph of all reachable instances
     graph: Graph<'tcx>,
 }
 
-impl<'tcx> CallGraph<'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>) -> Self {
+impl<'ccx, 'tcx> CallGraph<'ccx, 'tcx> {
+    pub fn new(ccx: CruxCtxt<'ccx, 'tcx>) -> Self {
         let mut entry = HashSet::new();
         let mut graph = HashMap::new();
 
         // collect all mono items in the crate
-        let inlining_map = collect_crate_mono_items(tcx, MonoItemCollectionMode::Lazy).1;
+        let inlining_map = collect_crate_mono_items(ccx.tcx(), MonoItemCollectionMode::Lazy).1;
         inlining_map.iter_accesses(|entry_mono_item, _| {
             if let MonoItem::Fn(entry_instance) = entry_mono_item {
                 entry.insert(entry_instance);
-                CallGraph::traverse(tcx, entry_instance, &mut graph);
+                CallGraph::traverse(ccx, entry_instance, &mut graph);
             } else {
                 warn!("Unhandled mono item: {:?}", entry_mono_item);
             }
         });
 
         CallGraph {
-            tcx,
+            ccx,
             _entry: entry,
             graph,
         }
     }
 
-    fn traverse(tcx: TyCtxt<'tcx>, caller: Instance<'tcx>, graph: &mut Graph<'tcx>) {
+    fn traverse(ccx: CruxCtxt<'ccx, 'tcx>, caller: Instance<'tcx>, graph: &mut Graph<'tcx>) {
         use std::collections::hash_map::Entry;
 
         if let Entry::Vacant(entry) = graph.entry(caller) {
             // early insert to prevent infinite recursion
             let vec = entry.insert(Vec::new());
-            if let Some(mir_body) = tcx.find_fn(caller).body() {
-                debug!("Instance: {:?}", caller);
+            match ccx.instance_body(caller).value() {
+                Ok(ir_body) => {
+                    debug!("Instance: {:?}", caller);
 
-                for callee in
-                    CallGraph::collect_all_callees(tcx, caller.substs, &mir_body).into_iter()
-                {
-                    // in most case, the number of callees are small enough that
-                    // the cost of the linear lookup is smaller than using a hashmap
-                    if !vec.contains(&callee) {
-                        vec.push(callee);
+                    for callee in CallGraph::collect_all_callees(ir_body).into_iter() {
+                        // in most case, the number of callees are small enough that
+                        // the cost of the linear lookup is smaller than using a hashmap
+                        if !vec.contains(&callee) {
+                            vec.push(callee);
+                        }
+                    }
+
+                    // clone here to make the borrow checker happy with the recursive call
+                    for next_instance in vec.clone().into_iter() {
+                        debug!("Call into {} -> {}", caller, next_instance);
+                        CallGraph::traverse(ccx, next_instance, graph);
                     }
                 }
-
-                // clone here to make the borrow checker happy with the recursive call
-                for next_instance in vec.clone().into_iter() {
-                    debug!("Call into {} -> {}", caller, next_instance);
-                    CallGraph::traverse(tcx, next_instance, graph);
-                }
-            } else {
-                warn!("MIR for `{:?}` is not available!", caller);
+                Err(e) => warn!("Cannot instantiate MIR body: {:?}", e),
             }
         }
     }
 
     /// Collects all function calls inside MIR body.
     /// Note that the same function can appear multiple times in the result.
-    fn collect_all_callees(
-        tcx: TyCtxt<'tcx>,
-        caller_substs: SubstsRef<'tcx>,
-        body: &'tcx mir::Body<'tcx>,
-    ) -> Vec<Instance<'tcx>> {
-        use mir::{Operand, TerminatorKind};
-        use rustc::ty::TyKind;
-
+    fn collect_all_callees(body: &ir::Body<'tcx>) -> Vec<Instance<'tcx>> {
         let mut result = Vec::new();
-        for bb in body.basic_blocks().iter() {
-            if let Some(terminator) = &bb.terminator {
-                if let TerminatorKind::Call {
-                    func: Operand::Constant(box func),
-                    ..
-                } = &terminator.kind
-                {
-                    let func_ty = func.literal.ty;
-                    match func_ty.kind {
-                        TyKind::FnDef(def_id, callee_substs) => {
-                            if let Some(instance) =
-                                tcx.monomorphic_resolve(def_id, callee_substs, caller_substs)
-                            {
-                                result.push(instance);
-                            }
-                        }
-                        TyKind::FnPtr(_) => {
-                            error!("Dynamic dispatch is not supported yet");
-                        }
-                        _ => panic!("invalid callee of type {:?}", func_ty),
-                    }
+        for bb in body.basic_blocks.iter() {
+            let terminator = &bb.terminator;
+            match terminator.kind {
+                ir::TerminatorKind::StaticCall { target, .. } => {
+                    result.push(target);
                 }
+                _ => (),
             }
         }
         result
@@ -114,8 +92,9 @@ impl<'tcx> CallGraph<'tcx> {
         self.graph.len()
     }
 
+    /// Local safe functions are potential entry points to our analysis
     pub fn local_safe_fn_iter(&self) -> impl Iterator<Item = Instance<'tcx>> + '_ {
-        let tcx = self.tcx;
+        let tcx = self.ccx.tcx();
         self.graph.iter().filter_map(move |(&instance, _)| {
             let def_id = instance.def.def_id();
             // check if it is local and safe function

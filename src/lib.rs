@@ -16,14 +16,17 @@ extern crate log;
 
 mod analyze;
 mod call_graph;
+pub mod context;
 pub mod ext;
 pub mod ir;
+pub mod prelude;
 pub mod utils;
 
 use rustc::ty::TyCtxt;
 
-use analyze::{AnalysisError, Analyzer};
-use call_graph::CallGraph;
+use crate::analyze::{AnalysisError, Analyzer};
+use crate::call_graph::CallGraph;
+use crate::context::CruxCtxtOwner;
 
 // Insert rustc arguments at the beginning of the argument list that Crux wants to be
 // set per default, for maximal validation power.
@@ -53,8 +56,11 @@ pub fn compile_time_sysroot() -> Option<String> {
 }
 
 pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
+    let ccx_owner = CruxCtxtOwner::new(tcx);
+    let ccx = &ccx_owner;
+
     // collect DefId of all bodies
-    let call_graph = CallGraph::new(tcx);
+    let call_graph = CallGraph::new(ccx);
     info!(
         "Found {} functions in the call graph",
         call_graph.num_functions()
