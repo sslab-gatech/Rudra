@@ -5,7 +5,6 @@ use rustc::ty::Instance;
 use rustc_mir::monomorphize::collector::{collect_crate_mono_items, MonoItemCollectionMode};
 use syntax::ast::Unsafety;
 
-use crate::context;
 use crate::ir;
 use crate::prelude::*;
 
@@ -13,7 +12,7 @@ type Graph<'tcx> = HashMap<Instance<'tcx>, Vec<Instance<'tcx>>>;
 
 // 'tcx: TyCtxt lifetime
 pub struct CallGraph<'ccx, 'tcx> {
-    ccx: context::CruxCtxt<'ccx, 'tcx>,
+    ccx: CruxCtxt<'ccx, 'tcx>,
     // this HashSet contains local mono items, which will be starting points of our analysis
     _entry: HashSet<Instance<'tcx>>,
     // this HashMap contains a call graph of all reachable instances

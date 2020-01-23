@@ -59,6 +59,10 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
     let ccx_owner = CruxCtxtOwner::new(tcx);
     let ccx = &ccx_owner;
 
+    // shadow the variable tcx
+    #[allow(unused_variables)]
+    let tcx = ();
+
     // collect DefId of all bodies
     let call_graph = CallGraph::new(ccx);
     info!(
@@ -66,10 +70,11 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
         call_graph.num_functions()
     );
 
-    let mut analyzer = Analyzer::new(tcx);
+    let mut analyzer = Analyzer::new(ccx.tcx());
 
     for local_instance in call_graph.local_safe_fn_iter() {
-        let def_path_string = tcx
+        let def_path_string = ccx
+            .tcx()
             .hir()
             .def_path(local_instance.def.def_id())
             .to_string_no_crate();
@@ -80,7 +85,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
         {
             info!("Found {:?}", local_instance);
             for &instance in call_graph.reachable_set(local_instance).iter() {
-                utils::print_mir(tcx, instance);
+                utils::print_mir(ccx.tcx(), instance);
             }
 
             let result = analyzer.analyze(local_instance);
