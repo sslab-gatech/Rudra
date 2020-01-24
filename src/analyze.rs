@@ -24,6 +24,7 @@ impl<'ccx, 'tcx> Analyzer<'ccx, 'tcx> {
         };
 
         let scc = Scc::construct(body);
+        let group_order = scc.topological_order();
 
         todo!()
     }

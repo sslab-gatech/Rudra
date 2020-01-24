@@ -33,13 +33,13 @@ impl<'tcx> Graph for ir::Body<'tcx> {
 pub struct Scc<'a, G: Graph> {
     graph: &'a G,
     /// group number of each item (indexed by node)
-    group_number: Vec<usize>,
+    group_of_node: Vec<usize>,
     /// adjacency list of groups (indexed by group)
     group_graph: Vec<Vec<usize>>,
 }
 
 /// Temporary state variable used in SCC construction
-struct SccState {
+struct SccConstructionState {
     // intermediate state
     current_index: usize,
     stack: Vec<usize>,
@@ -50,9 +50,9 @@ struct SccState {
     nodes_in_group: Vec<Vec<usize>>,
 }
 
-impl SccState {
+impl SccConstructionState {
     fn new(size: usize) -> Self {
-        SccState {
+        SccConstructionState {
             current_index: 0,
             stack: Vec::new(),
             index: vec![0; size],
@@ -68,10 +68,24 @@ impl SccState {
     }
 }
 
+struct SccTopologicalOrderState {
+    visited: Vec<bool>,
+    order: Vec<usize>,
+}
+
+impl SccTopologicalOrderState {
+    fn new(size: usize) -> Self {
+        SccTopologicalOrderState {
+            visited: vec![false; size],
+            order: Vec::new(),
+        }
+    }
+}
+
 impl<'a, G: Graph> Scc<'a, G> {
     pub fn construct(graph: &'a G) -> Self {
         let num_node = graph.len();
-        let mut state = SccState::new(num_node);
+        let mut state = SccConstructionState::new(num_node);
 
         // construct SCC
         for node in 0..num_node {
@@ -102,13 +116,13 @@ impl<'a, G: Graph> Scc<'a, G> {
 
         Scc {
             graph,
-            group_number: state.group_number,
+            group_of_node: state.group_number,
             group_graph,
         }
     }
 
     // returns the lowest reachable node
-    fn traverse(graph: &'a G, state: &mut SccState, node: usize) -> usize {
+    fn traverse(graph: &'a G, state: &mut SccConstructionState, node: usize) -> usize {
         state.assign_id(node);
         state.stack.push(node);
 
@@ -143,8 +157,33 @@ impl<'a, G: Graph> Scc<'a, G> {
         low_link
     }
 
+    fn topological_dfs(&self, state: &mut SccTopologicalOrderState, group: usize) {
+        state.visited[group] = true;
+        state.order.push(group);
+        for &next_group in self.next_groups(group).iter() {
+            if !state.visited[next_group] {
+                self.topological_dfs(state, next_group)
+            }
+        }
+    }
+
+    pub fn topological_order(&self) -> Vec<usize> {
+        let num_group = self.group_graph.len();
+        let mut state = SccTopologicalOrderState::new(num_group);
+
+        for group in 0..num_group {
+            if !state.visited[group] {
+                self.topological_dfs(&mut state, group);
+            }
+        }
+
+        let mut result = state.order;
+        result.reverse();
+        result
+    }
+
     pub fn group_of_node(&self, idx: usize) -> usize {
-        self.group_number[idx]
+        self.group_of_node[idx]
     }
 
     pub fn next_groups(&self, group_idx: usize) -> &[usize] {
