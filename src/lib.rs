@@ -70,7 +70,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
         call_graph.num_functions()
     );
 
-    let mut analyzer = Analyzer::new(ccx.tcx());
+    let mut analyzer = Analyzer::new(ccx);
 
     for local_instance in call_graph.local_safe_fn_iter() {
         let def_path_string = ccx
@@ -92,8 +92,8 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
 
             println!("Target {}", def_path_string);
             match result {
-                Err(e @ AnalysisError::Unimplemented(_, _)) => {
-                    println!("Unsupported MIR pattern: {:?}", e);
+                Err(e @ AnalysisError::Unimplemented(_)) => {
+                    println!("Unimplemented MIR pattern: {:?}", e);
                 }
                 Err(e) => {
                     println!("Analysis failed with error: {:?}", e);
