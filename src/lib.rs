@@ -24,7 +24,7 @@ pub mod utils;
 
 use rustc::ty::TyCtxt;
 
-use crate::analyze::{AnalysisError, Analyzer};
+use crate::analyze::Analyzer;
 use crate::call_graph::CallGraph;
 use crate::context::CruxCtxtOwner;
 
@@ -88,11 +88,11 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
                 utils::print_mir(ccx.tcx(), instance);
             }
 
-            let result = analyzer.analyze(local_instance);
+            let result = analyzer.enter(local_instance);
 
             println!("Target {}", def_path_string);
             match result {
-                Err(e @ AnalysisError::Unimplemented(_)) => {
+                Err(e @ analyze::Error::Unimplemented(_)) => {
                     println!("Unimplemented MIR pattern: {:?}", e);
                 }
                 Err(e) => {

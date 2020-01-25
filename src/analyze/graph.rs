@@ -34,6 +34,8 @@ pub struct Scc<'a, G: Graph> {
     graph: &'a G,
     /// group number of each item (indexed by node)
     group_of_node: Vec<usize>,
+    /// nodes in each SCC group (indexed by group)
+    nodes_in_group: Vec<Vec<usize>>,
     /// adjacency list of groups (indexed by group)
     group_graph: Vec<Vec<usize>>,
 }
@@ -46,7 +48,7 @@ struct SccConstructionState {
     index: Vec<usize>,
     low_link: Vec<usize>,
     // result
-    group_number: Vec<usize>,
+    group_of_node: Vec<usize>,
     nodes_in_group: Vec<Vec<usize>>,
 }
 
@@ -57,7 +59,7 @@ impl SccConstructionState {
             stack: Vec::new(),
             index: vec![0; size],
             low_link: vec![0; size],
-            group_number: vec![0; size],
+            group_of_node: vec![0; size],
             nodes_in_group: Vec::new(),
         }
     }
@@ -99,8 +101,8 @@ impl<'a, G: Graph> Scc<'a, G> {
         let mut group_graph = vec![Vec::new(); num_group];
         for from in 0..num_node {
             for to in graph.next(from).into_iter() {
-                let from_group = state.group_number[from];
-                let to_group = state.group_number[to];
+                let from_group = state.group_of_node[from];
+                let to_group = state.group_of_node[to];
                 if from_group != to_group {
                     group_graph[from_group].push(to_group);
                 }
@@ -114,9 +116,16 @@ impl<'a, G: Graph> Scc<'a, G> {
             edges.dedup();
         }
 
+        let SccConstructionState {
+            group_of_node,
+            nodes_in_group,
+            ..
+        } = state;
+
         Scc {
             graph,
-            group_of_node: state.group_number,
+            group_of_node,
+            nodes_in_group,
             group_graph,
         }
     }
@@ -131,7 +140,7 @@ impl<'a, G: Graph> Scc<'a, G> {
             if state.index[next] == 0 {
                 // not visited yet
                 low_link = min(low_link, Scc::traverse(graph, state, next));
-            } else if state.group_number[next] == 0 {
+            } else if state.group_of_node[next] == 0 {
                 // already in stack
                 low_link = min(low_link, state.index[next]);
             }
@@ -144,7 +153,7 @@ impl<'a, G: Graph> Scc<'a, G> {
             let group_num = state.nodes_in_group.len() + 1;
             loop {
                 let now = state.stack.pop().unwrap();
-                state.group_number[now] = group_num;
+                state.group_of_node[now] = group_num;
                 new_group.push(now);
 
                 if now == node {
@@ -182,8 +191,16 @@ impl<'a, G: Graph> Scc<'a, G> {
         result
     }
 
+    pub fn graph(&self) -> &G {
+        &self.graph
+    }
+
     pub fn group_of_node(&self, idx: usize) -> usize {
         self.group_of_node[idx]
+    }
+
+    pub fn nodes_in_group(&self, idx: usize) -> &[usize] {
+        &self.nodes_in_group[idx]
     }
 
     pub fn next_groups(&self, group_idx: usize) -> &[usize] {
