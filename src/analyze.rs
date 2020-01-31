@@ -23,7 +23,7 @@ pub struct Analyzer<'ccx, 'tcx> {
     local_var_map: HashMap<Instance<'tcx>, Vec<Location<'tcx>>>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Location<'tcx> {
     id: usize,
     ty: Ty<'tcx>,
@@ -54,6 +54,12 @@ impl<'tcx> LocationFactory<'tcx> {
         self.counter = 0;
         self.list.clear();
     }
+}
+
+#[derive(Clone, Debug)]
+struct Place<'tcx> {
+    base: Location<'tcx>,
+    deref_count: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -91,12 +97,57 @@ impl<'ccx, 'tcx> Analyzer<'ccx, 'tcx> {
         self.constraints.clear();
     }
 
-    fn add_constraint(&mut self, from: usize, edge: Constraint) {
-        todo!()
+    fn local_to_location(&self, local: mir::Local) -> Location<'tcx> {
+        self.local_var_map[self.call_stack.last().unwrap()][local.index()]
+    }
+
+    fn lower_mir_place(
+        &self,
+        place: &mir::Place<'tcx>,
+    ) -> std::result::Result<Place<'tcx>, Error<'tcx>> {
+        let base = self.local_to_location(place.local);
+
+        let mut count = 0;
+        for projection in place.projection {
+            match projection {
+                Deref => count += 1,
+                _ => {
+                    return Err(Error::Unimplemented(format!(
+                        "Projection: {:?}",
+                        projection
+                    )))
+                }
+            }
+        }
+
+        Ok(Place {
+            base,
+            deref_count: count,
+        })
     }
 
     fn analyzed(&self, instance: Instance<'tcx>) -> bool {
         self.local_var_map.contains_key(&instance)
+    }
+
+    fn is_operand_ptr(
+        &self,
+        local_decls: &impl mir::HasLocalDecls<'tcx>,
+        operand: &mir::Operand<'tcx>,
+    ) -> bool {
+        operand.ty(local_decls, self.ccx.tcx()).is_any_ptr()
+    }
+
+    fn is_place_ptr(
+        &self,
+        local_decls: &impl mir::HasLocalDecls<'tcx>,
+        place: &mir::Place<'tcx>,
+    ) -> bool {
+        place.ty(local_decls, self.ccx.tcx()).ty.is_any_ptr()
+    }
+
+    fn add_constraint(&mut self, from: usize, edge: Constraint) {
+        todo!()
     }
 
     pub fn enter(&mut self, instance: Instance<'tcx>) -> Result<'tcx> {
@@ -131,7 +182,6 @@ impl<'ccx, 'tcx> Analyzer<'ccx, 'tcx> {
 
         // we are implementing a flow-insensitive analysis,
         // so the visiting order doesn't matter
-        let tcx = self.ccx.tcx();
         for basic_block in body.basic_blocks.iter() {
             for statement in basic_block.statements.iter() {
                 use mir::StatementKind::*;
@@ -139,25 +189,11 @@ impl<'ccx, 'tcx> Analyzer<'ccx, 'tcx> {
                     Assign(box (ref dst, ref rvalue)) => {
                         use mir::Rvalue::*;
                         match rvalue {
-                            Use(operand) => self.handle_assign(dst, operand)?,
+                            Use(operand) => self.handle_assign(body, dst, operand)?,
+                            Cast(_, ref operand, _) => self.handle_assign(body, dst, operand)?,
 
-                            Cast(_, ref operand, _) => {
-                                let src_is_ptr = operand.ty(body, tcx).is_any_ptr();
-                                let dst_is_ptr = dst.ty(body, tcx).ty.is_any_ptr();
-                                if dst_is_ptr {
-                                    if src_is_ptr {
-                                        self.handle_assign(dst, operand)?;
-                                    } else {
-                                        return Err(Error::Unimplemented(format!(
-                                            "Pointer casting is not supported `{:?}`",
-                                            statement
-                                        )));
-                                    }
-                                }
-                            }
-
-                            AddressOf(_, ref src) => self.handle_ref(dst, src)?,
-                            Ref(_, _, ref src) => self.handle_ref(dst, src)?,
+                            AddressOf(_, ref src) => self.handle_ref(body, dst, src)?,
+                            Ref(_, _, ref src) => self.handle_ref(body, dst, src)?,
 
                             BinaryOp(_, _, _) | CheckedBinaryOp(_, _, _) | UnaryOp(_, _) => (),
 
@@ -177,18 +213,60 @@ impl<'ccx, 'tcx> Analyzer<'ccx, 'tcx> {
             }
         }
 
+        self.call_stack.pop();
+
         Ok(())
     }
 
-    fn handle_assign(
+    fn handle_assign<T>(
         &mut self,
+        local_decls: &T,
         dst: &mir::Place<'tcx>,
-        operand: &mir::Operand<'tcx>,
-    ) -> Result<'tcx> {
-        todo!()
+        src: &mir::Operand<'tcx>,
+    ) -> Result<'tcx>
+    where
+        T: mir::HasLocalDecls<'tcx>,
+    {
+        let src_is_ptr = self.is_operand_ptr(local_decls, src);
+        let dst_is_ptr = self.is_place_ptr(local_decls, dst);
+
+        if src_is_ptr && dst_is_ptr {
+            match src {
+                mir::Operand::Copy(src) | mir::Operand::Move(src) => {
+                    let src = self.lower_mir_place(src)?;
+                    let dst = self.lower_mir_place(dst)?;
+
+                    todo!()
+                }
+                mir::Operand::Constant(_) => {
+                    return Err(Error::Unimplemented(format!("Constant pointer: {:?}", src)));
+                }
+            }
+        } else if dst_is_ptr && !src_is_ptr {
+            return Err(Error::Unimplemented(format!(
+                "Cast to pointer: from `{:?}` to `{:?}`",
+                src, dst
+            )));
+        }
+
+        Ok(())
     }
 
-    fn handle_ref(&mut self, dst: &mir::Place<'tcx>, src: &mir::Place<'tcx>) -> Result<'tcx> {
+    fn handle_ref<T>(
+        &mut self,
+        local_decls: &T,
+        dst: &mir::Place<'tcx>,
+        src: &mir::Place<'tcx>,
+    ) -> Result<'tcx>
+    where
+        T: mir::HasLocalDecls<'tcx>,
+    {
+        let dst_is_ptr = self.is_place_ptr(local_decls, dst);
+        assert!(dst_is_ptr);
+
+        let src = self.lower_mir_place(src)?;
+        let dst = self.lower_mir_place(dst)?;
+
         todo!()
     }
 }

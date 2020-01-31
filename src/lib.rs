@@ -95,7 +95,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
             println!("Target {}", def_path_string);
             match result {
                 Err(e @ analyze::Error::Unimplemented(_)) => {
-                    println!("Unimplemented MIR pattern: {:?}", e);
+                    println!("Unimplemented: {:?}", e);
                 }
                 Err(e) => {
                     println!("Analysis failed with error: {:?}", e);
