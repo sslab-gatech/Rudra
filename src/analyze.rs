@@ -26,7 +26,8 @@ pub struct Analyzer<'ccx, 'tcx> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Location<'tcx> {
     id: usize,
-    ty: Ty<'tcx>,
+    /// `None` for temporary variables introduced during lowering process
+    ty: Option<Ty<'tcx>>,
 }
 
 struct LocationFactory<'tcx> {
@@ -42,7 +43,7 @@ impl<'tcx> LocationFactory<'tcx> {
         }
     }
 
-    fn next(&mut self, ty: Ty<'tcx>) -> Location<'tcx> {
+    fn next(&mut self, ty: Option<Ty<'tcx>>) -> Location<'tcx> {
         let counter = self.counter;
         self.counter
             .checked_add(1)
@@ -62,14 +63,8 @@ struct Place<'tcx> {
     deref_count: usize,
 }
 
-#[derive(Clone, Debug)]
-struct Constraint {
-    to: usize,
-    kind: ConstraintKind,
-}
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-enum ConstraintKind {
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+enum Constraint {
     /// A >= {B}
     AddrOf(usize),
     /// A >= B
@@ -110,7 +105,7 @@ impl<'ccx, 'tcx> Analyzer<'ccx, 'tcx> {
         let mut count = 0;
         for projection in place.projection {
             match projection {
-                Deref => count += 1,
+                mir::ProjectionElem::Deref => count += 1,
                 _ => {
                     return Err(Error::Unimplemented(format!(
                         "Projection: {:?}",
@@ -146,8 +141,8 @@ impl<'ccx, 'tcx> Analyzer<'ccx, 'tcx> {
         place.ty(local_decls, self.ccx.tcx()).ty.is_any_ptr()
     }
 
-    fn add_constraint(&mut self, from: usize, edge: Constraint) {
-        todo!()
+    fn add_constraint(&mut self, dst_id: usize, constraint: Constraint) {
+        self.constraints[dst_id].insert(constraint);
     }
 
     pub fn enter(&mut self, instance: Instance<'tcx>) -> Result<'tcx> {
@@ -173,7 +168,7 @@ impl<'ccx, 'tcx> Analyzer<'ccx, 'tcx> {
         let locations = body
             .local_decls
             .iter()
-            .map(|local_decl| self.location_factory.next(local_decl.ty))
+            .map(|local_decl| self.location_factory.next(Some(local_decl.ty)))
             .collect::<Vec<_>>();
 
         // mark the function as visited
@@ -233,10 +228,10 @@ impl<'ccx, 'tcx> Analyzer<'ccx, 'tcx> {
         if src_is_ptr && dst_is_ptr {
             match src {
                 mir::Operand::Copy(src) | mir::Operand::Move(src) => {
-                    let src = self.lower_mir_place(src)?;
                     let dst = self.lower_mir_place(dst)?;
+                    let src = self.lower_mir_place(src)?;
 
-                    todo!()
+                    self.handle_place_to_place(dst, src)?;
                 }
                 mir::Operand::Constant(_) => {
                     return Err(Error::Unimplemented(format!("Constant pointer: {:?}", src)));
@@ -264,9 +259,75 @@ impl<'ccx, 'tcx> Analyzer<'ccx, 'tcx> {
         let dst_is_ptr = self.is_place_ptr(local_decls, dst);
         assert!(dst_is_ptr);
 
-        let src = self.lower_mir_place(src)?;
         let dst = self.lower_mir_place(dst)?;
+        let src = self.lower_mir_place(src)?;
 
-        todo!()
+        if src.deref_count == 0 {
+            let mut current_dst = dst;
+            while current_dst.deref_count > 0 {
+                let next_base = self.location_factory.next(None);
+                self.add_constraint(next_base.id, Constraint::Load(current_dst.base.id));
+                current_dst = Place {
+                    base: next_base,
+                    deref_count: current_dst.deref_count - 1,
+                };
+            }
+            self.add_constraint(current_dst.base.id, Constraint::AddrOf(src.base.id))
+        } else {
+            // Replace &* pattern
+            let Place {
+                base: src_base,
+                deref_count: src_deref_count,
+            } = src;
+            self.handle_place_to_place(
+                dst,
+                Place {
+                    base: src_base,
+                    deref_count: src_deref_count - 1,
+                },
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn handle_place_to_place(&mut self, dst: Place<'tcx>, src: Place<'tcx>) -> Result<'tcx> {
+        match (dst.deref_count, src.deref_count) {
+            (0, 0) => self.add_constraint(dst.base.id, Constraint::Copy(src.base.id)),
+            (0, _) => {
+                let mut current_src = src;
+                while current_src.deref_count > 1 {
+                    let next_base = self.location_factory.next(None);
+                    self.add_constraint(next_base.id, Constraint::Load(current_src.base.id));
+                    current_src = Place {
+                        base: next_base,
+                        deref_count: current_src.deref_count - 1,
+                    };
+                }
+                self.add_constraint(dst.base.id, Constraint::Load(current_src.base.id))
+            }
+            (_, _) => {
+                let mut current_src = src;
+                while current_src.deref_count >= 1 {
+                    let next_base = self.location_factory.next(None);
+                    self.add_constraint(next_base.id, Constraint::Load(current_src.base.id));
+                    current_src = Place {
+                        base: next_base,
+                        deref_count: current_src.deref_count - 1,
+                    };
+                }
+                let mut current_dst = dst;
+                while current_dst.deref_count > 1 {
+                    let next_base = self.location_factory.next(None);
+                    self.add_constraint(next_base.id, Constraint::Load(current_dst.base.id));
+                    current_dst = Place {
+                        base: next_base,
+                        deref_count: current_dst.deref_count - 1,
+                    };
+                }
+                self.add_constraint(current_dst.base.id, Constraint::Store(current_src.base.id))
+            }
+        }
+        Ok(())
     }
 }
