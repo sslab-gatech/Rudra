@@ -1,5 +1,6 @@
 use rustc::mir;
 use rustc::ty::{Instance, Ty};
+use rustc_index::vec::IndexVec;
 
 #[derive(Debug)]
 pub struct Terminator<'tcx> {
@@ -33,5 +34,12 @@ pub struct LocalDecl<'tcx> {
 #[derive(Debug)]
 pub struct Body<'tcx> {
     pub local_decls: Vec<LocalDecl<'tcx>>,
+    pub original_decls: IndexVec<mir::Local, mir::LocalDecl<'tcx>>,
     pub basic_blocks: Vec<BasicBlock<'tcx>>,
+}
+
+impl<'tcx> mir::HasLocalDecls<'tcx> for Body<'tcx> {
+    fn local_decls(&self) -> &IndexVec<mir::Local, mir::LocalDecl<'tcx>> {
+        &self.original_decls
+    }
 }

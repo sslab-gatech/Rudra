@@ -46,7 +46,6 @@ struct SccConstructionState {
     current_index: usize,
     stack: Vec<usize>,
     index: Vec<usize>,
-    low_link: Vec<usize>,
     // result
     group_of_node: Vec<usize>,
     nodes_in_group: Vec<Vec<usize>>,
@@ -58,7 +57,6 @@ impl SccConstructionState {
             current_index: 0,
             stack: Vec::new(),
             index: vec![0; size],
-            low_link: vec![0; size],
             group_of_node: vec![0; size],
             nodes_in_group: Vec::new(),
         }

@@ -17,6 +17,8 @@ extern crate log;
 mod analyze;
 mod call_graph;
 pub mod context;
+/// Data Structures
+pub mod ds;
 pub mod ext;
 pub mod ir;
 pub mod prelude;

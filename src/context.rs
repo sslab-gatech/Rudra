@@ -7,15 +7,15 @@ use dashmap::DashMap;
 use crate::ir;
 use crate::prelude::*;
 
-macro_rules! unsupported {
-    () => (return Err(TranslateError::Unsupported(String::new())));
-    ($($arg:tt)+) => (return Err(TranslateError::Unsupported(format!($($arg)+))));
+macro_rules! unimplemented {
+    () => (return Err(TranslateError::Unimplemented(String::new())));
+    ($($arg:tt)+) => (return Err(TranslateError::Unimplemented(format!($($arg)+))));
 }
 
 #[derive(Debug, Clone)]
 pub enum TranslateError<'tcx> {
     BodyNotAvailable(Instance<'tcx>),
-    Unsupported(String),
+    Unimplemented(String),
 }
 
 pub type TranslateResult<'tcx, T> = Result<T, TranslateError<'tcx>>;
@@ -79,6 +79,7 @@ impl<'tcx> CruxCtxtOwner<'tcx> {
 
         Ok(ir::Body {
             local_decls,
+            original_decls: body.local_decls.clone(),
             basic_blocks,
         })
     }
@@ -132,7 +133,7 @@ impl<'tcx> CruxCtxtOwner<'tcx> {
                         if let Some((place, block)) = destination {
                             (place.clone(), block.index())
                         } else {
-                            unsupported!("Diverging function call is not yet supported");
+                            unimplemented!("Diverging function call is not yet supported");
                         }
                     };
 
@@ -152,15 +153,15 @@ impl<'tcx> CruxCtxtOwner<'tcx> {
                                 }
                             }
                             TyKind::FnPtr(_) => {
-                                unsupported!("Call through function ptr is not yet supported")
+                                unimplemented!("Call through function ptr is not yet supported")
                             }
                             _ => panic!("invalid callee of type {:?}", func_ty),
                         }
                     } else {
-                        unsupported!("Non-constant function call is not supported")
+                        unimplemented!("Non-constant function call is not supported")
                     }
                 }
-                _ => unsupported!("Unknown terminator: {:?}", terminator),
+                _ => unimplemented!("Unknown terminator: {:?}", terminator),
             },
         })
     }
