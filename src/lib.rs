@@ -26,7 +26,8 @@ pub mod utils;
 
 use rustc::ty::TyCtxt;
 
-use crate::analyze::Analyzer;
+use crate::analyze::solver::SolverW1;
+use crate::analyze::SimpleAnderson;
 use crate::call_graph::CallGraph;
 use crate::context::CruxCtxtOwner;
 
@@ -72,7 +73,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
         call_graph.num_functions()
     );
 
-    let mut analyzer = Analyzer::new(ccx);
+    let mut simple_anderson = SimpleAnderson::new(ccx);
 
     for local_instance in call_graph.local_safe_fn_iter() {
         let def_path_string = ccx
@@ -90,7 +91,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
                 utils::print_mir(ccx.tcx(), instance);
             }
 
-            let result = analyzer.enter(local_instance);
+            let result = simple_anderson.analyze(local_instance);
 
             println!("Target {}", def_path_string);
             match result {
@@ -101,6 +102,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
                     println!("Analysis failed with error: {:?}", e);
                 }
                 Ok(_) => {
+                    let _solver = SolverW1::solve(&simple_anderson);
                     println!("No error found");
                 }
             }
