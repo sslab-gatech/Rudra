@@ -185,6 +185,8 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
                     _ => return Err(Error::Unimplemented(format!("Statement `{:?}`", statement))),
                 }
             }
+
+            // TODO: handle terminator
         }
 
         self.call_stack.pop();
