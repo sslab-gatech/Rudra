@@ -10,6 +10,7 @@ pub struct Terminator<'tcx> {
 #[derive(Debug)]
 pub enum TerminatorKind<'tcx> {
     Goto(usize),
+    Return,
     StaticCall {
         target: Instance<'tcx>,
         args: Vec<mir::Operand<'tcx>>,

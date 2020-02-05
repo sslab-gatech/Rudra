@@ -1,31 +1,26 @@
+use std::result::Result as StdResult;
+
 use rustc::mir;
 use rustc::ty::{Instance, TyCtxt, TyKind};
 
 use dashmap::mapref::one::RefMut;
 use dashmap::DashMap;
 
+use crate::error::{Error, Result};
 use crate::ir;
 use crate::prelude::*;
 
 macro_rules! unimplemented {
-    () => (return Err(TranslateError::Unimplemented(String::new())));
-    ($($arg:tt)+) => (return Err(TranslateError::Unimplemented(format!($($arg)+))));
+    () => (return Err(Error::TranslationUnimplemented(String::new())));
+    ($($arg:tt)+) => (return Err(Error::TranslationUnimplemented(format!($($arg)+))));
 }
-
-#[derive(Debug, Clone)]
-pub enum TranslateError<'tcx> {
-    BodyNotAvailable(Instance<'tcx>),
-    Unimplemented(String),
-}
-
-pub type TranslateResult<'tcx, T> = Result<T, TranslateError<'tcx>>;
 
 pub type CruxCtxt<'ccx, 'tcx> = &'ccx CruxCtxtOwner<'tcx>;
 
 /// Maps Instance to MIR and cache the result.
 pub struct CruxCtxtOwner<'tcx> {
     tcx: TyCtxt<'tcx>,
-    cache: DashMap<Instance<'tcx>, TranslateResult<'tcx, ir::Body<'tcx>>>,
+    cache: DashMap<Instance<'tcx>, Result<'tcx, ir::Body<'tcx>>>,
 }
 
 /// Visit MIR body and returns a Crux IR function
@@ -46,13 +41,13 @@ impl<'tcx> CruxCtxtOwner<'tcx> {
     pub fn instance_body(
         &self,
         instance: Instance<'tcx>,
-    ) -> RefMut<Instance<'tcx>, TranslateResult<'tcx, ir::Body<'tcx>>> {
+    ) -> RefMut<Instance<'tcx>, Result<'tcx, ir::Body<'tcx>>> {
         let tcx = self.tcx();
         let result = self.cache.entry(instance).or_insert_with(|| {
             let mir_body = tcx
                 .find_fn(instance)
                 .body()
-                .ok_or_else(|| TranslateError::BodyNotAvailable(instance))?;
+                .ok_or_else(|| Error::BodyNotAvailable(instance))?;
 
             self.translate_body(instance, mir_body)
         });
@@ -64,18 +59,18 @@ impl<'tcx> CruxCtxtOwner<'tcx> {
         &self,
         instance: Instance<'tcx>,
         body: &mir::Body<'tcx>,
-    ) -> TranslateResult<'tcx, ir::Body<'tcx>> {
+    ) -> Result<'tcx, ir::Body<'tcx>> {
         let local_decls = body
             .local_decls
             .iter()
             .map(|local_decl| self.translate_local_decl(local_decl))
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<StdResult<Vec<_>, _>>()?;
 
         let basic_blocks: Vec<_> = body
             .basic_blocks()
             .iter()
             .map(|basic_block| self.translate_basic_block(instance, basic_block))
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<StdResult<Vec<_>, _>>()?;
 
         Ok(ir::Body {
             local_decls,
@@ -88,7 +83,7 @@ impl<'tcx> CruxCtxtOwner<'tcx> {
         &self,
         instance: Instance<'tcx>,
         basic_block: &mir::BasicBlockData<'tcx>,
-    ) -> TranslateResult<'tcx, ir::BasicBlock<'tcx>> {
+    ) -> Result<'tcx, ir::BasicBlock<'tcx>> {
         let statements = basic_block
             .statements
             .iter()
@@ -114,13 +109,14 @@ impl<'tcx> CruxCtxtOwner<'tcx> {
         &self,
         instance: Instance<'tcx>,
         terminator: &mir::Terminator<'tcx>,
-    ) -> TranslateResult<'tcx, ir::Terminator<'tcx>> {
+    ) -> Result<'tcx, ir::Terminator<'tcx>> {
         let caller_substs = instance.substs;
 
         use mir::TerminatorKind::*;
         Ok(ir::Terminator {
             kind: match &terminator.kind {
                 Goto { target } => ir::TerminatorKind::Goto(target.index()),
+                Return => ir::TerminatorKind::Return,
                 Call {
                     func: func_operand,
                     args,
@@ -169,7 +165,7 @@ impl<'tcx> CruxCtxtOwner<'tcx> {
     fn translate_local_decl(
         &self,
         local_decl: &mir::LocalDecl<'tcx>,
-    ) -> TranslateResult<'tcx, ir::LocalDecl<'tcx>> {
+    ) -> Result<'tcx, ir::LocalDecl<'tcx>> {
         Ok(ir::LocalDecl { ty: local_decl.ty })
     }
 }

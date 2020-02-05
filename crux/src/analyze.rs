@@ -1,10 +1,8 @@
-mod error;
 mod simple_anderson;
 pub mod solver;
 
 use rustc::ty::Ty;
 
-pub use error::{Error, Result};
 pub use simple_anderson::SimpleAnderson;
 
 #[derive(Clone, Copy, Debug, PartialEq)]

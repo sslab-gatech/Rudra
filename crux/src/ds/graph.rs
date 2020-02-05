@@ -16,6 +16,7 @@ impl<'tcx> Graph for ir::Body<'tcx> {
         use ir::TerminatorKind::*;
         match self.basic_blocks[id].terminator.kind {
             Goto(n) => vec![n],
+            Return => vec![],
             StaticCall {
                 cleanup,
                 destination: (_, destination_block),

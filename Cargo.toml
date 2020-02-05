@@ -1,34 +1,5 @@
-[package]
-name = "crux"
-version = "0.1.0"
-authors = ["Yechan Bae <yechan@gatech.edu>"]
-default-run = "crux"
-edition = "2018"
+[workspace]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[lib]
-test = true
-doctest = false
-
-[[bin]]
-name = "crux"
-test = false
-doctest = false
-
-[[bin]]
-name = "cargo-crux"
-test = false
-doctest = false
-
-[[bin]]
-name = "cargo-crux-update"
-test = false
-doctest = false
-
-[dependencies]
-cargo_metadata = "0.8"
-dashmap = "3.2.1"
-dotenv = "0.14"
-env_logger = "0.7"
-log = "0.4"
+members = [
+    "crux",
+]

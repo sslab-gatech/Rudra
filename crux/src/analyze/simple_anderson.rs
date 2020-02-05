@@ -7,8 +7,14 @@ use std::collections::HashSet;
 use rustc::mir;
 use rustc::ty::{Instance, Ty};
 
-use super::{Constraint, ConstraintSet, Error, Location, LocationFactory, Result};
+use super::{Constraint, ConstraintSet, Location, LocationFactory};
+use crate::error::{Error, Result};
 use crate::prelude::*;
+
+macro_rules! unimplemented {
+    () => (return Err(Error::AnalysisUnimplemented(String::new())));
+    ($($arg:tt)+) => (return Err(Error::AnalysisUnimplemented(format!($($arg)+))));
+}
 
 #[derive(Clone, Debug)]
 struct Place<'tcx> {
@@ -79,12 +85,7 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
         for projection in place.projection {
             match projection {
                 mir::ProjectionElem::Deref => count += 1,
-                _ => {
-                    return Err(Error::Unimplemented(format!(
-                        "Projection: {:?}",
-                        projection
-                    )))
-                }
+                _ => unimplemented!("Projection: {:?}", projection),
             }
         }
 
@@ -124,14 +125,14 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
     }
 
     /// The main entry point of the analysis
-    pub fn analyze(&mut self, instance: Instance<'tcx>) -> Result<'tcx> {
+    pub fn analyze(&mut self, instance: Instance<'tcx>) -> Result<'tcx, ()> {
         self.clear();
         self.visit_body(instance)?;
 
         todo!("check constraints")
     }
 
-    fn visit_body(&mut self, instance: Instance<'tcx>) -> Result<'tcx> {
+    fn visit_body(&mut self, instance: Instance<'tcx>) -> Result<'tcx, ()> {
         if self.analyzed(instance) {
             return Ok(());
         }
@@ -140,7 +141,7 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
         let body = self.ccx.instance_body(instance);
         let body = match &*body {
             Ok(body) => body,
-            Err(_) => return Err(Error::BodyNotAvailable(instance)),
+            Err(e) => return Err(e.clone()),
         };
 
         // instantiate local variables
@@ -172,9 +173,7 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
                             BinaryOp(_, _, _) | CheckedBinaryOp(_, _, _) | UnaryOp(_, _) => (),
 
                             // TODO: support more rvalue
-                            rvalue => {
-                                return Err(Error::Unimplemented(format!("Rvalue `{:?}`", rvalue)))
-                            }
+                            rvalue => unimplemented!("Rvalue `{:?}`", rvalue),
                         }
                     }
 
@@ -182,7 +181,7 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
                     StorageLive(_) | StorageDead(_) | Nop => (),
 
                     // TODO: support more statements
-                    _ => return Err(Error::Unimplemented(format!("Statement `{:?}`", statement))),
+                    _ => unimplemented!("Statement `{:?}`", statement),
                 }
             }
 
@@ -199,7 +198,7 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
         local_decls: &T,
         dst: &mir::Place<'tcx>,
         src: &mir::Operand<'tcx>,
-    ) -> Result<'tcx>
+    ) -> Result<'tcx, ()>
     where
         T: mir::HasLocalDecls<'tcx>,
     {
@@ -214,15 +213,10 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
 
                     self.handle_place_to_place(dst, src)?;
                 }
-                mir::Operand::Constant(_) => {
-                    return Err(Error::Unimplemented(format!("Constant pointer: {:?}", src)));
-                }
+                mir::Operand::Constant(_) => unimplemented!("Constant pointer: {:?}", src),
             }
         } else if dst_is_ptr && !src_is_ptr {
-            return Err(Error::Unimplemented(format!(
-                "Cast to pointer: from `{:?}` to `{:?}`",
-                src, dst
-            )));
+            unimplemented!("Cast to pointer: from `{:?}` to `{:?}`", src, dst);
         }
 
         Ok(())
@@ -233,7 +227,7 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
         local_decls: &T,
         dst: &mir::Place<'tcx>,
         src: &mir::Place<'tcx>,
-    ) -> Result<'tcx>
+    ) -> Result<'tcx, ()>
     where
         T: mir::HasLocalDecls<'tcx>,
     {
@@ -276,7 +270,7 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
         Ok(())
     }
 
-    fn handle_place_to_place(&mut self, dst: Place<'tcx>, src: Place<'tcx>) -> Result<'tcx> {
+    fn handle_place_to_place(&mut self, dst: Place<'tcx>, src: Place<'tcx>) -> Result<'tcx, ()> {
         match (dst.deref_count, src.deref_count) {
             (0, 0) => self.add_constraint(dst.base.id, Constraint::Copy(src.base.id)),
             (0, _) => {

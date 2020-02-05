@@ -19,6 +19,7 @@ mod call_graph;
 pub mod context;
 /// Data Structures
 pub mod ds;
+pub mod error;
 pub mod ext;
 pub mod ir;
 pub mod prelude;
@@ -30,6 +31,7 @@ use crate::analyze::solver::SolverW1;
 use crate::analyze::SimpleAnderson;
 use crate::call_graph::CallGraph;
 use crate::context::CruxCtxtOwner;
+use crate::error::Error;
 
 // Insert rustc arguments at the beginning of the argument list that Crux wants to be
 // set per default, for maximal validation power.
@@ -95,8 +97,11 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
 
             println!("Target {}", def_path_string);
             match result {
-                Err(e @ analyze::Error::Unimplemented(_)) => {
-                    println!("Unimplemented: {:?}", e);
+                Err(e @ Error::AnalysisUnimplemented(_)) => {
+                    println!("Analysis Unimplemented: {:?}", e);
+                }
+                Err(e @ Error::TranslationUnimplemented(_)) => {
+                    println!("Translation Unimplemented: {:?}", e);
                 }
                 Err(e) => {
                     println!("Analysis failed with error: {:?}", e);
