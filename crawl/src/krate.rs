@@ -3,7 +3,7 @@ use chrono::DateTime;
 use semver::Version;
 use serde::Deserialize;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct CrateRecord {
     pub description: String,
     pub documentation: String,
@@ -17,8 +17,8 @@ pub struct CrateRecord {
     #[serde(with = "psql_format")]
     pub updated_at: DateTime<Utc>,
 }
-// 2017-06-20 17:30:52.919673
-#[derive(Deserialize, Debug)]
+
+#[derive(Deserialize, Clone, Debug)]
 pub struct VersionRecord {
     pub crate_id: u64,
     pub downloads: u64,
@@ -37,6 +37,10 @@ pub struct Crate {
 }
 
 impl Crate {
+    pub fn new(krate: CrateRecord, versions: Vec<VersionRecord>) -> Crate {
+        Crate { krate, versions }
+    }
+
     pub fn krate(&self) -> &CrateRecord {
         &self.krate
     }

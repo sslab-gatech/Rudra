@@ -27,7 +27,8 @@ fn main() -> Result<()> {
         "Using `{}` as scratch directory",
         scratch_dir.to_string_lossy()
     );
-    fetch_crate_info(&scratch_dir)?;
+
+    let _crate_list = fetch_crate_info(&scratch_dir)?;
 
     Ok(())
 }

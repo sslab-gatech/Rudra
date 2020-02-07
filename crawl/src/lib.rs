@@ -3,6 +3,7 @@
 pub mod error;
 pub mod krate;
 
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
@@ -13,6 +14,7 @@ use log::*;
 use once_cell::sync::Lazy;
 use reqwest::blocking::Client;
 use reqwest::IntoUrl;
+use serde::de::DeserializeOwned;
 use tar::Archive;
 
 use crate::error::Result;
@@ -57,14 +59,14 @@ fn file_needs_refresh(path: impl AsRef<Path>, duration: Duration) -> bool {
     }
 }
 
-fn parse_crate_list(csv_path: impl AsRef<Path>) -> Result<Vec<CrateRecord>> {
-    let file = File::open(csv_path.as_ref())?;
+fn parse_csv_records<T: DeserializeOwned>(csv_path: &Path) -> Result<Vec<T>> {
+    let file = File::open(csv_path)?;
     let buf_reader = BufReader::new(file);
     let mut csv_reader = csv::Reader::from_reader(buf_reader);
 
     let mut vec = Vec::new();
     for result in csv_reader.deserialize() {
-        let record: CrateRecord = result?;
+        let record = result?;
         vec.push(record);
     }
 
@@ -100,7 +102,27 @@ pub fn fetch_crate_info(scratch_dir: &Path) -> Result<Vec<Crate>> {
             .to_string_lossy()
     );
 
-    let crate_list = parse_crate_list(unpacked_path.join("data/crates.csv"))?;
+    let crate_list = parse_csv_records::<CrateRecord>(&unpacked_path.join("data/crates.csv"))?;
+    let mut map = HashMap::with_capacity(crate_list.len());
+    for crate_record in crate_list.iter() {
+        map.insert(crate_record.id, Vec::new());
+    }
 
-    todo!()
+    let version_list =
+        parse_csv_records::<VersionRecord>(&unpacked_path.join("data/versions.csv"))?;
+    for version_record in version_list.into_iter() {
+        map.get_mut(&version_record.crate_id)
+            .unwrap()
+            .push(version_record);
+    }
+
+    let mut vec = Vec::new();
+    for crate_record in crate_list.into_iter() {
+        vec.push(Crate::new(
+            crate_record.clone(),
+            map.remove(&crate_record.id).unwrap(),
+        ));
+    }
+
+    Ok(vec)
 }
