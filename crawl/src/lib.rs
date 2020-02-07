@@ -4,9 +4,10 @@ pub mod error;
 pub mod krate;
 
 use std::collections::HashMap;
+use std::env;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use flate2::read::GzDecoder;
@@ -46,6 +47,16 @@ fn download(url: impl IntoUrl, path: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
+fn decompress(tarball_path: &Path, parent_path: &Path) -> Result<()> {
+    let tar_gz = fs::File::open(&tarball_path)?;
+    let enc = GzDecoder::new(tar_gz);
+    let mut archive = Archive::new(enc);
+
+    archive.unpack(&parent_path)?;
+
+    Ok(())
+}
+
 fn file_needs_refresh(path: impl AsRef<Path>, duration: Duration) -> bool {
     let path = path.as_ref();
 
@@ -73,56 +84,96 @@ fn parse_csv_records<T: DeserializeOwned>(csv_path: &Path) -> Result<Vec<T>> {
     Ok(vec)
 }
 
-pub fn fetch_crate_info(scratch_dir: &Path) -> Result<Vec<Crate>> {
-    let db_dump_dir = scratch_dir.join("db-dump");
-    let db_dump_tarball = scratch_dir.join("db-dump.tar.gz");
-    if file_needs_refresh(&db_dump_tarball, ONE_DAY) {
-        info!("Start downloading new DB");
-        download("https://static.crates.io/db-dump.tar.gz", &db_dump_tarball)?;
+pub struct ScratchDir {
+    path: PathBuf,
+}
 
-        let tar_gz = fs::File::open(&db_dump_tarball)?;
-        let enc = GzDecoder::new(tar_gz);
-        let mut archive = Archive::new(enc);
-
-        fs::remove_dir_all(&db_dump_dir).ok();
-        fs::create_dir(&db_dump_dir)?;
-        archive.unpack(&db_dump_dir)?;
-    } else {
-        info!("Use existing DB");
+impl ScratchDir {
+    pub fn new() -> Self {
+        let path = PathBuf::from(env::var("CRUX_SCRATCH").unwrap_or(String::from("./scratch")));
+        ScratchDir { path }
     }
 
-    let unpacked_path = fs::read_dir(&db_dump_dir)?.next().unwrap()?.path();
-    info!(
-        "Database version: {}",
-        unpacked_path
-            .components()
-            .last()
-            .unwrap()
-            .as_os_str()
-            .to_string_lossy()
-    );
-
-    let crate_list = parse_csv_records::<CrateRecord>(&unpacked_path.join("data/crates.csv"))?;
-    let mut map = HashMap::with_capacity(crate_list.len());
-    for crate_record in crate_list.iter() {
-        map.insert(crate_record.id, Vec::new());
+    pub fn path(&self) -> &PathBuf {
+        &self.path
     }
 
-    let version_list =
-        parse_csv_records::<VersionRecord>(&unpacked_path.join("data/versions.csv"))?;
-    for version_record in version_list.into_iter() {
-        map.get_mut(&version_record.crate_id)
-            .unwrap()
-            .push(version_record);
+    pub fn fetch_crate_info(&self) -> Result<Vec<Crate>> {
+        let db_dump_dir = self.path.join("db-dump");
+        let db_dump_tarball = self.path.join("db-dump.tar.gz");
+        if file_needs_refresh(&db_dump_tarball, ONE_DAY) {
+            info!("Start downloading new DB");
+            download("https://static.crates.io/db-dump.tar.gz", &db_dump_tarball)?;
+
+            fs::remove_dir_all(&db_dump_dir).ok();
+            fs::create_dir(&db_dump_dir)?;
+            decompress(&db_dump_tarball, &db_dump_dir)?;
+        } else {
+            info!("Use existing DB");
+        }
+
+        let unpacked_path = fs::read_dir(&db_dump_dir)?.next().unwrap()?.path();
+        info!(
+            "Database version: {}",
+            unpacked_path
+                .components()
+                .last()
+                .unwrap()
+                .as_os_str()
+                .to_string_lossy()
+        );
+
+        let crate_list = parse_csv_records::<CrateRecord>(&unpacked_path.join("data/crates.csv"))?;
+        let mut map = HashMap::with_capacity(crate_list.len());
+        for crate_record in crate_list.iter() {
+            map.insert(crate_record.id, Vec::new());
+        }
+
+        let version_list =
+            parse_csv_records::<VersionRecord>(&unpacked_path.join("data/versions.csv"))?;
+        for version_record in version_list.into_iter() {
+            map.get_mut(&version_record.crate_id)
+                .unwrap()
+                .push(version_record);
+        }
+
+        let mut vec = Vec::new();
+        for crate_record in crate_list.into_iter() {
+            vec.push(Crate::new(
+                crate_record.clone(),
+                map.remove(&crate_record.id).unwrap(),
+            ));
+        }
+
+        Ok(vec)
     }
 
-    let mut vec = Vec::new();
-    for crate_record in crate_list.into_iter() {
-        vec.push(Crate::new(
-            crate_record.clone(),
-            map.remove(&crate_record.id).unwrap(),
-        ));
-    }
+    pub fn fetch_latest_version(&self, krate: &Crate) -> Result<PathBuf> {
+        let version_tag = krate.latest_version_tag();
 
-    Ok(vec)
+        // download .crate file
+        let crate_path = self.path.join(format!("{}.crate", &version_tag));
+        if !crate_path.exists() {
+            info!("Fetching `{}`", &version_tag);
+            download(
+                &format!(
+                    "https://static.crates.io/crates/{}/{}.crate",
+                    krate.name(),
+                    version_tag,
+                ),
+                &crate_path,
+            )?;
+        }
+
+        // unpack .crate file
+        let crate_content_path = self.path.join(&version_tag);
+        if !crate_content_path.exists() {
+            info!("Unpacking `{}`", &version_tag);
+            decompress(&crate_path, &self.path)?;
+        } else {
+            debug!("Use existing `{}`", &version_tag);
+        }
+
+        Ok(crate_content_path)
+    }
 }

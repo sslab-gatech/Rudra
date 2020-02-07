@@ -41,12 +41,30 @@ impl Crate {
         Crate { krate, versions }
     }
 
+    pub fn name(&self) -> &str {
+        &self.krate.name
+    }
+
     pub fn krate(&self) -> &CrateRecord {
         &self.krate
     }
 
-    pub fn version(&self) -> &Vec<VersionRecord> {
+    pub fn versions(&self) -> &Vec<VersionRecord> {
         &self.versions
+    }
+
+    pub fn latest_version_record(&self) -> &VersionRecord {
+        self.versions()
+            .iter()
+            .max_by_key(|record| &record.num)
+            .unwrap()
+    }
+
+    /// Returns the latest version as `$CRATE_NAME-$CRATE_VERSION` form.
+    /// Example: `crux-0.1.0`.
+    pub fn latest_version_tag(&self) -> String {
+        let record = self.latest_version_record();
+        format!("{}-{}", self.krate.name, record.num)
     }
 }
 

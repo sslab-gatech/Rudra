@@ -1,10 +1,9 @@
 use std::env;
-use std::path::PathBuf;
 
 use log::*;
 
 use crawl::error::Result;
-use crawl::fetch_crate_info;
+use crawl::ScratchDir;
 
 fn setup_log() {
     dotenv::dotenv().ok();
@@ -22,13 +21,17 @@ fn setup_log() {
 fn main() -> Result<()> {
     setup_log();
 
-    let scratch_dir = PathBuf::from(env::var("CRUX_SCRATCH").unwrap_or(String::from("./scratch")));
+    let scratch_dir = ScratchDir::new();
     info!(
         "Using `{}` as scratch directory",
-        scratch_dir.to_string_lossy()
+        scratch_dir.path().to_string_lossy()
     );
 
-    let _crate_list = fetch_crate_info(&scratch_dir)?;
+    let crate_list = scratch_dir.fetch_crate_info()?;
+
+    for krate in crate_list.iter().take(5) {
+        scratch_dir.fetch_latest_version(krate)?;
+    }
 
     Ok(())
 }
