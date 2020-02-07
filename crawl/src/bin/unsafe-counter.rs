@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
 
+use rayon::prelude::*;
 use semver::Version;
 use serde::Serialize;
 
@@ -65,6 +66,14 @@ fn setup_log() {
     pretty_env_logger::init_custom_env(log_var_name);
 }
 
+fn setup_rayon() {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(16)
+        .stack_size(8 * 1024 * 1024) // syn requires bigger stack
+        .build_global()
+        .expect("Failed to initialize thread pool");
+}
+
 fn print_csv(file_name: impl AsRef<Path>, crate_list: &Vec<(Crate, CrateStat)>) -> Result<()> {
     let file = File::create(file_name)?;
     let buf_writer = BufWriter::new(file);
@@ -78,14 +87,15 @@ fn print_csv(file_name: impl AsRef<Path>, crate_list: &Vec<(Crate, CrateStat)>) 
 
 fn main() -> Result<()> {
     setup_log();
+    setup_rayon();
 
     let scratch_dir = ScratchDir::new();
 
     let crate_list = scratch_dir.fetch_crate_info()?;
-    // TODO: increase the number of crates
-    let crate_list: Vec<_> = crate_list.into_iter().take(5).collect();
+    let num_total = crate_list.len();
+
     let crate_list: Vec<_> = crate_list
-        .into_iter()
+        .into_par_iter()
         .map(|krate| -> Result<(Crate, CrateStat)> {
             let path = scratch_dir.fetch_latest_version(&krate)?;
             let crate_stat = crawl::stat::stat(&path)?;
@@ -93,6 +103,21 @@ fn main() -> Result<()> {
         })
         .filter_map(|result| result.ok())
         .collect();
+    let num_success = crate_list.len();
+
+    let num_unsafe = crate_list
+        .par_iter()
+        .filter(|(_, stat)| {
+            stat.summary.num_unsafe_fn > 0
+                || stat.summary.num_contains_unsafe_fn > 0
+                || stat.summary.num_unsafe_global > 0
+        })
+        .count();
+
+    println!("Total: {}", num_total);
+    println!("Success: {}", num_success);
+    println!("Fail: {}", num_total - num_success);
+    println!("Has Unsafe: {}", num_unsafe);
 
     print_csv("unsafe-counter.csv", &crate_list)?;
 

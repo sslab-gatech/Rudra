@@ -9,11 +9,13 @@ use std::env;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
+use std::thread;
 use std::time::{Duration, SystemTime};
 
 use flate2::read::GzDecoder;
 use log::*;
 use once_cell::sync::Lazy;
+use rand::Rng;
 use reqwest::blocking::Client;
 use reqwest::IntoUrl;
 use serde::de::DeserializeOwned;
@@ -22,7 +24,6 @@ use tar::Archive;
 use crate::error::Result;
 use crate::krate::*;
 
-// Read Crawler policies for crates.io here: https://crates.io/policies
 static CLIENT: Lazy<Client> = Lazy::new(|| {
     use reqwest::header;
 
@@ -41,6 +42,10 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
 const ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
 
 fn download(url: impl IntoUrl, path: impl AsRef<Path>) -> Result<()> {
+    // Read Crawler policies for crates.io here: https://crates.io/policies
+    let sleep_duration = rand::thread_rng().gen_range(8_000, 16_000);
+    thread::sleep(Duration::from_millis(sleep_duration));
+
     let file = File::create(path.as_ref())?;
     let mut buf_writer = BufWriter::new(file);
     CLIENT.get(url).send()?.copy_to(&mut buf_writer)?;
