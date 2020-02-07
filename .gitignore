@@ -1,6 +1,8 @@
 /target
 **/*.rs.bk
 
+unsafe-counter.csv
+
 # debug output
 stdout
 stderr

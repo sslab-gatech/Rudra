@@ -45,6 +45,14 @@ impl Crate {
         &self.krate.name
     }
 
+    pub fn downloads(&self) -> u64 {
+        self.krate.downloads
+    }
+
+    pub fn id(&self) -> u64 {
+        self.krate.id
+    }
+
     pub fn krate(&self) -> &CrateRecord {
         &self.krate
     }

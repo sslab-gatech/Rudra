@@ -2,6 +2,7 @@
 
 pub mod error;
 pub mod krate;
+pub mod stat;
 
 use std::collections::HashMap;
 use std::env;
@@ -91,6 +92,7 @@ pub struct ScratchDir {
 impl ScratchDir {
     pub fn new() -> Self {
         let path = PathBuf::from(env::var("CRUX_SCRATCH").unwrap_or(String::from("./scratch")));
+        info!("Using `{}` as scratch directory", path.to_string_lossy());
         ScratchDir { path }
     }
 
