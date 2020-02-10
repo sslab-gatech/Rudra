@@ -9,7 +9,7 @@ type NodeId = usize;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Location<'tcx> {
-    id: usize,
+    id: NodeId,
     /// `None` for temporary variables introduced during lowering process
     ty: Option<Ty<'tcx>>,
 }

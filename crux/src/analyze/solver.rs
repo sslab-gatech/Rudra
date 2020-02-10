@@ -2,7 +2,7 @@ use std::collections::{HashSet, VecDeque};
 
 use super::{Constraint, ConstraintSet, NodeId};
 
-type NodeSet = HashSet<usize>;
+type NodeSet = HashSet<NodeId>;
 
 struct WorkList {
     /// node ID that should be handled
