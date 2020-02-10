@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use rustc::mir;
 use rustc::ty::{Instance, Ty};
 
-use super::{Constraint, ConstraintSet, Location, LocationFactory};
+use super::{Constraint, ConstraintSet, Location, LocationFactory, NodeId};
 use crate::error::{Error, Result};
 use crate::prelude::*;
 
@@ -34,7 +34,7 @@ pub struct SimpleAnderson<'ccx, 'tcx> {
 }
 
 impl<'ccx, 'tcx> ConstraintSet for SimpleAnderson<'ccx, 'tcx> {
-    type Iter = std::vec::IntoIter<(usize, Constraint)>;
+    type Iter = std::vec::IntoIter<(NodeId, Constraint)>;
 
     fn num_locations(&self) -> usize {
         self.location_factory.num_locations()
@@ -120,7 +120,7 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
         place.ty(local_decls, self.ccx.tcx()).ty.is_any_ptr()
     }
 
-    fn add_constraint(&mut self, dst_id: usize, constraint: Constraint) {
+    fn add_constraint(&mut self, dst_id: NodeId, constraint: Constraint) {
         self.constraints[dst_id].insert(constraint);
     }
 
