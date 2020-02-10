@@ -220,7 +220,7 @@ fn stat_tokei(path: &Path) -> tokei::Language {
     };
 
     let mut languages = Languages::new();
-    languages.get_statistics(&[path], &[], &config);
+    languages.get_statistics(&[path], &["test", "tests"], &config);
 
     if languages.contains_key(&LanguageType::Rust) {
         languages[&LanguageType::Rust].clone()
