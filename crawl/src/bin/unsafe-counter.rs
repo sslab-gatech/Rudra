@@ -29,6 +29,7 @@ struct CsvEntry {
     num_fn: usize,
     num_unsafe_fn: usize,
     num_contains_unsafe_fn: usize,
+    num_loop_in_unsafe_fn: usize,
     num_unsafe_global: usize,
 }
 
@@ -49,6 +50,7 @@ impl From<&(Crate, CrateStat)> for CsvEntry {
             num_fn: stat.summary.num_fn,
             num_unsafe_fn: stat.summary.num_unsafe_fn,
             num_contains_unsafe_fn: stat.summary.num_contains_unsafe_fn,
+            num_loop_in_unsafe_fn: stat.summary.num_loop_in_unsafe_fn,
             num_unsafe_global: stat.summary.num_unsafe_global,
         }
     }

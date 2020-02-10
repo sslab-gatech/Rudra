@@ -17,6 +17,7 @@ pub struct Stat {
     pub num_fn: usize,
     pub num_unsafe_fn: usize,
     pub num_contains_unsafe_fn: usize,
+    pub num_loop_in_unsafe_fn: usize,
     pub num_unsafe_global: usize,
     pub inaccurate: bool,
 }
@@ -31,6 +32,7 @@ impl Stat {
             num_fn: 0,
             num_unsafe_fn: 0,
             num_contains_unsafe_fn: 0,
+            num_loop_in_unsafe_fn: 0,
             num_unsafe_global: 0,
             inaccurate: false,
         }
@@ -48,6 +50,7 @@ impl std::ops::Add<&Stat> for Stat {
         self.num_fn += other.num_fn;
         self.num_unsafe_fn += other.num_unsafe_fn;
         self.num_contains_unsafe_fn += other.num_contains_unsafe_fn;
+        self.num_loop_in_unsafe_fn += other.num_loop_in_unsafe_fn;
         self.num_unsafe_global += other.num_unsafe_global;
         self.inaccurate |= other.inaccurate;
         self
@@ -56,9 +59,10 @@ impl std::ops::Add<&Stat> for Stat {
 
 impl std::ops::AddAssign<StatVisitor<'_>> for Stat {
     fn add_assign(&mut self, visitor: StatVisitor) {
-        self.num_fn += visitor.fn_cnt;
-        self.num_unsafe_fn += visitor.unsafe_fn_cnt;
-        self.num_contains_unsafe_fn += visitor.contains_unsafe_fn_cnt;
+        self.num_fn += visitor.num_fn;
+        self.num_unsafe_fn += visitor.num_unsafe_fn;
+        self.num_contains_unsafe_fn += visitor.num_contains_unsafe_fn;
+        self.num_loop_in_unsafe_fn += visitor.num_loop_in_unsafe_fn;
         self.num_unsafe_global += visitor.unsafe_global;
     }
 }
@@ -80,44 +84,73 @@ pub struct CrateStat {
     pub stats: Vec<(Stat, PathBuf)>,
 }
 
-struct Function {
+struct FunctionStat {
     is_unsafe: bool,
     contains_unsafe: bool,
+    loop_in_unsafe: bool,
+    nested_unsafe_block: usize,
 }
 
 pub struct StatVisitor<'ast> {
-    pub fn_cnt: usize,
-    pub unsafe_fn_cnt: usize,
-    pub contains_unsafe_fn_cnt: usize,
+    pub num_fn: usize,
+    pub num_unsafe_fn: usize,
+    pub num_contains_unsafe_fn: usize,
+    pub num_loop_in_unsafe_fn: usize,
     pub unsafe_global: usize,
     _content: &'ast str,
-    visit_stack: Vec<Function>,
+    visit_stack: Vec<FunctionStat>,
 }
 
 impl<'ast> StatVisitor<'ast> {
     fn enter_fn(&mut self, sig: &Signature) {
-        self.visit_stack.push(Function {
-            is_unsafe: sig.unsafety.is_some(),
+        let is_unsafe = sig.unsafety.is_some();
+        self.visit_stack.push(FunctionStat {
+            is_unsafe,
             contains_unsafe: false,
+            loop_in_unsafe: false,
+            nested_unsafe_block: if is_unsafe { 1 } else { 0 },
         });
     }
 
     fn leave_fn(&mut self) {
         let item = self.visit_stack.pop().expect("bug in visitor logic");
-        self.fn_cnt += 1;
+
+        self.num_fn += 1;
+
         if item.is_unsafe {
-            self.unsafe_fn_cnt += 1;
+            self.num_unsafe_fn += 1;
         } else if item.contains_unsafe {
-            self.contains_unsafe_fn_cnt += 1;
+            self.num_contains_unsafe_fn += 1;
+        }
+
+        if item.loop_in_unsafe {
+            self.num_loop_in_unsafe_fn += 1;
         }
     }
 
-    fn mark_contains_unsafe(&mut self) {
-        if self.visit_stack.is_empty() {
-            self.unsafe_global += 1;
-        } else {
-            let last_index = self.visit_stack.len() - 1;
-            self.visit_stack[last_index].contains_unsafe = true;
+    fn enter_loop(&mut self) {
+        if let Some(fn_stat) = self.visit_stack.last_mut() {
+            if fn_stat.nested_unsafe_block > 0 {
+                fn_stat.loop_in_unsafe = true;
+            }
+        }
+    }
+
+    fn leave_loop(&mut self) {}
+
+    fn enter_unsafe(&mut self) {
+        match self.visit_stack.last_mut() {
+            Some(fn_stat) => {
+                fn_stat.contains_unsafe = true;
+                fn_stat.nested_unsafe_block += 1;
+            }
+            None => self.unsafe_global += 1,
+        }
+    }
+
+    fn leave_unsafe(&mut self) {
+        if let Some(fn_stat) = self.visit_stack.last_mut() {
+            fn_stat.nested_unsafe_block -= 1;
         }
     }
 }
@@ -125,9 +158,10 @@ impl<'ast> StatVisitor<'ast> {
 impl<'ast> StatVisitor<'ast> {
     pub fn new(content: &'ast str) -> Self {
         StatVisitor {
-            fn_cnt: 0,
-            unsafe_fn_cnt: 0,
-            contains_unsafe_fn_cnt: 0,
+            num_fn: 0,
+            num_unsafe_fn: 0,
+            num_contains_unsafe_fn: 0,
+            num_loop_in_unsafe_fn: 0,
             unsafe_global: 0,
             _content: content,
             visit_stack: Vec::new(),
@@ -155,8 +189,27 @@ impl<'ast> Visit<'ast> for StatVisitor<'ast> {
     }
 
     fn visit_expr_unsafe(&mut self, node: &'ast syn::ExprUnsafe) {
-        self.mark_contains_unsafe();
+        self.enter_unsafe();
         visit::visit_expr_unsafe(self, node);
+        self.leave_unsafe();
+    }
+
+    fn visit_expr_for_loop(&mut self, node: &'ast syn::ExprForLoop) {
+        self.enter_loop();
+        visit::visit_expr_for_loop(self, node);
+        self.leave_loop();
+    }
+
+    fn visit_expr_loop(&mut self, node: &'ast syn::ExprLoop) {
+        self.enter_loop();
+        visit::visit_expr_loop(self, node);
+        self.leave_loop();
+    }
+
+    fn visit_expr_while(&mut self, node: &'ast syn::ExprWhile) {
+        self.enter_loop();
+        visit::visit_expr_while(self, node);
+        self.leave_loop();
     }
 }
 
