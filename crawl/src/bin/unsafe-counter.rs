@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
 
+use log::*;
 use rayon::prelude::*;
 use semver::Version;
 use serde::Serialize;
@@ -98,8 +99,11 @@ fn main() -> Result<()> {
         .into_par_iter()
         .map(|krate| -> Result<(Crate, CrateStat)> {
             let path = scratch_dir.fetch_latest_version(&krate)?;
-            let crate_stat = crawl::stat::stat(&path)?;
-            Ok((krate, crate_stat))
+            let crate_stat = crawl::stat::stat(&path);
+            if let Err(ref e) = crate_stat {
+                warn!("{}: {}", krate.latest_version_tag(), e);
+            }
+            Ok((krate, crate_stat?))
         })
         .filter_map(|result| result.ok())
         .collect();
