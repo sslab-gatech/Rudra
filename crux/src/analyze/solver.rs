@@ -1,12 +1,12 @@
 use std::collections::{HashSet, VecDeque};
 
-use super::{Constraint, ConstraintSet};
+use super::{Constraint, ConstraintSet, NodeId};
 
-type NodeSet = HashSet<usize>;
+type NodeSet = HashSet<NodeId>;
 
 struct WorkList {
     /// node ID that should be handled
-    work_list: VecDeque<usize>,
+    work_list: VecDeque<NodeId>,
     in_list: Vec<bool>,
 }
 
@@ -18,14 +18,14 @@ impl WorkList {
         }
     }
 
-    fn push(&mut self, target: usize) {
+    fn push(&mut self, target: NodeId) {
         if self.in_list[target] == false {
             self.in_list[target] = true;
             self.work_list.push_back(target);
         }
     }
 
-    fn pop(&mut self) -> Option<usize> {
+    fn pop(&mut self) -> Option<NodeId> {
         let result = self.work_list.pop_front();
         if let Some(idx) = result {
             self.in_list[idx] = false;
@@ -51,12 +51,12 @@ impl StateW1 {
         }
     }
 
-    fn add_edge(&mut self, src: usize, dst: usize) {
+    fn add_edge(&mut self, src: NodeId, dst: NodeId) {
         self.from[src].insert(dst);
         self.to[dst].insert(src);
     }
 
-    fn contains_edge(&mut self, src: usize, dst: usize) -> bool {
+    fn contains_edge(&mut self, src: NodeId, dst: NodeId) -> bool {
         self.from[src].contains(&dst)
     }
 }
@@ -75,19 +75,19 @@ pub struct SolverW1 {
 }
 
 impl SolverW1 {
-    fn add_sol(&mut self, ptr: usize, loc: usize) {
+    fn add_sol(&mut self, ptr: NodeId, loc: NodeId) {
         self.sol[ptr].insert(loc);
     }
 
-    fn add_load(&mut self, src: usize, dst: usize) {
+    fn add_load(&mut self, src: NodeId, dst: NodeId) {
         self.load[src].insert(dst);
     }
 
-    fn add_store(&mut self, src: usize, dst: usize) {
+    fn add_store(&mut self, src: NodeId, dst: NodeId) {
         self.store[dst].insert(src);
     }
 
-    fn add_store_addr(&mut self, src: usize, dst: usize) {
+    fn add_store_addr(&mut self, src: NodeId, dst: NodeId) {
         self.store_addr[dst].insert(src);
     }
 

@@ -5,9 +5,11 @@ use rustc::ty::Ty;
 
 pub use simple_anderson::SimpleAnderson;
 
+type NodeId = usize;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Location<'tcx> {
-    id: usize,
+    id: NodeId,
     /// `None` for temporary variables introduced during lowering process
     ty: Option<Ty<'tcx>>,
 }
@@ -46,19 +48,19 @@ impl<'tcx> LocationFactory<'tcx> {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Constraint {
     /// A >= {B}
-    AddrOf(usize),
+    AddrOf(NodeId),
     /// A >= B
-    Copy(usize),
+    Copy(NodeId),
     /// A >= *B
-    Load(usize),
+    Load(NodeId),
     /// *A >= B
-    Store(usize),
+    Store(NodeId),
     /// *A >= {B}
-    StoreAddr(usize),
+    StoreAddr(NodeId),
 }
 
 pub trait ConstraintSet {
-    type Iter: Iterator<Item = (usize, Constraint)>;
+    type Iter: Iterator<Item = (NodeId, Constraint)>;
 
     fn num_locations(&self) -> usize;
     fn constraints(&self) -> Self::Iter;
