@@ -9,7 +9,7 @@ Crux is a cross-language static checker for Rust
 rustup toolchain install nightly --profile default --component rustc-dev
 
 # Test your installation
-cargo run -- samples/trivial_escape.rs
+cargo run -- --crate-type lib samples/trivial_escape.rs
 ```
 
 ## Install to Cargo
