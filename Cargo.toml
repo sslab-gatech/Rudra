@@ -3,6 +3,7 @@
 members = [
     "crawl",
     "crux",
+    "utility",
 ]
 
 exclude = [

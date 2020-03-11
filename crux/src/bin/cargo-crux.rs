@@ -1,3 +1,5 @@
+///! This implementation is based on `cargo-miri`
+///! https://github.com/rust-lang/miri/blob/master/src/bin/cargo-miri.rs
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -89,7 +91,11 @@ fn list_targets() -> impl Iterator<Item = cargo_metadata::Target> {
                 package_manifest_directory == current_dir
             }
         })
-        .expect("could not find matching package");
+        .unwrap_or_else(|| {
+            show_error(format!(
+                "This seems to be a workspace, which is not supported by cargo-crux"
+            ))
+        });
     let package = metadata.packages.remove(package_index);
 
     // Finally we got the list of targets to build
@@ -186,6 +192,11 @@ fn in_cargo_crux() {
         cmd.arg("rustc");
         match kind.as_str() {
             // Only libraries are supported at this point
+            "bin" => {
+                // FIXME: we just run all the binaries here.
+                // We should instead support `cargo crux --bin foo`.
+                cmd.arg("--bin").arg(target.name);
+            }
             "lib" => {
                 // There can be only one lib in a crate.
                 cmd.arg("--lib");

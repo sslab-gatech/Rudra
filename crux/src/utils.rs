@@ -1,6 +1,7 @@
 use rustc::ty::{Instance, InstanceDef, TyCtxt};
 use rustc_mir::util::write_mir_pretty;
 use rustc_span::Span;
+
 use crate::compile_time_sysroot;
 
 // TODO: support dump to another file
@@ -56,7 +57,8 @@ pub fn print_mir_to_file<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>, outp
     match instance.def {
         InstanceDef::Item(_) => {
             if tcx.is_mir_available(instance.def.def_id()) {
-                let mut handle = std::fs::File::create(filename).expect("Error while creating file");
+                let mut handle =
+                    std::fs::File::create(filename).expect("Error while creating file");
                 if let Err(_) = write_mir_pretty(tcx, Some(instance.def.def_id()), &mut handle) {
                     error!(
                         "Cannot print MIR: error while printing `{:?}`",
