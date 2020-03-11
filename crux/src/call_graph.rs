@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use rustc::mir::mono::MonoItem;
 use rustc::ty::Instance;
+use rustc_hir::Unsafety;
 use rustc_mir::monomorphize::collector::{collect_crate_mono_items, MonoItemCollectionMode};
-use syntax::ast::Unsafety;
 
 use crate::ir;
 use crate::prelude::*;

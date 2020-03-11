@@ -26,6 +26,11 @@ name = "cargo-crux-update"
 test = false
 doctest = false
 
+[[bin]]
+name = "poc-test"
+test = false
+doctest = false
+
 [dependencies]
 cargo_metadata = "0.8"
 dashmap = "3.2.1"

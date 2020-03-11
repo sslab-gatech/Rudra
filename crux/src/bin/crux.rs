@@ -4,7 +4,6 @@ extern crate rustc;
 extern crate rustc_driver;
 extern crate rustc_errors;
 extern crate rustc_interface;
-extern crate syntax;
 
 #[macro_use]
 extern crate log;

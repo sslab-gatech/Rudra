@@ -12,6 +12,12 @@ rustup toolchain install nightly --profile default --component rustc-dev
 cargo run -- --crate-type lib samples/trivial_escape.rs
 ```
 
+You may want to add `.env` file for your local development:
+
+```
+CRUX_LOG=warn,unsafe_counter=info,crawl=info,tokei::language::language_type=error
+```
+
 ## Install to Cargo
 
 ```

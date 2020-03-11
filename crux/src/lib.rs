@@ -9,7 +9,6 @@ extern crate rustc_index;
 extern crate rustc_interface;
 extern crate rustc_mir;
 extern crate rustc_span;
-extern crate syntax;
 
 #[macro_use]
 extern crate log;

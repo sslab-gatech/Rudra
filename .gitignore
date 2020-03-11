@@ -6,3 +6,6 @@ unsafe-counter.csv
 # debug output
 stdout
 stderr
+
+# local file
+.env
