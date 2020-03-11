@@ -7,5 +7,6 @@ members = [
 ]
 
 exclude = [
-    "samples"
+    "poc",
+    "samples",
 ]
