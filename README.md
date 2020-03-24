@@ -5,8 +5,19 @@ Crux is a cross-language static checker for Rust
 ## Development Setup
 
 ```
-# Install Rust nightly toolchain
-rustup toolchain install nightly --profile default --component rustc-dev
+# Clone custom build MIRI
+git clone https://github.com/JOE1994/miri miri-custom
+
+# Setup custom MIRI and related toolchain
+cd miri-custom
+cargo install rustup-toolchain-install-master
+git checkout custom_use
+./rustup-toolchain
+./miri install
+cd ..
+
+# Verify that you have the correct custom MIRI version by checking the commit ID
+cargo miri --version
 
 # Test your installation
 cargo run -- --crate-type lib samples/trivial_escape.rs

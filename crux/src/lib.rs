@@ -80,7 +80,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
         let def_path_string = ccx
             .tcx()
             .hir()
-            .def_path(local_instance.def.def_id())
+            .def_path(local_instance.def.def_id().expect_local())
             .to_string_no_crate();
 
         // TODO: remove these temporary setups
