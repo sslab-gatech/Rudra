@@ -29,6 +29,15 @@ You may want to add `.env` file for your local development:
 CRUX_LOG=warn,unsafe_counter=info,crawl=info,tokei::language::language_type=error
 ```
 
+## Updating Custom MIRI
+
+```
+# (inside `miri-custom` directory)
+git rebase master
+./rustup-toolchain
+./miri install
+```
+
 ## Install to Cargo
 
 ```
@@ -53,9 +62,9 @@ foreach P in Path
     UAF(p, pta)
 ```
 
-* [ ] build call graph -> start from the root node
-* [ ] flow-insensitive points-to analysis
-* [ ] build data-flow graph
-    * [ ] detect alloc / load / store / dealloc
-    * just analyze the same function multiple times
-* [ ] see if use of a pointer overlaps with a dropped pointer
+- [ ] build call graph -> start from the root node
+- [ ] flow-insensitive points-to analysis
+- [ ] build data-flow graph
+  - [ ] detect alloc / load / store / dealloc
+  - just analyze the same function multiple times
+- [ ] see if use of a pointer overlaps with a dropped pointer
