@@ -9,3 +9,4 @@ stderr
 
 # local file
 .env
+.vscode

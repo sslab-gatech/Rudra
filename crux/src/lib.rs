@@ -36,6 +36,19 @@ use crate::error::Error;
 // set per default, for maximal validation power.
 pub static CRUX_DEFAULT_ARGS: &[&str] = &["-Zalways-encode-mir", "-Zmir-opt-level=0", "--cfg=crux"];
 
+#[derive(Debug, Clone, Copy)]
+pub struct CruxAnalysisConfig {
+    pub simple_anderson_enabled: bool,
+}
+
+impl Default for CruxAnalysisConfig {
+    fn default() -> Self {
+        CruxAnalysisConfig {
+            simple_anderson_enabled: false,
+        }
+    }
+}
+
 /// Returns the "default sysroot" that Crux will use if no `--sysroot` flag is set.
 /// Should be a compile-time constant.
 pub fn compile_time_sysroot() -> Option<String> {
@@ -45,6 +58,7 @@ pub fn compile_time_sysroot() -> Option<String> {
         // We can rely on the sysroot computation in librustc.
         return None;
     }
+
     // For builds outside rustc, we need to ensure that we got a sysroot
     // that gets used as a default.  The sysroot computation in librustc would
     // end up somewhere in the build dir.
@@ -59,7 +73,7 @@ pub fn compile_time_sysroot() -> Option<String> {
     })
 }
 
-pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
+pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxAnalysisConfig) {
     let ccx_owner = CruxCtxtOwner::new(tcx);
     let ccx = &ccx_owner;
 
@@ -74,8 +88,46 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
         call_graph.num_functions()
     );
 
-    let mut simple_anderson = SimpleAnderson::new(ccx);
+    // Simple anderson analysis
+    if config.simple_anderson_enabled {
+        let mut simple_anderson = SimpleAnderson::new(ccx);
 
+        for local_instance in call_graph.local_safe_fn_iter() {
+            let def_path_string = ccx
+                .tcx()
+                .hir()
+                .def_path(local_instance.def.def_id().expect_local())
+                .to_string_no_crate();
+
+            // TODO: remove these temporary setups
+            if def_path_string == "::buffer[0]::{{impl}}[2]::from[0]"
+                || def_path_string.starts_with("::crux_test")
+            {
+                info!("Found {:?}", local_instance);
+
+                let result = simple_anderson.analyze(local_instance);
+
+                println!("Target {}", def_path_string);
+                match result {
+                    Err(e @ Error::AnalysisUnimplemented(_)) => {
+                        println!("Analysis Unimplemented: {:?}", e);
+                    }
+                    Err(e @ Error::TranslationUnimplemented(_)) => {
+                        println!("Translation Unimplemented: {:?}", e);
+                    }
+                    Err(e) => {
+                        println!("Analysis failed with error: {:?}", e);
+                    }
+                    Ok(_) => {
+                        let _solver = SolverW1::solve(&simple_anderson);
+                        println!("No error found");
+                    }
+                }
+            }
+        }
+    }
+
+    // Default analysis -- currently, it prints MIR of all reachable functions from the target
     for local_instance in call_graph.local_safe_fn_iter() {
         let def_path_string = ccx
             .tcx()
@@ -90,25 +142,6 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>) {
             info!("Found {:?}", local_instance);
             for &instance in call_graph.reachable_set(local_instance).iter() {
                 utils::print_mir(ccx.tcx(), instance);
-            }
-
-            let result = simple_anderson.analyze(local_instance);
-
-            println!("Target {}", def_path_string);
-            match result {
-                Err(e @ Error::AnalysisUnimplemented(_)) => {
-                    println!("Analysis Unimplemented: {:?}", e);
-                }
-                Err(e @ Error::TranslationUnimplemented(_)) => {
-                    println!("Translation Unimplemented: {:?}", e);
-                }
-                Err(e) => {
-                    println!("Analysis failed with error: {:?}", e);
-                }
-                Ok(_) => {
-                    let _solver = SolverW1::solve(&simple_anderson);
-                    println!("No error found");
-                }
             }
         }
     }

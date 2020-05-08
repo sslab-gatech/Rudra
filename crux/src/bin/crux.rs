@@ -15,13 +15,15 @@ use rustc_interface::{interface::Compiler, Queries};
 
 use dotenv::dotenv;
 
-use crux::{analyze, compile_time_sysroot, CRUX_DEFAULT_ARGS};
+use crux::{analyze, compile_time_sysroot, CruxAnalysisConfig, CRUX_DEFAULT_ARGS};
 
-struct CruxCompilerCalls {}
+struct CruxCompilerCalls {
+    config: CruxAnalysisConfig,
+}
 
 impl CruxCompilerCalls {
-    fn new() -> CruxCompilerCalls {
-        CruxCompilerCalls {}
+    fn new(config: CruxAnalysisConfig) -> CruxCompilerCalls {
+        CruxCompilerCalls { config }
     }
 }
 
@@ -37,7 +39,7 @@ impl rustc_driver::Callbacks for CruxCompilerCalls {
         info!("Crate name: {}", queries.crate_name().unwrap().peek_mut());
 
         queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
-            analyze(tcx);
+            analyze(tcx, self.config);
         });
         compiler.session().abort_if_errors();
 
@@ -58,8 +60,34 @@ fn main() {
         rustc_driver::init_rustc_env_logger();
     }
 
-    // propagate arguments to rustc
-    let mut rustc_args: Vec<String> = std::env::args().collect();
+    // collect arguments
+    let mut config = CruxAnalysisConfig::default();
+
+    let mut after_dashdash = false;
+    let mut rustc_args = vec![];
+    let mut crux_args = vec![];
+
+    for arg in std::env::args() {
+        if rustc_args.is_empty() {
+            // Very first arg: for `rustc`.
+            rustc_args.push(arg);
+        } else if after_dashdash {
+            // Everything that comes after are `crux` args.
+            crux_args.push(arg);
+        } else {
+            match arg.as_str() {
+                "-Zcrux-enable-simple-anderson" => {
+                    config.simple_anderson_enabled = true;
+                }
+                "--" => {
+                    after_dashdash = true;
+                }
+                _ => {
+                    rustc_args.push(arg);
+                }
+            }
+        }
+    }
 
     if let Some(sysroot) = compile_time_sysroot() {
         let sysroot_flag = "--sysroot";
@@ -77,7 +105,7 @@ fn main() {
 
     rustc_driver::install_ice_hook(); // ICE: Internal Compilation Error
     let result = rustc_driver::catch_fatal_errors(move || {
-        rustc_driver::run_compiler(&rustc_args, &mut CruxCompilerCalls::new(), None, None)
+        rustc_driver::run_compiler(&rustc_args, &mut CruxCompilerCalls::new(config), None, None)
     })
     .and_then(|result| result);
     std::process::exit(result.is_err() as i32);

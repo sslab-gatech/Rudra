@@ -1,10 +1,8 @@
+use crux::CRUX_DEFAULT_ARGS;
 ///! This implementation is based on `cargo-miri`
 ///! https://github.com/rust-lang/miri/blob/master/src/bin/cargo-miri.rs
 use std::path::{Path, PathBuf};
 use std::process::Command;
-
-const MARKER_START: &str = "cargo-crux-marker-start";
-const MARKER_END: &str = "cargo-crux-marker-end";
 
 const CARGO_CRUX_HELP: &str = r#"Tests crates with Crux
 Usage:
@@ -13,7 +11,7 @@ Usage:
 Common options:
     -h, --help               Print this message
 
-Other [options] are the same as `cargo rustc`.  Everything after the first "--" is
+Other [options] are the same as `cargo check`. Everything after the first "--" is
 passed verbatim to Crux.
 "#;
 
@@ -161,8 +159,8 @@ fn main() {
         // and dispatch the invocations to `rustc` and `crux`, respectively.
         in_cargo_crux();
     } else if let Some("rustc") = std::env::args().nth(1).as_ref().map(AsRef::as_ref) {
-        // This arm is executed when `cargo-miri` runs `cargo rustc` with the `RUSTC_WRAPPER` env var set to itself:
-        // dependencies get dispatched to `rustc`, the final test/binary to `miri`.
+        // This arm is executed when `cargo-crux` runs `cargo rustc` with the `RUSTC_WRAPPER` env var set to itself:
+        // dependencies get dispatched to `rustc`, the final test/binary to `crux`.
         inside_cargo_rustc();
     } else {
         show_error(format!(
@@ -185,15 +183,16 @@ fn in_cargo_crux() {
             .kind
             .get(0)
             .expect("badly formatted cargo metadata: target::kind is an empty array");
-        // Now we run `cargo rustc $FLAGS $ARGS`, giving the user the
+
+        // Now we run `cargo check $FLAGS $ARGS`, giving the user the
         // change to add additional arguments. `FLAGS` is set to identify
         // this target. The user gets to control what gets actually passed to Crux.
         let mut cmd = Command::new("cargo");
-        cmd.arg("rustc");
+        cmd.arg("check");
         match kind.as_str() {
             // Only libraries are supported at this point
             "bin" => {
-                // FIXME: we just run all the binaries here.
+                // FIXME: we just analyze all the binaries here.
                 // We should instead support `cargo crux --bin foo`.
                 cmd.arg("--bin").arg(target.name);
             }
@@ -207,7 +206,7 @@ fn in_cargo_crux() {
             }
         }
 
-        // Add user-defined args until first `--`.
+        // Forward user-defined `cargo` args until first `--`.
         while let Some(arg) = args.next() {
             if arg == "--" {
                 break;
@@ -215,13 +214,24 @@ fn in_cargo_crux() {
             cmd.arg(arg);
         }
 
-        // Add `--` (to end the `cargo` flags), and then the user flags. We add markers around the
-        // user flags to be able to identify them later.  "cargo rustc" adds more stuff after this,
-        // so we have to mark both the beginning and the end.
-        cmd.arg("--").arg(MARKER_START).args(args).arg(MARKER_END);
+        // Serialize the remaining args into a special environemt variable.
+        // This will be read by `inside_cargo_rustc` when we go to invoke
+        // our actual target crate (the binary or the test we are running).
+        // Since we're using "cargo check", we have no other way of passing
+        // these arguments.
+        let args_vec: Vec<String> = args.collect();
+        cmd.env(
+            "CRUX_ARGS",
+            serde_json::to_string(&args_vec).expect("failed to serialize args"),
+        );
+
+        // Set `RUSTC_WRAPPER` to ourselves.  Cargo will prepend that binary to its usual invocation,
+        // i.e., the first argument is `rustc` -- which is what we use in `main` to distinguish
+        // the two codepaths.
         let path = std::env::current_exe().expect("current executable path invalid");
         cmd.env("RUSTC_WRAPPER", path);
         if verbose {
+            cmd.env("CRUX_VERBOSE", ""); // this makes `inside_cargo_rustc` verbose.
             eprintln!("+ {:?}", cmd);
         }
 
@@ -238,54 +248,76 @@ fn in_cargo_crux() {
 }
 
 fn inside_cargo_rustc() {
-    let rustc_args = std::env::args().skip(2); // skip `cargo rustc`
-    let mut args: Vec<String> = rustc_args.collect();
-    args.splice(
-        0..0,
-        crux::CRUX_DEFAULT_ARGS.iter().map(ToString::to_string),
-    );
+    /// Determines if we are being invoked (as rustc) to build a runnable
+    /// executable. We run "cargo check", so this should only happen when
+    /// we are trying to compile a build script or build script dependency,
+    /// which actually needs to be executed on the host platform.
+    ///
+    /// Currently, we detect this by checking for "--emit=link",
+    /// which indicates that Cargo instruced rustc to output
+    /// a native object.
+    fn is_target_crate() -> bool {
+        // `--emit` is sometimes missing, e.g. cargo calls rustc for "--print".
+        // That is definitely not a target crate.
+        // If `--emit` is present, then host crates are built ("--emit=link,...),
+        // while the rest is only checked.
+        get_arg_flag_value("--emit").map_or(false, |emit| !emit.contains("link"))
+    }
 
-    // See if we can find the `cargo-crux` markers. Those only get added to the binary we want to
-    // run. They also serve to mark the user-defined arguments, which we have to move all the way
-    // to the end (they get added somewhere in the middle).
-    let needs_crux = if let Some(begin) = args.iter().position(|arg| arg == MARKER_START) {
-        let end = args
-            .iter()
-            .position(|arg| arg == MARKER_END)
-            .expect("cannot find end marker");
+    /// Returns whether or not Cargo invoked the wrapper (this binary) to compile
+    /// the final, target crate (either a test for 'cargo test', or a binary for 'cargo run')
+    /// Cargo does not give us this information directly, so we need to check
+    /// various command-line flags.
+    fn is_runnable_crate() -> bool {
+        let is_bin = get_arg_flag_value("--crate-type").as_deref() == Some("bin");
+        let is_test = has_arg_flag("--test");
 
-        // These mark the user arguments. We remove the first and last as they are the markers.
-        let mut user_args = args.drain(begin..=end);
-        assert_eq!(user_args.next().unwrap(), MARKER_START);
-        assert_eq!(user_args.next_back().unwrap(), MARKER_END);
+        // The final runnable (under Crux) crate will either be a binary crate
+        // or a test crate. We make sure to exclude build scripts here, since
+        // they are also build with "--crate-type bin"
+        is_bin || is_test
+    }
 
-        // Collect the rest and add it back at the end.
-        let mut user_args = user_args.collect::<Vec<String>>();
+    let verbose = std::env::var("CRUX_VERBOSE").is_ok();
+    let target_crate = is_target_crate();
+
+    // Figure out which arguments we need to pass.
+    let mut args: Vec<String> = std::env::args().skip(2).collect(); // skip `cargo-crux rustc`
+
+    if target_crate {
+        // TODO: Miri sets custom sysroot here, check if it is needed (CRUX-30)
+        args.splice(0..0, CRUX_DEFAULT_ARGS.iter().map(ToString::to_string));
+    }
+
+    // Figure out the binary we need to call. If this is a runnable target crate, we want to call
+    // Crux to start interpretation; otherwise we want to call rustc to build the crate as usual.
+    let mut command = if target_crate && is_runnable_crate() {
+        // This is the 'target crate' - the binary or test crate that
+        // we want to interpret under Crux. We deserialize the user-provided arguments
+        // from the special environment variable "CRUX_ARGS", and feed them
+        // to the 'crux' binary.
+        let magic = std::env::var("CRUX_ARGS").expect("missing CRUX_ARGS");
+        let mut user_args: Vec<String> =
+            serde_json::from_str(&magic).expect("failed to deserialize CRUX_ARGS");
         args.append(&mut user_args);
-
-        // Run this in Crux
-        true
-    } else {
-        false
-    };
-
-    let mut command = if needs_crux {
+        // Run this in Crux.
         Command::new(find_crux())
     } else {
         Command::new("rustc")
     };
+
+    // Run it.
     command.args(&args);
-    if has_arg_flag("-v") {
+    if verbose {
         eprintln!("+ {:?}", command);
     }
 
     match command.status() {
         Ok(exit) => {
             if !exit.success() {
-                std::process::exit(exit.code().unwrap_or(-1));
+                std::process::exit(exit.code().unwrap_or(42));
             }
         }
-        Err(e) if needs_crux => panic!("error during crux run: {:?}", e),
-        Err(e) => panic!("error during rustc call: {:?}", e),
+        Err(e) => panic!("error running {:?}:\n{:?}", command, e),
     }
 }

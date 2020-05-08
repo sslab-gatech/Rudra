@@ -38,13 +38,18 @@ git rebase master
 ./miri install
 ```
 
+## Code Formatting
+
+1. Follow whatever `rustfmt` does
+2. Group `use` statements by `std` - `rustc` internals - 3rd party - local order
+
 ## Install to Cargo
 
 ```
 # this executes: cargo install --debug --path ./ --force --locked
 ./install-debug
 
-crux ./test.rs  # for single file testing
+crux ./test.rs  # for single file testing (you need to set library include path, or use `cargo run` instead)
 cargo crux  # for crate compilation
 cargo crux-update  # wrapper for ./install-debug
 ```
