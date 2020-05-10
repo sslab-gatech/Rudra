@@ -1,7 +1,7 @@
 mod simple_anderson;
 pub mod solver;
 
-use rustc::ty::Ty;
+use rustc_middle::ty::Ty;
 
 pub use simple_anderson::SimpleAnderson;
 

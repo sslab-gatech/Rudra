@@ -1,12 +1,13 @@
 #![feature(box_patterns)]
 #![feature(rustc_private)]
 
-extern crate rustc;
+extern crate arena;
 extern crate rustc_driver;
 extern crate rustc_errors;
 extern crate rustc_hir;
 extern crate rustc_index;
 extern crate rustc_interface;
+extern crate rustc_middle;
 extern crate rustc_mir;
 extern crate rustc_span;
 
@@ -24,7 +25,7 @@ pub mod ir;
 pub mod prelude;
 pub mod utils;
 
-use rustc::ty::TyCtxt;
+use rustc_middle::ty::TyCtxt;
 
 use crate::analyze::solver::SolverW1;
 use crate::analyze::SimpleAnderson;
@@ -38,12 +39,14 @@ pub static CRUX_DEFAULT_ARGS: &[&str] = &["-Zalways-encode-mir", "-Zmir-opt-leve
 
 #[derive(Debug, Clone, Copy)]
 pub struct CruxAnalysisConfig {
+    pub unsafe_destructor_enabled: bool,
     pub simple_anderson_enabled: bool,
 }
 
 impl Default for CruxAnalysisConfig {
     fn default() -> Self {
         CruxAnalysisConfig {
+            unsafe_destructor_enabled: true,
             simple_anderson_enabled: false,
         }
     }
@@ -74,8 +77,9 @@ pub fn compile_time_sysroot() -> Option<String> {
 }
 
 pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxAnalysisConfig) {
+    // workaround to mimic arena lifetime (CRUX-34)
     let ccx_owner = CruxCtxtOwner::new(tcx);
-    let ccx = &ccx_owner;
+    let ccx = Box::leak(Box::new(ccx_owner));
 
     // shadow the variable tcx
     #[allow(unused_variables)]

@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use rustc::mir::mono::MonoItem;
-use rustc::ty::Instance;
 use rustc_hir::Unsafety;
+use rustc_middle::mir::mono::MonoItem;
+use rustc_middle::ty::Instance;
 use rustc_mir::monomorphize::collector::{collect_crate_mono_items, MonoItemCollectionMode};
 
 use crate::ir;
@@ -11,16 +11,16 @@ use crate::prelude::*;
 type Graph<'tcx> = HashMap<Instance<'tcx>, Vec<Instance<'tcx>>>;
 
 // 'tcx: TyCtxt lifetime
-pub struct CallGraph<'ccx, 'tcx> {
-    ccx: CruxCtxt<'ccx, 'tcx>,
+pub struct CallGraph<'tcx> {
+    ccx: CruxCtxt<'tcx>,
     // this HashSet contains local mono items, which will be starting points of our analysis
     _entry: HashSet<Instance<'tcx>>,
     // this HashMap contains a call graph of all reachable instances
     graph: Graph<'tcx>,
 }
 
-impl<'ccx, 'tcx> CallGraph<'ccx, 'tcx> {
-    pub fn new(ccx: CruxCtxt<'ccx, 'tcx>) -> Self {
+impl<'tcx> CallGraph<'tcx> {
+    pub fn new(ccx: CruxCtxt<'tcx>) -> Self {
         let mut entry = HashSet::new();
         let mut graph = HashMap::new();
 
@@ -42,7 +42,7 @@ impl<'ccx, 'tcx> CallGraph<'ccx, 'tcx> {
         }
     }
 
-    fn traverse(ccx: CruxCtxt<'ccx, 'tcx>, caller: Instance<'tcx>, graph: &mut Graph<'tcx>) {
+    fn traverse(ccx: CruxCtxt<'tcx>, caller: Instance<'tcx>, graph: &mut Graph<'tcx>) {
         use std::collections::hash_map::Entry;
 
         if let Entry::Vacant(entry) = graph.entry(caller) {

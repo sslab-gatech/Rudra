@@ -1,7 +1,7 @@
 use std::result::Result as StdResult;
 
-use rustc::mir;
-use rustc::ty::{Instance, TyCtxt, TyKind};
+use rustc_middle::mir;
+use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 
 use dashmap::mapref::one::RefMut;
 use dashmap::DashMap;
@@ -15,7 +15,7 @@ macro_rules! unimplemented {
     ($($arg:tt)+) => (return Err(Error::TranslationUnimplemented(format!($($arg)+))));
 }
 
-pub type CruxCtxt<'ccx, 'tcx> = &'ccx CruxCtxtOwner<'tcx>;
+pub type CruxCtxt<'tcx> = &'tcx CruxCtxtOwner<'tcx>;
 
 /// Maps Instance to MIR and cache the result.
 pub struct CruxCtxtOwner<'tcx> {

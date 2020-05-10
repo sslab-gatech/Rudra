@@ -1,8 +1,10 @@
 # Crux
 
-Crux is a cross-language static checker for Rust
+Crux is a static analyzer to detect common undefined behaviors in Rust programs.
 
 ## Development Setup
+
+You need nightly Rust for Crux and custom Miri for PoC testing.
 
 ```
 # Clone custom build MIRI
@@ -41,9 +43,9 @@ git rebase master
 ## Code Formatting
 
 1. Follow whatever `rustfmt` does
-2. Group `use` statements by `std` - `rustc` internals - 3rd party - local order
+2. Group `use` statements in order of `std` - `rustc` internals - 3rd party - local order
 
-## Install to Cargo
+## Install Crux to Cargo
 
 ```
 # this executes: cargo install --debug --path ./ --force --locked

@@ -1,6 +1,6 @@
-use rustc::mir;
-use rustc::ty::{Instance, Ty};
 use rustc_index::vec::IndexVec;
+use rustc_middle::mir;
+use rustc_middle::ty::{Instance, Ty};
 
 #[derive(Debug)]
 pub struct Terminator<'tcx> {

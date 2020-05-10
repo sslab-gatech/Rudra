@@ -1,6 +1,5 @@
 #![feature(rustc_private)]
 
-extern crate rustc;
 extern crate rustc_driver;
 extern crate rustc_errors;
 extern crate rustc_interface;
@@ -78,6 +77,15 @@ fn main() {
             match arg.as_str() {
                 "-Zcrux-enable-simple-anderson" => {
                     config.simple_anderson_enabled = true;
+                }
+                "-Zcrux-disable-simple-anderson" => {
+                    config.simple_anderson_enabled = false;
+                }
+                "-Zcrux-enable-unsafe-destructor" => {
+                    config.unsafe_destructor_enabled = true;
+                }
+                "-Zcrux-disable-unsafe-destructor" => {
+                    config.unsafe_destructor_enabled = false;
                 }
                 "--" => {
                     after_dashdash = true;

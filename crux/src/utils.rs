@@ -1,4 +1,4 @@
-use rustc::ty::{Instance, InstanceDef, TyCtxt};
+use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
 use rustc_mir::util::write_mir_pretty;
 use rustc_span::Span;
 

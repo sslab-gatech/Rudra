@@ -4,17 +4,13 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use rustc::mir;
-use rustc::ty::{Instance, Ty};
+use rustc_middle::mir;
+use rustc_middle::ty::{Instance, Ty};
 
 use super::{Constraint, ConstraintSet, Location, LocationFactory, NodeId};
+use crate::context::CruxCtxt;
 use crate::error::{Error, Result};
 use crate::prelude::*;
-
-macro_rules! unimplemented {
-    () => (return Err(Error::AnalysisUnimplemented(String::new())));
-    ($($arg:tt)+) => (return Err(Error::AnalysisUnimplemented(format!($($arg)+))));
-}
 
 #[derive(Clone, Debug)]
 struct Place<'tcx> {
@@ -23,8 +19,8 @@ struct Place<'tcx> {
 }
 
 // TODO: add translation cache here
-pub struct SimpleAnderson<'ccx, 'tcx> {
-    ccx: CruxCtxt<'ccx, 'tcx>,
+pub struct SimpleAnderson<'tcx> {
+    ccx: CruxCtxt<'tcx>,
     location_factory: LocationFactory<'tcx>,
     /// Analysis call stack
     call_stack: Vec<Instance<'tcx>>,
@@ -33,7 +29,7 @@ pub struct SimpleAnderson<'ccx, 'tcx> {
     local_var_map: HashMap<Instance<'tcx>, Vec<Location<'tcx>>>,
 }
 
-impl<'ccx, 'tcx> ConstraintSet for SimpleAnderson<'ccx, 'tcx> {
+impl<'tcx> ConstraintSet for SimpleAnderson<'tcx> {
     type Iter = std::vec::IntoIter<(NodeId, Constraint)>;
 
     fn num_locations(&self) -> usize {
@@ -54,8 +50,8 @@ impl<'ccx, 'tcx> ConstraintSet for SimpleAnderson<'ccx, 'tcx> {
     }
 }
 
-impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
-    pub fn new(ccx: CruxCtxt<'ccx, 'tcx>) -> Self {
+impl<'tcx> SimpleAnderson<'tcx> {
+    pub fn new(ccx: CruxCtxt<'tcx>) -> Self {
         SimpleAnderson {
             ccx,
             location_factory: LocationFactory::new(),
@@ -85,7 +81,7 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
         for projection in place.projection {
             match projection {
                 mir::ProjectionElem::Deref => count += 1,
-                _ => unimplemented!("Projection: {:?}", projection),
+                _ => not_yet!("Projection: {:?}", projection),
             }
         }
 
@@ -173,7 +169,7 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
                             BinaryOp(_, _, _) | CheckedBinaryOp(_, _, _) | UnaryOp(_, _) => (),
 
                             // TODO: support more rvalue
-                            rvalue => unimplemented!("Rvalue `{:?}`", rvalue),
+                            rvalue => not_yet!("Rvalue `{:?}`", rvalue),
                         }
                     }
 
@@ -181,7 +177,7 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
                     StorageLive(_) | StorageDead(_) | Nop => (),
 
                     // TODO: support more statements
-                    _ => unimplemented!("Statement `{:?}`", statement),
+                    _ => not_yet!("Statement `{:?}`", statement),
                 }
             }
 
@@ -213,10 +209,10 @@ impl<'ccx, 'tcx> SimpleAnderson<'ccx, 'tcx> {
 
                     self.handle_place_to_place(dst, src)?;
                 }
-                mir::Operand::Constant(_) => unimplemented!("Constant pointer: {:?}", src),
+                mir::Operand::Constant(_) => not_yet!("Constant pointer: {:?}", src),
             }
         } else if dst_is_ptr && !src_is_ptr {
-            unimplemented!("Cast to pointer: from `{:?}` to `{:?}`", src, dst);
+            not_yet!("Cast to pointer: from `{:?}` to `{:?}`", src, dst);
         }
 
         Ok(())

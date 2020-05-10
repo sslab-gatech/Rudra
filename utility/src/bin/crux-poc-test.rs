@@ -38,7 +38,7 @@ fn main() -> StdResult<(), Box<dyn StdError>> {
             run_command("cargo clean", test_dir).expect("clean shouldn't fail");
 
             // TODO: add timeout check
-            let result = run_command("cargo miri", test_dir);
+            let result = run_command("cargo +miri miri", test_dir);
             if is_cmd_success(&result) {
                 println!("Miri {}", Red.bold().paint("Missed"));
             } else {
