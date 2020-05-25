@@ -1,9 +1,13 @@
+mod call_graph;
 mod simple_anderson;
 pub mod solver;
+mod unsafe_destructor;
 
 use rustc_middle::ty::Ty;
 
+pub use call_graph::CallGraph;
 pub use simple_anderson::SimpleAnderson;
+pub use unsafe_destructor::UnsafeDestructor;
 
 type NodeId = usize;
 

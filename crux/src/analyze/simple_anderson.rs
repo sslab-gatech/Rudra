@@ -8,7 +8,6 @@ use rustc_middle::mir;
 use rustc_middle::ty::{Instance, Ty};
 
 use super::{Constraint, ConstraintSet, Location, LocationFactory, NodeId};
-use crate::context::CruxCtxt;
 use crate::error::{Error, Result};
 use crate::prelude::*;
 

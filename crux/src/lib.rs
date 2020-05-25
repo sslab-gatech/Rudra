@@ -14,11 +14,9 @@ extern crate rustc_span;
 #[macro_use]
 extern crate log;
 
+pub mod algorithm;
 mod analyze;
-mod call_graph;
 pub mod context;
-/// Data Structures
-pub mod ds;
 pub mod error;
 pub mod ext;
 pub mod ir;
@@ -28,8 +26,7 @@ pub mod utils;
 use rustc_middle::ty::TyCtxt;
 
 use crate::analyze::solver::SolverW1;
-use crate::analyze::SimpleAnderson;
-use crate::call_graph::CallGraph;
+use crate::analyze::{CallGraph, SimpleAnderson, UnsafeDestructor};
 use crate::context::CruxCtxtOwner;
 use crate::error::Error;
 
@@ -127,6 +124,27 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxAnalysisConfig) {
                         println!("No error found");
                     }
                 }
+            }
+        }
+    }
+
+    // Unsafe destructor analysis
+    if config.unsafe_destructor_enabled {
+        let mut unsafe_destructor = UnsafeDestructor::new(ccx);
+        let result = unsafe_destructor.analyze();
+
+        match result {
+            Err(e @ Error::AnalysisUnimplemented(_)) => {
+                println!("Analysis Unimplemented: {:?}", e);
+            }
+            Err(e @ Error::TranslationUnimplemented(_)) => {
+                println!("Translation Unimplemented: {:?}", e);
+            }
+            Err(e) => {
+                println!("Analysis failed with error: {:?}", e);
+            }
+            Ok(_) => {
+                println!("No error found");
             }
         }
     }

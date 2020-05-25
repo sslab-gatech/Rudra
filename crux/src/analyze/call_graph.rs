@@ -1,3 +1,4 @@
+//! Call graph and reachability calculation
 use std::collections::{HashMap, HashSet};
 
 use rustc_hir::Unsafety;
