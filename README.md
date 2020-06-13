@@ -7,6 +7,10 @@ Crux is a static analyzer to detect common undefined behaviors in Rust programs.
 You need nightly Rust for Crux and custom Miri for PoC testing.
 
 ```
+# Toolchain setup
+rustup component add rustc-dev
+export RUSTFLAGS="-L $HOME/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib"
+
 # Clone custom build MIRI
 git clone https://github.com/JOE1994/miri miri-custom
 

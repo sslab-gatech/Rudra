@@ -1,7 +1,6 @@
 #![feature(box_patterns)]
 #![feature(rustc_private)]
 
-extern crate arena;
 extern crate rustc_driver;
 extern crate rustc_errors;
 extern crate rustc_hir;
@@ -11,6 +10,8 @@ extern crate rustc_middle;
 extern crate rustc_mir;
 extern crate rustc_span;
 
+#[macro_use]
+extern crate if_chain;
 #[macro_use]
 extern crate log;
 
