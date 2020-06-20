@@ -32,7 +32,7 @@ impl<'tcx> UnsafeDestructor<'tcx> {
             if *trait_def_id == drop_trait_def_id {
                 for impl_hir_id in impl_vec.iter() {
                     if visitor.check_drop_unsafety(*impl_hir_id).unwrap() {
-                        // TODO: correctly report error here
+                        // FIXME: correctly report error here
                         error!("Unsafe drop implementation detected!");
                     }
                 }
@@ -86,7 +86,6 @@ mod visitor {
 
         fn check_drop_fn(&mut self, drop_fn_impl_item_id: ImplItemId) -> bool {
             self.drop_is_unsafe = false;
-            // TODO: this is not working as expected
             self.visit_nested_impl_item(drop_fn_impl_item_id);
             self.drop_is_unsafe
         }
@@ -96,11 +95,10 @@ mod visitor {
         type Map = rustc_middle::hir::map::Map<'tcx>;
 
         fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-            NestedVisitorMap::OnlyBodies(self.ccx.tcx().hir())
+            NestedVisitorMap::All(self.ccx.tcx().hir())
         }
 
         fn visit_block(&mut self, block: &'tcx Block<'tcx>) {
-            error!("I'm visiting blocks");
             use rustc_hir::BlockCheckMode;
             match block.rules {
                 BlockCheckMode::DefaultBlock => (),
