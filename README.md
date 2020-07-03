@@ -2,6 +2,26 @@
 
 Crux is a static analyzer to detect common undefined behaviors in Rust programs.
 
+## Configurations
+
+### Common
+
+- CRUX_LOG
+  - Adjust logging level.
+
+### Crux
+
+- CRUX_REPORT
+  - Report file location. If set, Crux analyis result will be serialized and
+    saved to that file. Otherwise, the result will be printed to stderr.
+
+### Crux-Runner
+
+- CRUX_SCRATCH_DIR
+  - Directory to store crawled crates (default: ../crux_scratch)
+- CRUX_REPORT_DIR
+  - Directory to store reports (default: ../crux_report)
+
 ## Development Setup
 
 You need nightly Rust for Crux and custom Miri for PoC testing.

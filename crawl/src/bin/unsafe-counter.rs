@@ -1,3 +1,5 @@
+#![feature(try_blocks)]
+
 use std::env;
 use std::fs::File;
 use std::io::BufWriter;
@@ -99,15 +101,21 @@ fn main() -> Result<()> {
 
     let crate_list: Vec<_> = crate_list
         .into_par_iter()
-        .map(|krate| -> Result<(Crate, CrateStat)> {
-            let path = scratch_dir.fetch_latest_version(&krate)?;
-            let crate_stat = crawl::stat::stat(&path);
-            if let Err(ref e) = crate_stat {
-                warn!("{}: {}", krate.latest_version_tag(), e);
+        .filter_map(|krate| -> Option<(Crate, CrateStat)> {
+            let result: Result<CrateStat> = try {
+                let path = scratch_dir.fetch_latest_version(&krate)?;
+                let crate_stat = crawl::stat::stat(&path)?;
+                crate_stat
+            };
+
+            match result {
+                Ok(crate_stat) => Some((krate, crate_stat)),
+                Err(e) => {
+                    warn!("{}: {}", krate.latest_version_tag(), &e);
+                    None
+                }
             }
-            Ok((krate, crate_stat?))
         })
-        .filter_map(|result| result.ok())
         .collect();
     let num_success = crate_list.len();
 

@@ -10,10 +10,12 @@ extern crate log;
 use std::env;
 
 use rustc_driver::Compilation;
+use rustc_errors::ErrorReported;
 use rustc_interface::{interface::Compiler, Queries};
 
 use dotenv::dotenv;
 
+use crux::report::{default_report_logger, init_report_logger};
 use crux::{analyze, compile_time_sysroot, CruxAnalysisConfig, CRUX_DEFAULT_ARGS};
 
 struct CruxCompilerCalls {
@@ -46,7 +48,7 @@ impl rustc_driver::Callbacks for CruxCompilerCalls {
     }
 }
 
-fn main() {
+fn main() -> Result<(), ErrorReported> {
     // init Crux logger
     dotenv().ok();
     let env = env_logger::Env::new()
@@ -58,6 +60,9 @@ fn main() {
     if env::var("RUSTC_LOG").is_ok() {
         rustc_driver::init_rustc_env_logger();
     }
+
+    // init report logger
+    let _logger_handle = init_report_logger(default_report_logger());
 
     // collect arguments
     let mut config = CruxAnalysisConfig::default();
@@ -116,5 +121,6 @@ fn main() {
         rustc_driver::run_compiler(&rustc_args, &mut CruxCompilerCalls::new(config), None, None)
     })
     .and_then(|result| result);
-    std::process::exit(result.is_err() as i32);
+
+    result
 }

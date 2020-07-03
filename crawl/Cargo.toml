@@ -11,6 +11,11 @@ test = true
 doctest = false
 
 [[bin]]
+name = "crux-runner"
+test = false
+doctest = false
+
+[[bin]]
 name = "unsafe-counter"
 test = false
 doctest = false

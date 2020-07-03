@@ -3,6 +3,7 @@
 pub mod error;
 pub mod krate;
 pub mod stat;
+pub mod utils;
 
 use std::collections::HashMap;
 use std::env;
@@ -12,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
+use chrono::prelude::*;
 use flate2::read::GzDecoder;
 use log::*;
 use once_cell::sync::Lazy;
@@ -96,7 +98,8 @@ pub struct ScratchDir {
 
 impl ScratchDir {
     pub fn new() -> Self {
-        let path = PathBuf::from(env::var("CRUX_SCRATCH").unwrap_or(String::from("./scratch")));
+        let path =
+            PathBuf::from(env::var("CRUX_SCRATCH_DIR").unwrap_or(String::from("../crux_scratch")));
         info!("Using `{}` as scratch directory", path.to_string_lossy());
         ScratchDir { path }
     }
@@ -113,13 +116,18 @@ impl ScratchDir {
             download("https://static.crates.io/db-dump.tar.gz", &db_dump_tarball)?;
 
             fs::remove_dir_all(&db_dump_dir).ok();
-            fs::create_dir(&db_dump_dir)?;
-            decompress(&db_dump_tarball, &db_dump_dir)?;
+            fs::create_dir(&db_dump_dir).expect("failed to create DB dump directory");
+            decompress(&db_dump_tarball, &db_dump_dir).expect("DB decompression failed");
         } else {
             info!("Use existing DB");
         }
 
-        let unpacked_path = fs::read_dir(&db_dump_dir)?.next().unwrap()?.path();
+        let unpacked_path = fs::read_dir(&db_dump_dir)
+            .expect("DB dump directory does not exist")
+            .next()
+            .expect("DB dump directory is empty")
+            .expect("Failed to read DB dump directory")
+            .path();
         info!(
             "Database version: {}",
             unpacked_path
@@ -182,5 +190,27 @@ impl ScratchDir {
         }
 
         Ok(crate_content_path)
+    }
+}
+
+pub struct ReportDir {
+    path: PathBuf,
+}
+
+impl ReportDir {
+    pub fn new() -> Self {
+        let parent_path =
+            PathBuf::from(env::var("CRUX_REPORT_DIR").unwrap_or(String::from("../crux_report")));
+
+        let dt: DateTime<Local> = Local::now();
+        let path = parent_path.join(dt.format("%Y%m%d_%H%M%S").to_string());
+        fs::create_dir_all(&path).expect("Failed to create report directory");
+
+        info!("Using `{}` as report directory", path.to_string_lossy());
+        ReportDir { path }
+    }
+
+    pub fn path(&self) -> &PathBuf {
+        &self.path
     }
 }

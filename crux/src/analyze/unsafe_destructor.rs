@@ -6,6 +6,7 @@ use rustc_middle::ty::TyCtxt;
 
 use crate::error::Result;
 use crate::prelude::*;
+use crate::report::{crux_report, Report, ReportLevel};
 
 fn drop_trait_def_id(tcx: TyCtxt<'_>) -> DefId {
     tcx.lang_items()
@@ -32,8 +33,14 @@ impl<'tcx> UnsafeDestructor<'tcx> {
             if *trait_def_id == drop_trait_def_id {
                 for impl_hir_id in impl_vec.iter() {
                     if visitor.check_drop_unsafety(*impl_hir_id).unwrap() {
-                        // FIXME: correctly report error here
-                        error!("Unsafe drop implementation detected!");
+                        let tcx = self.ccx.tcx();
+                        crux_report(Report::with_span(
+                            self.ccx.tcx(),
+                            ReportLevel::Warning,
+                            "UnsafeDestructor",
+                            "unsafe block detected in drop",
+                            tcx.hir().span(*impl_hir_id),
+                        ));
                     }
                 }
             }

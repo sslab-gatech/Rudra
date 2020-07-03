@@ -289,6 +289,7 @@ fn inside_cargo_rustc() {
         args.splice(0..0, CRUX_DEFAULT_ARGS.iter().map(ToString::to_string));
     }
 
+    // TODO: Crux should support library analysis (CRUX-52)
     // Figure out the binary we need to call. If this is a runnable target crate, we want to call
     // Crux to start interpretation; otherwise we want to call rustc to build the crate as usual.
     let mut command = if target_crate && is_runnable_crate() {

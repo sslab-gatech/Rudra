@@ -22,6 +22,7 @@ pub mod error;
 pub mod ext;
 pub mod ir;
 pub mod prelude;
+pub mod report;
 pub mod utils;
 
 use rustc_middle::ty::TyCtxt;
