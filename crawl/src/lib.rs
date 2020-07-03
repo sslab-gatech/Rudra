@@ -194,7 +194,8 @@ impl ScratchDir {
 }
 
 pub struct ReportDir {
-    path: PathBuf,
+    log_path: PathBuf,
+    report_path: PathBuf,
 }
 
 impl ReportDir {
@@ -203,14 +204,29 @@ impl ReportDir {
             PathBuf::from(env::var("CRUX_REPORT_DIR").unwrap_or(String::from("../crux_report")));
 
         let dt: DateTime<Local> = Local::now();
-        let path = parent_path.join(dt.format("%Y%m%d_%H%M%S").to_string());
-        fs::create_dir_all(&path).expect("Failed to create report directory");
+        let parent_path = parent_path.join(dt.format("%Y%m%d_%H%M%S").to_string());
+        fs::create_dir_all(&parent_path).expect("Failed to create report directory");
 
-        info!("Using `{}` as report directory", path.to_string_lossy());
-        ReportDir { path }
+        let log_path = parent_path.join("log");
+        let report_path = parent_path.join("report");
+        fs::create_dir(&log_path).expect("Failed to create report directory");
+        fs::create_dir(&report_path).expect("Failed to create report directory");
+
+        info!(
+            "Using `{}` as report directory",
+            parent_path.to_string_lossy()
+        );
+        ReportDir {
+            log_path,
+            report_path,
+        }
     }
 
-    pub fn path(&self) -> &PathBuf {
-        &self.path
+    pub fn log_path(&self) -> &PathBuf {
+        &self.log_path
+    }
+
+    pub fn report_path(&self) -> &PathBuf {
+        &self.report_path
     }
 }

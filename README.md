@@ -13,7 +13,7 @@ Crux is a static analyzer to detect common undefined behaviors in Rust programs.
 ### Crux
 
 - CRUX_REPORT
-  - Report file location. If set, Crux analyis result will be serialized and
+  - Report file location. If set, Crux analysis result will be serialized and
     saved to that file. Otherwise, the result will be printed to stderr.
 
 ### Crux-Runner

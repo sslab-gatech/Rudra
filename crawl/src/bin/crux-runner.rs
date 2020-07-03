@@ -48,7 +48,7 @@ fn main() -> Result<()> {
     let crate_list: Vec<_> = crate_list
         .into_par_iter()
         // FIXME: experimental setup
-        .take(10)
+        .take(1000)
         .filter_map(|krate| -> Option<(Crate, PathBuf, CrateStat)> {
             let result: Result<(PathBuf, CrateStat)> = try {
                 let path = scratch_dir.fetch_latest_version(&krate)?;
@@ -71,22 +71,30 @@ fn main() -> Result<()> {
         .into_par_iter()
         // TODO: performance optimization with unsafe filtering (CRUX-53)
         .filter_map(|(krate, path, _crate_stat)| -> Option<Crate> {
-            // FIXME: add timeout
-            let output = run_command_with_env(
+            // FIXME: add timeout (CRUX-43)
+            info!("Analysis start: {}", krate.latest_version_tag());
+            let crux_output = run_command_with_env(
                 "cargo crux",
-                path,
+                &path,
                 &[(
                     "CRUX_REPORT",
                     report_dir
-                        .path()
+                        .report_path()
                         .join(format!("report-{}", krate.latest_version_tag())),
                 )],
             );
+            info!("Analysis end: {}", krate.latest_version_tag());
+
+            let clean_output = run_command("cargo clean", &path);
+            if !is_cmd_success(&clean_output) {
+                warn!("Failed to clean {}", krate.latest_version_tag());
+            }
 
             let log_path = report_dir
-                .path()
+                .log_path()
                 .join(format!("log-{}", krate.latest_version_tag()));
-            match output {
+
+            match crux_output {
                 Ok(output) => {
                     if let Ok(file) = File::create(&log_path) {
                         let mut file = BufWriter::new(file);
