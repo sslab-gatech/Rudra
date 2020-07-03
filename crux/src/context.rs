@@ -1,9 +1,9 @@
+use std::rc::Rc;
 use std::result::Result as StdResult;
 
 use rustc_middle::mir;
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 
-use dashmap::mapref::one::RefMut;
 use dashmap::DashMap;
 
 use crate::error::{Error, Result};
@@ -16,11 +16,12 @@ macro_rules! unimplemented {
 }
 
 pub type CruxCtxt<'tcx> = &'tcx CruxCtxtOwner<'tcx>;
+pub type BodyResult<'tcx> = Rc<Result<'tcx, ir::Body<'tcx>>>;
 
 /// Maps Instance to MIR and cache the result.
 pub struct CruxCtxtOwner<'tcx> {
     tcx: TyCtxt<'tcx>,
-    cache: DashMap<Instance<'tcx>, Result<'tcx, ir::Body<'tcx>>>,
+    cache: DashMap<Instance<'tcx>, BodyResult<'tcx>>,
 }
 
 /// Visit MIR body and returns a Crux IR function
@@ -38,21 +39,22 @@ impl<'tcx> CruxCtxtOwner<'tcx> {
         self.tcx
     }
 
-    pub fn instance_body(
-        &self,
-        instance: Instance<'tcx>,
-    ) -> RefMut<Instance<'tcx>, Result<'tcx, ir::Body<'tcx>>> {
+    pub fn instance_body(&self, instance: Instance<'tcx>) -> BodyResult<'tcx> {
         let tcx = self.tcx();
         let result = self.cache.entry(instance).or_insert_with(|| {
-            let mir_body = tcx
-                .find_fn(instance)
-                .body()
-                .ok_or_else(|| Error::BodyNotAvailable(instance))?;
+            Rc::new(
+                try {
+                    let mir_body = tcx
+                        .find_fn(instance)
+                        .body()
+                        .ok_or(Error::BodyNotAvailable(instance))?;
 
-            self.translate_body(instance, mir_body)
+                    self.translate_body(instance, mir_body)?
+                },
+            )
         });
 
-        result
+        result.value().clone()
     }
 
     fn translate_body(

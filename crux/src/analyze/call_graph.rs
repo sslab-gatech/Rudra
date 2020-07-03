@@ -49,7 +49,7 @@ impl<'tcx> CallGraph<'tcx> {
         if let Entry::Vacant(entry) = graph.entry(caller) {
             // early insert to prevent infinite recursion
             let vec = entry.insert(Vec::new());
-            match ccx.instance_body(caller).value() {
+            match ccx.instance_body(caller).as_ref() {
                 Ok(ir_body) => {
                     trace!("Instance: {:?}", caller);
 

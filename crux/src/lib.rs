@@ -1,5 +1,6 @@
 #![feature(box_patterns)]
 #![feature(rustc_private)]
+#![feature(try_blocks)]
 
 extern crate rustc_driver;
 extern crate rustc_errors;
