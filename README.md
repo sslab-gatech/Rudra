@@ -7,7 +7,8 @@ Crux is a static analyzer to detect common undefined behaviors in Rust programs.
 ### Common
 
 - CRUX_LOG
-  - Adjust logging level.
+  - Adjust logging level. Use `.env` file at your discretion.
+  - Example: `CRUX_LOG=info,unsafe_counter=info,crawl=info,tokei::language::language_type=error`
 
 ### Crux
 

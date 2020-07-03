@@ -76,7 +76,7 @@ impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
                 if self.is_mir_available(def_id) {
                     MirBody::Static(self.optimized_mir(def_id))
                 } else {
-                    info!(
+                    debug!(
                         "Skipping an item {:?}, no MIR available for this item",
                         &instance
                     );

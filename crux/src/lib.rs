@@ -85,6 +85,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxAnalysisConfig) {
     let tcx = ();
 
     // collect DefId of all bodies
+    info!("Running call graph analysis");
     let call_graph = CallGraph::new(ccx);
     info!(
         "Found {} functions in the call graph",
@@ -93,6 +94,8 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxAnalysisConfig) {
 
     // Simple anderson analysis
     if config.simple_anderson_enabled {
+        info!("Running simple anderson analysis");
+
         let mut simple_anderson = SimpleAnderson::new(ccx);
 
         for local_instance in call_graph.local_safe_fn_iter() {
@@ -113,17 +116,17 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxAnalysisConfig) {
                 println!("Target {}", def_path_string);
                 match result {
                     Err(e @ Error::AnalysisUnimplemented(_)) => {
-                        println!("Analysis Unimplemented: {:?}", e);
+                        error!("Analysis Unimplemented: {:?}", e);
                     }
                     Err(e @ Error::TranslationUnimplemented(_)) => {
-                        println!("Translation Unimplemented: {:?}", e);
+                        error!("Translation Unimplemented: {:?}", e);
                     }
                     Err(e) => {
-                        println!("Analysis failed with error: {:?}", e);
+                        error!("Analysis failed with error: {:?}", e);
                     }
                     Ok(_) => {
                         let _solver = SolverW1::solve(&simple_anderson);
-                        println!("No error found");
+                        // TODO: report solver result
                     }
                 }
             }
@@ -132,22 +135,22 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxAnalysisConfig) {
 
     // Unsafe destructor analysis
     if config.unsafe_destructor_enabled {
+        info!("Running unsafe destructor analysis");
+
         let mut unsafe_destructor = UnsafeDestructor::new(ccx);
         let result = unsafe_destructor.analyze();
 
         match result {
             Err(e @ Error::AnalysisUnimplemented(_)) => {
-                println!("Analysis Unimplemented: {:?}", e);
+                error!("Analysis Unimplemented: {:?}", e);
             }
             Err(e @ Error::TranslationUnimplemented(_)) => {
-                println!("Translation Unimplemented: {:?}", e);
+                error!("Translation Unimplemented: {:?}", e);
             }
             Err(e) => {
-                println!("Analysis failed with error: {:?}", e);
+                error!("Analysis failed with error: {:?}", e);
             }
-            Ok(_) => {
-                println!("No error found");
-            }
+            Ok(_) => (),
         }
     }
 

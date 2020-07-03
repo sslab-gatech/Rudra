@@ -1,4 +1,4 @@
-// cargo run -- --crate-type lib samples/unsafe_destructor_test.rs 2>stderr
+// cargo run -- --crate-type lib samples/unsafe_destructor_test.rs
 
 pub struct FooNoDrop<'a> {
     vec: &'a mut Vec<u32>,

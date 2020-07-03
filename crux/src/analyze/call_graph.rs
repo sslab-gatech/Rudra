@@ -51,7 +51,7 @@ impl<'tcx> CallGraph<'tcx> {
             let vec = entry.insert(Vec::new());
             match ccx.instance_body(caller).value() {
                 Ok(ir_body) => {
-                    debug!("Instance: {:?}", caller);
+                    trace!("Instance: {:?}", caller);
 
                     for callee in CallGraph::collect_all_callees(ir_body).into_iter() {
                         // in most case, the number of callees are small enough that
@@ -63,7 +63,7 @@ impl<'tcx> CallGraph<'tcx> {
 
                     // clone here to make the borrow checker happy with the recursive call
                     for next_instance in vec.clone().into_iter() {
-                        debug!("Call into {} -> {}", caller, next_instance);
+                        trace!("Call into {} -> {}", caller, next_instance);
                         CallGraph::traverse(ccx, next_instance, graph);
                     }
                 }

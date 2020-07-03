@@ -36,8 +36,8 @@ impl rustc_driver::Callbacks for CruxCompilerCalls {
     ) -> Compilation {
         compiler.session().abort_if_errors();
 
-        info!("Input file name: {}", compiler.input().source_name());
-        info!("Crate name: {}", queries.crate_name().unwrap().peek_mut());
+        debug!("Input file name: {}", compiler.input().source_name());
+        debug!("Crate name: {}", queries.crate_name().unwrap().peek_mut());
 
         queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
             analyze(tcx, self.config);
