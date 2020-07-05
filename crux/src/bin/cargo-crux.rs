@@ -236,6 +236,11 @@ fn in_cargo_crux() {
             cmd.arg(version_info().host);
         }
 
+        // Add suffix to CRUX_REPORT
+        if let Ok(report) = env::var("CRUX_REPORT") {
+            cmd.env("CRUX_REPORT", format!("{}-{}", report, &target.name));
+        }
+
         // Serialize the remaining args into a special environemt variable.
         // This will be read by `inside_cargo_rustc` when we go to invoke
         // our actual target crate (the binary or the test we are running).
