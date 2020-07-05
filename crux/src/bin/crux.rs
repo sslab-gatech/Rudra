@@ -113,31 +113,24 @@ fn main() {
         // collect arguments
         let mut config = CruxAnalysisConfig::default();
 
-        let mut crate_name = None;
         let mut rustc_args = vec![];
 
         for arg in std::env::args() {
-            if rustc_args.is_empty() {
-                // Very first arg: crate name
-                crate_name = Some(arg.clone());
-                rustc_args.push(arg);
-            } else {
-                match arg.as_str() {
-                    "-Zcrux-enable-simple-anderson" => {
-                        config.simple_anderson_enabled = true;
-                    }
-                    "-Zcrux-disable-simple-anderson" => {
-                        config.simple_anderson_enabled = false;
-                    }
-                    "-Zcrux-enable-unsafe-destructor" => {
-                        config.unsafe_destructor_enabled = true;
-                    }
-                    "-Zcrux-disable-unsafe-destructor" => {
-                        config.unsafe_destructor_enabled = false;
-                    }
-                    _ => {
-                        rustc_args.push(arg);
-                    }
+            match arg.as_str() {
+                "-Zcrux-enable-simple-anderson" => {
+                    config.simple_anderson_enabled = true;
+                }
+                "-Zcrux-disable-simple-anderson" => {
+                    config.simple_anderson_enabled = false;
+                }
+                "-Zcrux-enable-unsafe-destructor" => {
+                    config.unsafe_destructor_enabled = true;
+                }
+                "-Zcrux-disable-unsafe-destructor" => {
+                    config.unsafe_destructor_enabled = false;
+                }
+                _ => {
+                    rustc_args.push(arg);
                 }
             }
         }

@@ -4,9 +4,8 @@ use rustc_span::Span;
 use std::borrow::Cow;
 use std::env;
 use std::fmt;
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::ops::Deref;
+use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 
 use once_cell::sync::OnceCell;
@@ -164,12 +163,22 @@ impl ReportLogger for FileLogger {
     }
 
     fn flush(&self) {
+        #[derive(Serialize)]
+        struct Reports<'a> {
+            reports: &'a [Report],
+        }
+
         let reports = self.reports.lock();
         if !reports.is_empty() {
-            let file = File::create(&self.file_path).expect("failed to create Crux report file");
-            let mut file = BufWriter::new(file);
-            serde_json::ser::to_writer_pretty(&mut file, reports.deref())
-                .expect("cannot write Crux report to file");
+            let reports_ref = &*reports;
+            fs::write(
+                &self.file_path,
+                toml::to_string_pretty(&Reports {
+                    reports: reports_ref,
+                })
+                .expect("failed to serialize Crux report"),
+            )
+            .expect("cannot write Crux report to file");
         }
     }
 }
