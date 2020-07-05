@@ -30,7 +30,11 @@ You need nightly Rust for Crux and custom Miri for PoC testing.
 ```
 # Toolchain setup
 rustup component add rustc-dev
+
+# Environment variable setup, put these in your `.bashrc`
+export CRUX_PATH="<your project path>"
 export RUSTFLAGS="-L $HOME/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib:${CRUX_PATH}/target/release/deps:${CRUX_PATH}/target/debug/deps"
 
 # Clone custom build MIRI
 git clone https://github.com/JOE1994/miri miri-custom
