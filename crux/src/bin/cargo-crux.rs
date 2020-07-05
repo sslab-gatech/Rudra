@@ -28,6 +28,7 @@ fn show_error(msg: String) -> ! {
 
 // Determines whether a `--flag` is present.
 fn has_arg_flag(name: &str) -> bool {
+    // Stop searching at `--`.
     let mut args = std::env::args().take_while(|val| val != "--");
     args.any(|val| val == name)
 }
@@ -55,6 +56,13 @@ fn get_arg_flag_value(name: &str) -> Option<String> {
             return Some(suffix[1..].to_owned());
         }
     }
+}
+
+/// Finds the first argument ends with `.rs`.
+fn get_first_arg_with_rs_suffix() -> Option<String> {
+    // Stop searching at `--`.
+    let mut args = std::env::args().take_while(|val| val != "--");
+    args.find(|arg| arg.ends_with(".rs"))
 }
 
 fn version_info() -> VersionMeta {
@@ -199,14 +207,14 @@ fn in_cargo_crux() {
         match kind.as_str() {
             "bin" => {
                 // Analyze all the binaries.
-                cmd.arg("--bin").arg(target.name);
+                cmd.arg("--bin").arg(&target.name);
             }
             "lib" => {
                 // There can be only one lib in a crate.
                 cmd.arg("--lib");
             }
             s => {
-                eprintln!("Target {}:{} is not supported", s, target.name);
+                eprintln!("Target {}:{} is not supported", s, &target.name);
                 continue;
             }
         }
@@ -276,59 +284,78 @@ fn inside_cargo_rustc() {
     /// never set for host crates. This matches what rustc bootstrap does,
     /// which hopefully makes it "reliable enough". This relies on us always
     /// invoking cargo itself with `--target`, which `in_cargo_crux` ensures.
-    fn is_target_crate() -> bool {
+    fn contains_target_flag() -> bool {
         get_arg_flag_value("--target").is_some()
     }
 
-    /// Returns whether or not Cargo invoked the wrapper (this binary) to compile
-    /// the final, target crate (either a test for 'cargo test', or a binary for 'cargo run')
-    /// Cargo does not give us this information directly, so we need to check
-    /// various command-line flags.
-    fn is_runnable_crate() -> bool {
-        // TODO: Crux should support library analysis (CRUX-52)
-        let is_bin = get_arg_flag_value("--crate-type").as_deref() == Some("bin");
-        let is_test = has_arg_flag("--test");
-        is_bin || is_test
+    /// Returns whether we are building the target crate.
+    /// Cargo passes the file name as a relative address when building the local crate,
+    /// such as `crawl/src/bin/unsafe-counter.rs` when building the target crate.
+    /// This might not be a stable behavior, but let's rely on this for now.
+    fn is_target_crate() -> bool {
+        let entry_path_arg = match get_first_arg_with_rs_suffix() {
+            Some(arg) => arg,
+            None => return false,
+        };
+        let entry_path: &Path = entry_path_arg.as_ref();
+
+        entry_path.is_relative()
     }
 
-    let verbose = std::env::var_os("CRUX_VERBOSE").is_some();
-    let target_crate = is_target_crate();
+    fn is_crate_type_lib() -> bool {
+        match get_arg_flag_value("--crate-type") {
+            Some(val) if val == "lib" => true,
+            _ => false,
+        }
+    }
 
-    let mut cmd = Command::new(find_crux());
-    cmd.args(std::env::args().skip(2)); // skip `cargo-crux rustc`
+    fn run_command(mut cmd: Command) {
+        // Run it.
+        let verbose = std::env::var_os("CRUX_VERBOSE").is_some();
+        if verbose {
+            eprintln!("+ {:?}", cmd);
+        }
+
+        match cmd.status() {
+            Ok(exit) => {
+                if !exit.success() {
+                    std::process::exit(exit.code().unwrap_or(42));
+                }
+            }
+            Err(e) => panic!("error running {:?}:\n{:?}", cmd, e),
+        }
+    }
 
     // TODO: Miri sets custom sysroot here, check if it is needed for us (CRUX-30)
 
-    // If this is a target crate, we want Crux to start analysis;
-    // otherwise we want Crux to behave like rustc and build the crate as usual.
-    // TODO: This code was borrowed from Miri, so it doesn't actually analyze libraries (CRUX-52)
-    if target_crate && is_runnable_crate() {
-        // This is the binary or test crate that we want to analyze with Crux.
+    let needs_crux_analysis = contains_target_flag() && is_target_crate();
+    if needs_crux_analysis {
+        let mut cmd = Command::new(find_crux());
+        cmd.args(std::env::args().skip(2)); // skip `cargo-crux rustc`
+
+        // This is the local crate that we want to analyze with Crux.
         // (Testing `target_crate` is needed to exclude build scripts.)
-        // We deserialize the arguments that are meant for Crux from the special environment
-        // variable "CRUX_ARGS", and feed them to the 'crux' binary.
+        // We deserialize the arguments that are meant for Crux from the special
+        // environment variable "CRUX_ARGS", and feed them to the 'crux' binary.
         //
         // `env::var` is okay here, well-formed JSON is always UTF-8.
         let magic = std::env::var("CRUX_ARGS").expect("missing CRUX_ARGS");
         let crux_args: Vec<String> =
             serde_json::from_str(&magic).expect("failed to deserialize CRUX_ARGS");
         cmd.args(crux_args);
-    } else {
-        // We want to compile, not interpret.
-        cmd.env("CRUX_BE_RUSTC", "1");
-    };
 
-    // Run it.
-    if verbose {
-        eprintln!("+ {:?}", cmd);
+        run_command(cmd);
     }
 
-    match cmd.status() {
-        Ok(exit) => {
-            if !exit.success() {
-                std::process::exit(exit.code().unwrap_or(42));
-            }
-        }
-        Err(e) => panic!("error running {:?}:\n{:?}", cmd, e),
+    // Libraries might be used for dependency, so we need to analyze and build it.
+    // FIXME: Once libraries are built, cargo will not invoke crux to analyze it.
+    if !needs_crux_analysis || is_crate_type_lib() {
+        let mut cmd = Command::new(find_crux());
+        cmd.args(std::env::args().skip(2)); // skip `cargo-crux rustc`
+
+        // We want to compile, not interpret.
+        cmd.env("CRUX_BE_RUSTC", "1");
+
+        run_command(cmd);
     }
 }
