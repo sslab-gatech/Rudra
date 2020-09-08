@@ -17,7 +17,7 @@ use crawl::ScratchDir;
 
 #[derive(Serialize)]
 struct CsvEntry {
-    inaccuate: bool,
+    inaccurate: bool,
     name: String,
     version: Version,
     id: u64,
@@ -38,7 +38,7 @@ struct CsvEntry {
 impl From<&(Crate, CrateStat)> for CsvEntry {
     fn from((krate, stat): &(Crate, CrateStat)) -> Self {
         CsvEntry {
-            inaccuate: stat.summary.inaccurate,
+            inaccurate: stat.summary.inaccurate,
             name: krate.name().to_owned(),
             version: krate.latest_version_record().num.clone(),
             id: krate.id(),

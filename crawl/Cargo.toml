@@ -33,7 +33,8 @@ rayon = "1.3.1"
 reqwest = { version = "0.10", features = ["blocking"] }
 serde = { version = "1.0", features = ["derive"] }
 semver = { version = "0.10", features = ["serde"] }
-syn = { version = "1.0.33", default-features = false, features = ["full", "parsing", "visit"] }
+# Updating syn panics the traversal
+syn = { version = "=1.0.14", default-features = false, features = ["full", "parsing", "visit"] }
 tar = "0.4.29"
 thiserror = "1.0"
 tokei = "10.1.2"

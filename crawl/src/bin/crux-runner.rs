@@ -44,11 +44,11 @@ fn main() -> Result<()> {
 
     let crate_list = scratch_dir.fetch_crate_info()?;
 
+    // Add `.take(val)` after `.into_par_iter()` for a quick test
+
     // first stage - fetching crate
     let crate_list: Vec<_> = crate_list
         .into_par_iter()
-        // FIXME: experimental setup
-        .take(1000)
         .filter_map(|krate| -> Option<(Crate, PathBuf, CrateStat)> {
             let result: Result<(PathBuf, CrateStat)> = try {
                 let path = scratch_dir.fetch_latest_version(&krate)?;
