@@ -50,6 +50,23 @@ Don't forget to add `.env` file for your local development.
 1. Follow whatever `rustfmt` does
 2. Group `use` statements in order of `std` - `rustc` internals - 3rd party - local order
 
+## Setup rust-analyzer
+
+Run:
+```
+cd ..
+git clone https://github.com/rust-lang/rust.git rust-nightly-2020-08-26
+cd rust-nightly-08-26
+git checkout bf4342114
+```
+
+Add to workspace setting:
+```
+"rust-analyzer.cargo.features": [
+    "rust-analyzer"
+]
+```
+
 ## Install Crux to Cargo
 
 ```
