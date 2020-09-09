@@ -12,7 +12,7 @@ use crawl::error::Result;
 use crawl::krate::Crate;
 use crawl::stat::CrateStat;
 use crawl::utils::*;
-use crawl::{ReportDir, ScratchDir};
+use crawl::{refresh_never, ReportDir, ScratchDir};
 
 fn setup_log() {
     dotenv::dotenv().ok();
@@ -29,7 +29,7 @@ fn setup_log() {
 
 fn setup_rayon() {
     rayon::ThreadPoolBuilder::new()
-        .num_threads(16)
+        .num_threads(num_cpus::get())
         .stack_size(8 * 1024 * 1024)
         .build_global()
         .expect("Failed to initialize thread pool");
@@ -42,11 +42,10 @@ fn main() -> Result<()> {
     let scratch_dir = ScratchDir::new();
     let report_dir = ReportDir::new();
 
-    let crate_list = scratch_dir.fetch_crate_info()?;
-
-    // Add `.take(val)` after `.into_par_iter()` for a quick test
+    let crate_list = scratch_dir.fetch_crate_info(refresh_never)?;
 
     // first stage - fetching crate
+    // Add `.take(val)` after `.into_par_iter()` for a quick local test
     let crate_list: Vec<_> = crate_list
         .into_par_iter()
         .filter_map(|krate| -> Option<(Crate, PathBuf, CrateStat)> {

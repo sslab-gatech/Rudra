@@ -10,14 +10,14 @@ use std::env;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use chrono::prelude::*;
 use flate2::read::GzDecoder;
 use log::*;
 use once_cell::sync::Lazy;
-use rand::Rng;
 use reqwest::blocking::Client;
 use reqwest::IntoUrl;
 use serde::de::DeserializeOwned;
@@ -41,12 +41,23 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
         .expect("Failed to build reqwest client")
 });
 
-const ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
+static LAST_DOWNLOAD: Lazy<Mutex<Instant>> = Lazy::new(|| Mutex::new(Instant::now()));
 
 fn download(url: impl IntoUrl, path: impl AsRef<Path>) -> Result<()> {
+    const REQUIRED_DELAY: Duration = Duration::from_secs(1);
+
     // Read Crawler policies for crates.io here: https://crates.io/policies
-    let sleep_duration = rand::thread_rng().gen_range(8_000, 16_000);
-    thread::sleep(Duration::from_millis(sleep_duration));
+    let mut last_download = LAST_DOWNLOAD.lock().unwrap();
+    let mut now = Instant::now();
+
+    let diff = now.duration_since(*last_download);
+    if diff < REQUIRED_DELAY {
+        thread::sleep(REQUIRED_DELAY - diff);
+        now = Instant::now();
+    }
+
+    *last_download = now;
+    drop(last_download);
 
     let file = File::create(path.as_ref())?;
     let mut buf_writer = BufWriter::new(file);
@@ -65,19 +76,6 @@ fn decompress(tarball_path: &Path, parent_path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn file_needs_refresh(path: impl AsRef<Path>, duration: Duration) -> bool {
-    let path = path.as_ref();
-
-    if path.exists() {
-        let metadata = path.metadata().expect("failed to access metadata");
-        let modified_time = metadata.modified().expect("failed to read modified time");
-        let diff = SystemTime::now().duration_since(modified_time).unwrap();
-        diff >= duration
-    } else {
-        true
-    }
-}
-
 fn parse_csv_records<T: DeserializeOwned>(csv_path: &Path) -> Result<Vec<T>> {
     let file = File::open(csv_path)?;
     let buf_reader = BufReader::new(file);
@@ -90,6 +88,19 @@ fn parse_csv_records<T: DeserializeOwned>(csv_path: &Path) -> Result<Vec<T>> {
     }
 
     Ok(vec)
+}
+
+pub fn refresh_never(_path: &Path) -> bool {
+    false
+}
+
+pub fn refresh_everyday(path: &Path) -> bool {
+    const ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
+
+    let metadata = path.metadata().expect("failed to access metadata");
+    let modified_time = metadata.modified().expect("failed to read modified time");
+    let diff = SystemTime::now().duration_since(modified_time).unwrap();
+    diff >= ONE_DAY
 }
 
 pub struct ScratchDir {
@@ -108,10 +119,13 @@ impl ScratchDir {
         &self.path
     }
 
-    pub fn fetch_crate_info(&self) -> Result<Vec<Crate>> {
+    pub fn fetch_crate_info<F>(&self, refresh_criteria: F) -> Result<Vec<Crate>>
+    where
+        F: FnOnce(&Path) -> bool,
+    {
         let db_dump_dir = self.path.join("db-dump");
         let db_dump_tarball = self.path.join("db-dump.tar.gz");
-        if file_needs_refresh(&db_dump_tarball, ONE_DAY) {
+        if !db_dump_tarball.exists() || refresh_criteria(&db_dump_tarball) {
             info!("Start downloading new DB");
             download("https://static.crates.io/db-dump.tar.gz", &db_dump_tarball)?;
 
@@ -169,7 +183,6 @@ impl ScratchDir {
         // download .crate file
         let crate_path = self.path.join(format!("{}.crate", &version_tag));
         if !crate_path.exists() {
-            info!("Fetching `{}`", &version_tag);
             download(
                 &format!(
                     "https://static.crates.io/crates/{}/{}.crate",
@@ -178,6 +191,7 @@ impl ScratchDir {
                 ),
                 &crate_path,
             )?;
+            info!("Downloaded `{}`", &version_tag);
         }
 
         // unpack .crate file

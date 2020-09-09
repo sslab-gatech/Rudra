@@ -61,20 +61,24 @@ impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
 
         // based on rustc InterpCx's `load_mir()`
         // https://doc.rust-lang.org/nightly/nightly-rustc/src/rustc_mir/interpret/eval_context.rs.html
-        let def_id = instance.def.def_id();
-        if let Some(def_id) = def_id.as_local() {
-            if self.has_typeck_tables(def_id)
-                && self.typeck_tables_of(def_id).tainted_by_errors.is_some()
-            {
-                // type check failure; shouldn't happen since we already ran `cargo check`
-                panic!("Type check failed for an item: {:?}", &instance);
+        let def_id = instance.def.with_opt_param();
+        if let Some(def) = def_id.as_local() {
+            if self.has_typeck_results(def.did) {
+                if let Some(_) = self.typeck_opt_const_arg(def).tainted_by_errors {
+                    // type check failure; shouldn't happen since we already ran `cargo check`
+                    panic!("Type check failed for an item: {:?}", &instance);
+                }
             }
         }
 
         match instance.def {
-            ty::InstanceDef::Item(_) => {
-                if self.is_mir_available(def_id) {
-                    MirBody::Static(self.optimized_mir(def_id))
+            ty::InstanceDef::Item(def) => {
+                if self.is_mir_available(def.did) {
+                    if let Some((did, param_did)) = def.as_const_arg() {
+                        MirBody::Static(self.optimized_mir_of_const_arg((did, param_did)))
+                    } else {
+                        MirBody::Static(self.optimized_mir(def.did))
+                    }
                 } else {
                     debug!(
                         "Skipping an item {:?}, no MIR available for this item",

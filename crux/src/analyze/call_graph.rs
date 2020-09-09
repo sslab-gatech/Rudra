@@ -98,9 +98,7 @@ impl<'tcx> CallGraph<'tcx> {
         self.graph.iter().filter_map(move |(&instance, _)| {
             let def_id = instance.def.def_id();
             // check if it is local and safe function
-            if def_id.is_local()
-                && instance.monomorphic_ty(tcx).fn_unsafety(tcx) == Unsafety::Normal
-            {
+            if def_id.is_local() && tcx.fn_sig(def_id).unsafety() == Unsafety::Normal {
                 Some(instance)
             } else {
                 None

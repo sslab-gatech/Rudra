@@ -8,7 +8,7 @@ Crux is a static analyzer to detect common undefined behaviors in Rust programs.
 
 - CRUX_LOG
   - Adjust logging level. Use `.env` file at your discretion.
-  - Example: `CRUX_LOG=info,unsafe_counter=info,crawl=info,tokei::language::language_type=error`
+  - Example: `CRUX_LOG=info,crux::analyze::call_graph=error,tokei::language::language_type=error`
 
 ### Crux
 
@@ -29,45 +29,21 @@ You need nightly Rust for Crux and custom Miri for PoC testing.
 
 ```
 # Toolchain setup
+rustup install nightly-2020-08-26
 rustup component add rustc-dev
+rustup component add miri
 
 # Environment variable setup, put these in your `.bashrc`
+export CRUX_RUST_CHANNEL=nightly-2020-08-26
 export CRUX_PATH="<your project path>"
-export RUSTFLAGS="-L $HOME/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib:${CRUX_PATH}/target/release/deps:${CRUX_PATH}/target/debug/deps"
-
-# Clone custom build MIRI
-git clone https://github.com/JOE1994/miri miri-custom
-
-# Setup custom MIRI and related toolchain
-cd miri-custom
-cargo install rustup-toolchain-install-master
-git checkout custom_use
-./rustup-toolchain
-./miri install
-cd ..
-
-# Verify that you have the correct custom MIRI version by checking the commit ID
-cargo miri --version
+export RUSTFLAGS="-L $HOME/.rustup/toolchains/${CRUX_RUST_CHANNEL}-x86_64-unknown-linux-gnu/lib"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.rustup/toolchains/${CRUX_RUST_CHANNEL}-x86_64-unknown-linux-gnu/lib:${CRUX_PATH}/target/release/deps:${CRUX_PATH}/target/debug/deps"
 
 # Test your installation
 cargo run -- --crate-type lib samples/trivial_escape.rs
 ```
 
-You may want to add `.env` file for your local development:
-
-```
-CRUX_LOG=warn,unsafe_counter=info,crawl=info,tokei::language::language_type=error
-```
-
-## Updating Custom MIRI
-
-```
-# (inside `miri-custom` directory)
-git rebase master
-./rustup-toolchain
-./miri install
-```
+Don't forget to add `.env` file for your local development.
 
 ## Code Formatting
 
