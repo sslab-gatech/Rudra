@@ -66,9 +66,16 @@ git checkout bf4342114
 
 Add to workspace setting:
 ```
-"rust-analyzer.cargo.features": [
-    "rust-analyzer"
-]
+{
+    "rust-analyzer.cargo.features": [
+        "rust-analyzer"
+    ],
+    "rust-analyzer.checkOnSave.extraArgs": [
+        "--target-dir",
+        "/home/yechan/crux-project/crux/target/check"
+    ],
+    "rust-analyzer.checkOnSave.features": []
+}
 ```
 
 ## Install Crux to Cargo

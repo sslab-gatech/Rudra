@@ -1,9 +1,10 @@
 //! Unsafe destructor detector
-use rustc_hir::def_id::{DefId, LOCAL_CRATE};
+use rustc_hir::def_id::DefId;
 use rustc_hir::intravisit::{self, NestedVisitorMap, Visitor};
 use rustc_hir::{Block, HirId, ImplItemId, ItemKind, Node};
 use rustc_middle::ty::TyCtxt;
 
+use crate::algorithm::LocalTraitIter;
 use crate::error::Result;
 use crate::prelude::*;
 use crate::report::{crux_report, Report, ReportLevel};
@@ -24,25 +25,19 @@ impl<'tcx> UnsafeDestructor<'tcx> {
 
     pub fn analyze(&mut self) -> Result<'tcx, ()> {
         // key is DefId of trait, value is vec of HirId
-        let local_trait_impl_map = self.ccx.tcx().all_local_trait_impls(LOCAL_CRATE);
-        let drop_trait_def_id = drop_trait_def_id(self.ccx.tcx());
-
         let mut visitor = visitor::UnsafeDestructorVisitor::new(self.ccx);
 
-        for (trait_def_id, impl_vec) in local_trait_impl_map.iter() {
-            if *trait_def_id == drop_trait_def_id {
-                for impl_hir_id in impl_vec.iter() {
-                    if visitor.check_drop_unsafety(*impl_hir_id).unwrap() {
-                        let tcx = self.ccx.tcx();
-                        crux_report(Report::with_span(
-                            self.ccx.tcx(),
-                            ReportLevel::Warning,
-                            "UnsafeDestructor",
-                            "unsafe block detected in drop",
-                            tcx.hir().span(*impl_hir_id),
-                        ));
-                    }
-                }
+        let drop_trait_def_id = drop_trait_def_id(self.ccx.tcx());
+        for impl_item in LocalTraitIter::new(self.ccx, drop_trait_def_id) {
+            if visitor.check_drop_unsafety(impl_item).unwrap() {
+                let tcx = self.ccx.tcx();
+                crux_report(Report::with_span(
+                    self.ccx.tcx(),
+                    ReportLevel::Warning,
+                    "UnsafeDestructor",
+                    "unsafe block detected in drop",
+                    tcx.hir().span(impl_item),
+                ));
             }
         }
 
@@ -54,8 +49,8 @@ mod visitor {
     use super::*;
 
     /// This struct finds the implementation for `Drop` trait implementation and
-    /// checks if it contains any unsafe block. This approach will provide a lot of
-    /// false positives, and heuristics to remove them will be added in the future.
+    /// checks if it contains any unsafe block. This approach will provide false
+    /// positives, which are pruned by heuristics.
     pub struct UnsafeDestructorVisitor<'tcx> {
         ccx: CruxCtxt<'tcx>,
         drop_is_unsafe: bool,
