@@ -36,8 +36,12 @@ rustup component add miri
 # Environment variable setup, put these in your `.bashrc`
 export CRUX_RUST_CHANNEL=nightly-2020-08-26
 export CRUX_PATH="<your project path>"
+
+export CRUX_SCRATCH_DIR="<your scratch path>"
+export CRUX_REPORT_DIR="<your report path>"
+
 export RUSTFLAGS="-L $HOME/.rustup/toolchains/${CRUX_RUST_CHANNEL}-x86_64-unknown-linux-gnu/lib"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.rustup/toolchains/${CRUX_RUST_CHANNEL}-x86_64-unknown-linux-gnu/lib:${CRUX_PATH}/target/release/deps:${CRUX_PATH}/target/debug/deps"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.rustup/toolchains/${CRUX_RUST_CHANNEL}-x86_64-unknown-linux-gnu/lib"
 
 # Test your installation
 cargo run -- --crate-type lib samples/trivial_escape.rs

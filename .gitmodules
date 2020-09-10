@@ -1,3 +1,0 @@
-[submodule "samples/isahc"]
-	path = samples/isahc
-	url = https://github.com/sagebind/isahc.git

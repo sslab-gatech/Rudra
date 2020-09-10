@@ -1,2 +1,2 @@
 #!/bin/bash
-cargo install --path "$(dirname "$0")/crux" --force --locked
+cargo install --path "$(dirname "$0")" --force --locked
