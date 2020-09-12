@@ -45,6 +45,7 @@ impl<'tcx> CruxCtxtOwner<'tcx> {
             Rc::new(
                 try {
                     let mir_body = tcx
+                        .ext()
                         .find_fn(instance)
                         .body()
                         .ok_or(Error::BodyNotAvailable(instance))?;
@@ -141,6 +142,7 @@ impl<'tcx> CruxCtxtOwner<'tcx> {
                             TyKind::FnDef(def_id, callee_substs) => {
                                 let instance = self
                                     .tcx()
+                                    .ext()
                                     .monomorphic_resolve(def_id, callee_substs, caller_substs)
                                     .expect("Unexpected resolve failure");
                                 ir::TerminatorKind::StaticCall {
