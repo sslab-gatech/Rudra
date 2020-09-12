@@ -1,8 +1,8 @@
 #![feature(try_blocks)]
 
 use std::env;
-use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::PathBuf;
 
 use log::*;
@@ -16,13 +16,10 @@ use crawl::{refresh_never, ReportDir, ScratchDir};
 
 fn setup_log() {
     dotenv::dotenv().ok();
-    let log_var_name = "CRUX_LOG";
+    let log_var_name = "CRUX_RUNNER_LOG";
 
     if let None = env::var_os(log_var_name) {
-        env::set_var(
-            log_var_name,
-            "warn,crawl=info,crux_runner=info,tokei::language::language_type=error",
-        );
+        env::set_var(log_var_name, "info");
     }
     pretty_env_logger::init_custom_env(log_var_name);
 }
@@ -72,15 +69,22 @@ fn main() -> Result<()> {
         .filter_map(|(krate, path, _crate_stat)| -> Option<Crate> {
             // FIXME: add timeout (CRUX-43)
             info!("Analysis start: {}", krate.latest_version_tag());
+
+            let report_path = report_dir
+                .report_path()
+                .join(format!("report-{}", krate.latest_version_tag()));
+
+            let log_path = report_dir
+                .log_path()
+                .join(format!("log-{}", krate.latest_version_tag()));
+
             let crux_output = run_command_with_env(
                 "cargo crux",
                 &path,
-                &[(
-                    "CRUX_REPORT_PATH",
-                    report_dir
-                        .report_path()
-                        .join(format!("report-{}", krate.latest_version_tag())),
-                )],
+                &[
+                    ("CRUX_REPORT_PATH", &report_path),
+                    ("CRUX_LOG_PATH", &log_path),
+                ],
             );
             info!("Analysis end: {}", krate.latest_version_tag());
 
@@ -89,21 +93,22 @@ fn main() -> Result<()> {
                 warn!("Failed to clean {}", krate.latest_version_tag());
             }
 
-            let log_path = report_dir
-                .log_path()
-                .join(format!("log-{}", krate.latest_version_tag()));
-
             match crux_output {
                 Ok(output) => {
-                    if let Ok(file) = File::create(&log_path) {
-                        let mut file = BufWriter::new(file);
-                        write!(
+                    let log_file = OpenOptions::new().append(true).create(true).open(&log_path);
+                    if let Ok(mut file) = log_file {
+                        if let Err(e) = write!(
                             &mut file,
-                            "=== stdout ===\n{}\n=== stderr ===\n{}\n",
+                            "[stdout]\n{}\n[stderr]\n{}\n",
                             String::from_utf8_lossy(&output.stdout),
                             String::from_utf8_lossy(&output.stderr),
-                        )
-                        .ok();
+                        ) {
+                            error!(
+                                "Failed to write the log for {}: {}",
+                                krate.latest_version_tag(),
+                                e
+                            );
+                        }
                     } else {
                         error!("Failed to create {:?}", &log_path);
                     }
@@ -111,7 +116,7 @@ fn main() -> Result<()> {
                 }
                 Err(e) => {
                     error!(
-                        "Failed to execute `cargo crux` on {}: {:?}",
+                        "Failed to execute `cargo crux` on {}: {}",
                         krate.latest_version_tag(),
                         e
                     );

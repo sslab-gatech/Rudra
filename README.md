@@ -4,11 +4,14 @@ Crux is a static analyzer to detect common undefined behaviors in Rust programs.
 
 ## Configurations
 
-### Common
+### Crawl
 
-- CRUX_LOG
-  - Adjust logging level. Use `.env` file at your discretion.
-  - Example: `CRUX_LOG=info,crux::analyze::call_graph=error,tokei::language::language_type=error`
+- CRUX_RUNNER_LOG
+  - Adjust logging level for `crux-runner`. Use `.env` file at your discretion.
+  - Default: `info`
+- UNSAFE_COUNTER_LOG
+  - Adjust logging level for `unsafe-counter`. Use `.env` file at your discretion.
+  - Default: `info,tokei::language_type=error`
 
 ### Crux
 
@@ -16,7 +19,7 @@ Crux is a static analyzer to detect common undefined behaviors in Rust programs.
   - Report file location. If set, Crux analysis result will be serialized and
     saved to that file. Otherwise, the result will be printed to stderr.
 - CRUX_LOG_PATH
-  - (TODO) Log file location.
+  - Log file location. If set, log will be saved to this file as well as printed to stderr.
 
 ### Crux-Runner
 
