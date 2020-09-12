@@ -17,7 +17,7 @@ extern crate if_chain;
 extern crate log;
 
 pub mod algorithm;
-mod analyze;
+mod analysis;
 pub mod context;
 pub mod error;
 pub mod ext;
@@ -28,8 +28,8 @@ pub mod utils;
 
 use rustc_middle::ty::TyCtxt;
 
-use crate::analyze::solver::SolverW1;
-use crate::analyze::{CallGraph, SimpleAnderson, UnsafeDestructor};
+use crate::analysis::solver::SolverW1;
+use crate::analysis::{CallGraph, SimpleAnderson, UnsafeDestructor};
 use crate::context::CruxCtxtOwner;
 use crate::error::Error;
 

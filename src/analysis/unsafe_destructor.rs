@@ -104,7 +104,7 @@ mod visitor {
             use rustc_hir::BlockCheckMode;
             match block.rules {
                 BlockCheckMode::DefaultBlock => (),
-                BlockCheckMode::UnsafeBlock(_source) => {
+                BlockCheckMode::UnsafeBlock(_unsafe_source) => {
                     // TODO: implement heuristic analysis
                     self.drop_is_unsafe = true;
                 }

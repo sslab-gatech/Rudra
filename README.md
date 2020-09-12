@@ -12,9 +12,11 @@ Crux is a static analyzer to detect common undefined behaviors in Rust programs.
 
 ### Crux
 
-- CRUX_REPORT
+- CRUX_REPORT_PATH
   - Report file location. If set, Crux analysis result will be serialized and
     saved to that file. Otherwise, the result will be printed to stderr.
+- CRUX_LOG_PATH
+  - (TODO) Log file location.
 
 ### Crux-Runner
 
@@ -22,6 +24,7 @@ Crux is a static analyzer to detect common undefined behaviors in Rust programs.
   - Directory to store crawled crates (default: ../crux_scratch)
 - CRUX_REPORT_DIR
   - Directory to store reports (default: ../crux_report)
+  - Crux-Runner will automatically set `CRUX_REPORT_PATH`
 
 ## Development Setup
 
@@ -32,6 +35,8 @@ You need nightly Rust for Crux and custom Miri for PoC testing.
 rustup install nightly-2020-08-26
 rustup component add rustc-dev
 rustup component add miri
+# you need to either make it default or run `cargo +nightly-2020-08-26 crux`
+rustup default nightly-2020-08-26
 
 # Environment variable setup, put these in your `.bashrc`
 export CRUX_RUST_CHANNEL=nightly-2020-08-26
@@ -47,12 +52,13 @@ export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.rustup/toolchains/${CRUX_RUST_
 cargo run -- --crate-type lib samples/trivial_escape.rs
 ```
 
-Don't forget to add `.env` file for your local development.
+Don't forget to add `.env` file for your local development. See "Configurations" for an example.
 
 ## Code Formatting
 
 1. Follow whatever `rustfmt` does
-2. Group `use` statements in order of `std` - `rustc` internals - 3rd party - local order
+2. Use an empty comment line if you want to bypass rustfmt's default formatting
+3. Group `use` statements in order of `std` - `rustc` internals - 3rd party - local order
 
 ## Setup rust-analyzer
 

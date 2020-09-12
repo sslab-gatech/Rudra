@@ -38,7 +38,7 @@ pub fn init_report_logger(report_logger: Box<dyn ReportLogger>) -> FlushHandle {
 }
 
 pub fn default_report_logger() -> Box<dyn ReportLogger> {
-    match env::var_os("CRUX_REPORT") {
+    match env::var_os("CRUX_REPORT_PATH") {
         Some(val) => Box::new(FileLogger::new(val)),
         None => Box::new(StderrLogger::new()),
     }

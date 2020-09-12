@@ -73,7 +73,7 @@ def run_test(test_case):
     try:
         with tempfile.NamedTemporaryFile(prefix="crux") as report_file:
             env_dict = dict(os.environ)
-            env_dict["CRUX_REPORT"] = report_file.name
+            env_dict["CRUX_REPORT_PATH"] = report_file.name
             output = subprocess.run(
                 ["crux", "--crate-type", "lib", test_case.path],
                 stdout=subprocess.PIPE,

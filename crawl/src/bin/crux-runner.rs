@@ -76,7 +76,7 @@ fn main() -> Result<()> {
                 "cargo crux",
                 &path,
                 &[(
-                    "CRUX_REPORT",
+                    "CRUX_REPORT_PATH",
                     report_dir
                         .report_path()
                         .join(format!("report-{}", krate.latest_version_tag())),

@@ -3,6 +3,7 @@ use rustc_hir::HirId;
 
 use crate::prelude::*;
 
+/// Given a trait `DefId`, this iterator returns all local implementation of that trait.
 pub struct LocalTraitIter {
     inner: std::vec::IntoIter<HirId>,
 }
