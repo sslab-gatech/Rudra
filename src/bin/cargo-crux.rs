@@ -1,10 +1,16 @@
 ///! This implementation is based on `cargo-miri`
 ///! https://github.com/rust-lang/miri/blob/master/src/bin/cargo-miri.rs
+#[macro_use]
+extern crate log as log_crate;
+
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use rustc_version::VersionMeta;
+
+use crux::log::{self, Verbosity};
+use crux::{progress_error, progress_info};
 
 const CARGO_CRUX_HELP: &str = r#"Tests crates with Crux
 Usage:
@@ -21,8 +27,8 @@ fn show_help() {
     println!("{}", CARGO_CRUX_HELP);
 }
 
-fn show_error(msg: String) -> ! {
-    eprintln!("fatal error: {}", msg);
+fn show_error(msg: impl AsRef<str>) -> ! {
+    progress_error!("{}", msg.as_ref());
     std::process::exit(1)
 }
 
@@ -82,7 +88,7 @@ fn list_targets() -> impl Iterator<Item = cargo_metadata::Target> {
     let mut metadata = if let Ok(metadata) = cmd.exec() {
         metadata
     } else {
-        show_error(format!("Could not obtain Cargo metadata"));
+        show_error("Could not obtain Cargo metadata");
     };
 
     let current_dir = std::env::current_dir();
@@ -105,9 +111,7 @@ fn list_targets() -> impl Iterator<Item = cargo_metadata::Target> {
             }
         })
         .unwrap_or_else(|| {
-            show_error(format!(
-                "This seems to be a workspace, which is not supported by cargo-crux"
-            ))
+            show_error("This seems to be a workspace, which is not supported by cargo-crux");
         });
     let package = metadata.packages.remove(package_index);
 
@@ -161,6 +165,27 @@ fn test_sysroot_consistency() {
     }
 }
 
+fn clean_target(target_name: &str) {
+    let mut cmd = Command::new("cargo");
+    cmd.arg("clean");
+
+    cmd.arg("-p");
+    cmd.arg(target_name);
+
+    cmd.arg("--target");
+    cmd.arg(version_info().host);
+
+    let exit_status = cmd
+        .spawn()
+        .expect("could not run cargo clean")
+        .wait()
+        .expect("failed to wait for cargo?");
+
+    if !exit_status.success() {
+        show_error(format!("cargo clean failed"));
+    }
+}
+
 fn main() {
     // Check for version and help flags even when invoked as `cargo-crux`.
     if std::env::args().any(|a| a == "--help" || a == "-h") {
@@ -168,7 +193,10 @@ fn main() {
         return;
     }
 
+    log::setup_logging(Verbosity::Normal).expect("Crux failed to initialize");
+
     if let Some("crux") = std::env::args().nth(1).as_ref().map(AsRef::as_ref) {
+        progress_info!("Running cargo crux");
         // This arm is for when `cargo crux` is called. We call `cargo rustc` for each applicable target,
         // but with the `RUSTC` env var set to the `cargo-crux` binary so that we come back in the other branch,
         // and dispatch the invocations to `rustc` and `crux`, respectively.
@@ -178,9 +206,7 @@ fn main() {
         // dependencies get dispatched to `rustc`, the final test/binary to `crux`.
         inside_cargo_rustc();
     } else {
-        show_error(format!(
-            "`cargo-crux` must be called with either `crux` or `rustc` as first argument."
-        ))
+        show_error("`cargo-crux` must be called with either `crux` or `rustc` as first argument.");
     }
 }
 
@@ -191,6 +217,23 @@ fn in_cargo_crux() {
     test_sysroot_consistency();
 
     // Now run the command.
+    let mut targets: Vec<_> = list_targets().collect();
+    targets.sort_by(|t1, t2| {
+        use std::cmp::Ordering;
+
+        let t1_kind = t1.kind.get(0).unwrap();
+        let t2_kind = t2.kind.get(0).unwrap();
+
+        if t1_kind < t2_kind {
+            Ordering::Greater
+        } else if t1_kind == t2_kind {
+            Ordering::Equal
+        } else {
+            Ordering::Less
+        }
+    });
+
+    // Ensure "lib" targets are compiled first
     for target in list_targets() {
         // Skip `cargo crux`
         let mut args = std::env::args().skip(2);
@@ -212,11 +255,17 @@ fn in_cargo_crux() {
             "lib" => {
                 // There can be only one lib in a crate.
                 cmd.arg("--lib");
+                // Clean the result to disable Cargo's freshness check
+                clean_target(&target.name);
             }
             s => {
-                eprintln!("Target {}:{} is not supported", s, &target.name);
+                warn!("Target {}:{} is not supported", s, &target.name);
                 continue;
             }
+        }
+
+        if !cfg!(debug_assertions) && !verbose {
+            cmd.arg("-q");
         }
 
         // Forward user-defined `cargo` args until first `--`.
@@ -238,7 +287,10 @@ fn in_cargo_crux() {
 
         // Add suffix to CRUX_REPORT_PATH
         if let Ok(report) = env::var("CRUX_REPORT_PATH") {
-            cmd.env("CRUX_REPORT_PATH", format!("{}-{}", report, &target.name));
+            cmd.env(
+                "CRUX_REPORT_PATH",
+                format!("{}-{}-{}", report, kind, &target.name),
+            );
         }
 
         // Serialize the remaining args into a special environment variable.
@@ -266,14 +318,15 @@ fn in_cargo_crux() {
             eprintln!("+ {:?}", cmd);
         }
 
+        progress_info!("Running crux for target {}:{}", kind.as_str(), &target.name);
         let exit_status = cmd
             .spawn()
-            .expect("could not run cargo")
+            .expect("could not run cargo check")
             .wait()
             .expect("failed to wait for cargo?");
 
         if !exit_status.success() {
-            std::process::exit(exit_status.code().unwrap_or(-1))
+            show_error("Finished with non-zero exit code");
         }
     }
 }
@@ -353,7 +406,6 @@ fn inside_cargo_rustc() {
     }
 
     // Libraries might be used for dependency, so we need to analyze and build it.
-    // FIXME: Once libraries are built, cargo will not invoke crux to analyze it.
     if !needs_crux_analysis || is_crate_type_lib() {
         let mut cmd = Command::new(find_crux());
         cmd.args(std::env::args().skip(2)); // skip `cargo-crux rustc`

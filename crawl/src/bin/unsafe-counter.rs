@@ -58,7 +58,7 @@ impl From<&(Crate, CrateStat)> for CsvEntry {
     }
 }
 
-fn setup_log() {
+fn setup_logging() {
     dotenv::dotenv().ok();
     let log_var_name = "UNSAFE_COUNTER_LOG";
 
@@ -88,7 +88,7 @@ fn print_csv(file_name: impl AsRef<Path>, crate_list: &Vec<(Crate, CrateStat)>) 
 }
 
 fn main() -> Result<()> {
-    setup_log();
+    setup_logging();
     setup_rayon();
 
     let scratch_dir = ScratchDir::new();

@@ -12,17 +12,16 @@ use std::env;
 use rustc_driver::Compilation;
 use rustc_interface::{interface::Compiler, Queries};
 
-use dotenv::dotenv;
-
+use crux::log::Verbosity;
 use crux::report::{default_report_logger, init_report_logger};
-use crux::{analyze, compile_time_sysroot, CruxAnalysisConfig, CRUX_DEFAULT_ARGS};
+use crux::{analyze, compile_time_sysroot, progress_info, AnalysisConfig, CRUX_DEFAULT_ARGS};
 
 struct CruxCompilerCalls {
-    config: CruxAnalysisConfig,
+    config: AnalysisConfig,
 }
 
 impl CruxCompilerCalls {
-    fn new(config: CruxAnalysisConfig) -> CruxCompilerCalls {
+    fn new(config: AnalysisConfig) -> CruxCompilerCalls {
         CruxCompilerCalls { config }
     }
 }
@@ -34,6 +33,9 @@ impl rustc_driver::Callbacks for CruxCompilerCalls {
         queries: &'tcx Queries<'tcx>,
     ) -> Compilation {
         compiler.session().abort_if_errors();
+
+        crux::log::setup_logging(self.config.verbosity).expect("Crux failed to initialize");
+        progress_info!("Crux started");
 
         debug!("Input file name: {}", compiler.input().source_name());
         debug!("Crate name: {}", queries.crate_name().unwrap().peek_mut());
@@ -82,6 +84,36 @@ fn run_compiler(
     exit_code
 }
 
+fn parse_config() -> (AnalysisConfig, Vec<String>) {
+    // collect arguments
+    let mut config = AnalysisConfig::default();
+
+    let mut rustc_args = vec![];
+    for arg in std::env::args() {
+        match arg.as_str() {
+            "-Zcrux-enable-simple-anderson" => {
+                config.simple_anderson_enabled = true;
+            }
+            "-Zcrux-disable-simple-anderson" => {
+                config.simple_anderson_enabled = false;
+            }
+            "-Zcrux-enable-unsafe-destructor" => {
+                config.unsafe_destructor_enabled = true;
+            }
+            "-Zcrux-disable-unsafe-destructor" => {
+                config.unsafe_destructor_enabled = false;
+            }
+            "-v" => config.verbosity = Verbosity::Verbose,
+            "-vv" => config.verbosity = Verbosity::Trace,
+            _ => {
+                rustc_args.push(arg);
+            }
+        }
+    }
+
+    (config, rustc_args)
+}
+
 fn main() {
     rustc_driver::install_ice_hook(); // ICE: Internal Compilation Error
 
@@ -94,13 +126,7 @@ fn main() {
         run_compiler(env::args().collect(), &mut callbacks)
     } else {
         // Otherwise, run Crux analysis
-
-        // init Crux logger
-        dotenv().ok();
-        let env = env_logger::Env::new()
-            .filter("CRUX_LOG")
-            .write_style("CRUX_LOG_STYLE");
-        env_logger::init_from_env(env);
+        let (config, mut rustc_args) = parse_config();
 
         // init rustc logger
         if env::var_os("RUSTC_LOG").is_some() {
@@ -109,31 +135,6 @@ fn main() {
 
         // init report logger
         let _logger_handle = init_report_logger(default_report_logger());
-
-        // collect arguments
-        let mut config = CruxAnalysisConfig::default();
-
-        let mut rustc_args = vec![];
-
-        for arg in std::env::args() {
-            match arg.as_str() {
-                "-Zcrux-enable-simple-anderson" => {
-                    config.simple_anderson_enabled = true;
-                }
-                "-Zcrux-disable-simple-anderson" => {
-                    config.simple_anderson_enabled = false;
-                }
-                "-Zcrux-enable-unsafe-destructor" => {
-                    config.unsafe_destructor_enabled = true;
-                }
-                "-Zcrux-disable-unsafe-destructor" => {
-                    config.unsafe_destructor_enabled = false;
-                }
-                _ => {
-                    rustc_args.push(arg);
-                }
-            }
-        }
 
         if let Some(sysroot) = compile_time_sysroot() {
             let sysroot_flag = "--sysroot";
@@ -149,7 +150,9 @@ fn main() {
 
         debug!("rustc arguments: {:?}", &rustc_args);
 
-        run_compiler(rustc_args, &mut CruxCompilerCalls::new(config))
+        let exit_code = run_compiler(rustc_args, &mut CruxCompilerCalls::new(config));
+        progress_info!("Crux finished");
+        exit_code
     };
 
     std::process::exit(exit_code)

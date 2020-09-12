@@ -32,7 +32,7 @@ impl<'tcx> CallGraph<'tcx> {
                 entry.insert(entry_instance);
                 CallGraph::traverse(ccx, entry_instance, &mut graph);
             } else {
-                warn!("Unhandled mono item: {:?}", entry_mono_item);
+                trace!("Unhandled mono item: {:?}", entry_mono_item);
             }
         });
 
@@ -67,7 +67,7 @@ impl<'tcx> CallGraph<'tcx> {
                         CallGraph::traverse(ccx, next_instance, graph);
                     }
                 }
-                Err(e) => warn!("Cannot instantiate MIR body: {:?}", e),
+                Err(e) => debug!("Cannot instantiate MIR body: {:?}", e),
             }
         }
     }

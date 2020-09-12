@@ -4,30 +4,33 @@ Crux is a static analyzer to detect common undefined behaviors in Rust programs.
 
 ## Configurations
 
-### Crawl
+### Unsafe Counter
 
-- CRUX_RUNNER_LOG
-  - Adjust logging level for `crux-runner`. Use `.env` file at your discretion.
-  - Default: `info`
 - UNSAFE_COUNTER_LOG
   - Adjust logging level for `unsafe-counter`. Use `.env` file at your discretion.
   - Default: `info,tokei::language_type=error`
 
-### Crux
+### Crux Runner
 
-- CRUX_REPORT_PATH
-  - Report file location. If set, Crux analysis result will be serialized and
-    saved to that file. Otherwise, the result will be printed to stderr.
-- CRUX_LOG_PATH
-  - Log file location. If set, log will be saved to this file as well as printed to stderr.
-
-### Crux-Runner
-
+- CRUX_RUNNER_LOG
+  - Adjust logging level for `crux-runner`. Use `.env` file at your discretion.
+  - Default: `info`
 - CRUX_SCRATCH_DIR
   - Directory to store crawled crates (default: ../crux_scratch)
 - CRUX_REPORT_DIR
   - Directory to store reports (default: ../crux_report)
   - Crux-Runner will automatically set `CRUX_REPORT_PATH`
+
+### Crux
+
+- Use `-v` or `-vv` to make logging more verbose.
+  More than two v's will be ignored, and only the last option will be considered (it does not accumulate).
+- CRUX_REPORT_PATH
+  - Report file location. If set, Crux analysis result will be serialized and
+    saved to that file. Otherwise, the result will be printed to stderr.
+  - If there already exists a file at the path, the existing content will be erased.
+- CRUX_LOG_PATH
+  - Log file location. If set, log will be saved to this file as well as printed to stderr.
 
 ## Development Setup
 

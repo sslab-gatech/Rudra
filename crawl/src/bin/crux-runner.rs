@@ -14,7 +14,7 @@ use crawl::stat::CrateStat;
 use crawl::utils::*;
 use crawl::{refresh_never, ReportDir, ScratchDir};
 
-fn setup_log() {
+fn setup_logging() {
     dotenv::dotenv().ok();
     let log_var_name = "CRUX_RUNNER_LOG";
 
@@ -33,7 +33,7 @@ fn setup_rayon() {
 }
 
 fn main() -> Result<()> {
-    setup_log();
+    setup_logging();
     setup_rayon();
 
     let scratch_dir = ScratchDir::new();

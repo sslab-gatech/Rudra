@@ -14,7 +14,7 @@ extern crate rustc_span;
 #[macro_use]
 extern crate if_chain;
 #[macro_use]
-extern crate log;
+extern crate log as log_crate;
 
 pub mod algorithm;
 mod analysis;
@@ -22,6 +22,7 @@ pub mod context;
 pub mod error;
 pub mod ext;
 pub mod ir;
+pub mod log;
 pub mod prelude;
 pub mod report;
 pub mod utils;
@@ -32,20 +33,23 @@ use crate::analysis::solver::SolverW1;
 use crate::analysis::{CallGraph, SimpleAnderson, UnsafeDestructor};
 use crate::context::CruxCtxtOwner;
 use crate::error::Error;
+use crate::log::Verbosity;
 
 // Insert rustc arguments at the beginning of the argument list that Crux wants to be
 // set per default, for maximal validation power.
 pub static CRUX_DEFAULT_ARGS: &[&str] = &["-Zalways-encode-mir", "-Zmir-opt-level=0", "--cfg=crux"];
 
 #[derive(Debug, Clone, Copy)]
-pub struct CruxAnalysisConfig {
+pub struct AnalysisConfig {
+    pub verbosity: Verbosity,
     pub unsafe_destructor_enabled: bool,
     pub simple_anderson_enabled: bool,
 }
 
-impl Default for CruxAnalysisConfig {
+impl Default for AnalysisConfig {
     fn default() -> Self {
-        CruxAnalysisConfig {
+        AnalysisConfig {
+            verbosity: Verbosity::Normal,
             unsafe_destructor_enabled: true,
             simple_anderson_enabled: false,
         }
@@ -63,7 +67,7 @@ pub fn compile_time_sysroot() -> Option<String> {
     }
 
     // For builds outside rustc, we need to ensure that we got a sysroot
-    // that gets used as a default.  The sysroot computation in librustc would
+    // that gets used as a default. The sysroot computation in librustc would
     // end up somewhere in the build dir.
     // Taken from PR <https://github.com/Manishearth/rust-clippy/pull/911>.
     let home = option_env!("RUSTUP_HOME").or(option_env!("MULTIRUST_HOME"));
@@ -76,86 +80,99 @@ pub fn compile_time_sysroot() -> Option<String> {
     })
 }
 
-pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxAnalysisConfig) {
-    // workaround to mimic arena lifetime (CRUX-34)
+fn run_analysis<F, R>(name: &str, f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    progress_info!("{} analysis started", name);
+    let result = f();
+    progress_info!("{} analysis finished", name);
+    result
+}
+
+pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: AnalysisConfig) {
+    // workaround to mimic arena lifetime
     let ccx_owner = CruxCtxtOwner::new(tcx);
-    let ccx = Box::leak(Box::new(ccx_owner));
+    let ccx = &*Box::leak(Box::new(ccx_owner));
 
     // shadow the variable tcx
     #[allow(unused_variables)]
     let tcx = ();
 
     // collect DefId of all bodies
-    info!("Running call graph analysis");
-    let call_graph = CallGraph::new(ccx);
-    info!(
-        "Found {} functions in the call graph",
-        call_graph.num_functions()
-    );
+    let call_graph = run_analysis("CallGraph", || {
+        let call_graph = CallGraph::new(ccx);
+        info!(
+            "Found {} functions in the call graph",
+            call_graph.num_functions()
+        );
+        call_graph
+    });
 
     // Simple anderson analysis
     if config.simple_anderson_enabled {
-        info!("Running simple anderson analysis");
+        run_analysis("SimpleAnderson", || {
+            let mut simple_anderson = SimpleAnderson::new(ccx);
 
-        let mut simple_anderson = SimpleAnderson::new(ccx);
+            for local_instance in call_graph.local_safe_fn_iter() {
+                let def_path_string = ccx
+                    .tcx()
+                    .hir()
+                    .def_path(local_instance.def.def_id().expect_local())
+                    .to_string_no_crate();
 
-        for local_instance in call_graph.local_safe_fn_iter() {
-            let def_path_string = ccx
-                .tcx()
-                .hir()
-                .def_path(local_instance.def.def_id().expect_local())
-                .to_string_no_crate();
+                // TODO: remove these temporary setups
+                if def_path_string == "::buffer[0]::{{impl}}[2]::from[0]"
+                    || def_path_string.starts_with("::crux_test")
+                {
+                    info!("Found {:?}", local_instance);
 
-            // TODO: remove these temporary setups
-            if def_path_string == "::buffer[0]::{{impl}}[2]::from[0]"
-                || def_path_string.starts_with("::crux_test")
-            {
-                info!("Found {:?}", local_instance);
+                    let result = simple_anderson.analyze(local_instance);
 
-                let result = simple_anderson.analyze(local_instance);
-
-                println!("Target {}", def_path_string);
-                match result {
-                    Err(e @ Error::AnalysisUnimplemented(_)) => {
-                        error!("Analysis Unimplemented: {:?}", e);
-                    }
-                    Err(e @ Error::TranslationUnimplemented(_)) => {
-                        error!("Translation Unimplemented: {:?}", e);
-                    }
-                    Err(e) => {
-                        error!("Analysis failed with error: {:?}", e);
-                    }
-                    Ok(_) => {
-                        let _solver = SolverW1::solve(&simple_anderson);
-                        // TODO: report solver result
+                    println!("Target {}", def_path_string);
+                    match result {
+                        Err(e @ Error::AnalysisUnimplemented(_)) => {
+                            error!("Analysis Unimplemented: {:?}", e);
+                        }
+                        Err(e @ Error::TranslationUnimplemented(_)) => {
+                            error!("Translation Unimplemented: {:?}", e);
+                        }
+                        Err(e) => {
+                            error!("Analysis failed with error: {:?}", e);
+                        }
+                        Ok(_) => {
+                            let _solver = SolverW1::solve(&simple_anderson);
+                            // TODO: report solver result
+                        }
                     }
                 }
             }
-        }
+        })
     }
 
     // Unsafe destructor analysis
     if config.unsafe_destructor_enabled {
-        info!("Running unsafe destructor analysis");
+        run_analysis("UnsafeDestructor", || {
+            let mut unsafe_destructor = UnsafeDestructor::new(ccx);
+            let result = unsafe_destructor.analyze();
 
-        let mut unsafe_destructor = UnsafeDestructor::new(ccx);
-        let result = unsafe_destructor.analyze();
-
-        match result {
-            Err(e @ Error::AnalysisUnimplemented(_)) => {
-                error!("Analysis Unimplemented: {:?}", e);
+            match result {
+                Err(e @ Error::AnalysisUnimplemented(_)) => {
+                    error!("Analysis Unimplemented: {:?}", e);
+                }
+                Err(e @ Error::TranslationUnimplemented(_)) => {
+                    error!("Translation Unimplemented: {:?}", e);
+                }
+                Err(e) => {
+                    error!("Analysis failed with error: {:?}", e);
+                }
+                Ok(_) => (),
             }
-            Err(e @ Error::TranslationUnimplemented(_)) => {
-                error!("Translation Unimplemented: {:?}", e);
-            }
-            Err(e) => {
-                error!("Analysis failed with error: {:?}", e);
-            }
-            Ok(_) => (),
-        }
+        })
     }
 
-    // Default analysis -- currently, it prints MIR of all reachable functions from the target
+    // TODO: remove these temporary setups
+    // Call graph testing
     for local_instance in call_graph.local_safe_fn_iter() {
         let def_path_string = ccx
             .tcx()
@@ -163,7 +180,6 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxAnalysisConfig) {
             .def_path(local_instance.def.def_id().expect_local())
             .to_string_no_crate();
 
-        // TODO: remove these temporary setups
         if def_path_string == "::buffer[0]::{{impl}}[2]::from[0]"
             || def_path_string.starts_with("::crux_test")
         {
