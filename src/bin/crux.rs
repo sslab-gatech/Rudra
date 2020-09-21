@@ -14,14 +14,14 @@ use rustc_interface::{interface::Compiler, Queries};
 
 use crux::log::Verbosity;
 use crux::report::{default_report_logger, init_report_logger};
-use crux::{analyze, compile_time_sysroot, progress_info, AnalysisConfig, CRUX_DEFAULT_ARGS};
+use crux::{analyze, compile_time_sysroot, progress_info, CruxConfig, CRUX_DEFAULT_ARGS};
 
 struct CruxCompilerCalls {
-    config: AnalysisConfig,
+    config: CruxConfig,
 }
 
 impl CruxCompilerCalls {
-    fn new(config: AnalysisConfig) -> CruxCompilerCalls {
+    fn new(config: CruxConfig) -> CruxCompilerCalls {
         CruxCompilerCalls { config }
     }
 }
@@ -84,9 +84,9 @@ fn run_compiler(
     exit_code
 }
 
-fn parse_config() -> (AnalysisConfig, Vec<String>) {
+fn parse_config() -> (CruxConfig, Vec<String>) {
     // collect arguments
-    let mut config = AnalysisConfig::default();
+    let mut config = CruxConfig::default();
 
     let mut rustc_args = vec![];
     for arg in std::env::args() {

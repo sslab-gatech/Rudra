@@ -7,9 +7,58 @@ use std::collections::HashSet;
 use rustc_middle::mir;
 use rustc_middle::ty::{Instance, Ty};
 
+use snafu::{Backtrace, Snafu};
+
 use super::{Constraint, ConstraintSet, Location, LocationFactory, NodeId};
-use crate::error::{Error, Result};
+use crate::context::MirInstantiationError;
 use crate::prelude::*;
+
+#[derive(Debug, Snafu)]
+pub enum SimpleAndersonError<'tcx> {
+    ConstraintCheck,
+    BodyNotFound {
+        backtrace: Backtrace,
+        reason: MirInstantiationError<'tcx>,
+    },
+    UnsupportedProjection {
+        backtrace: Backtrace,
+        place: mir::Place<'tcx>,
+    },
+    UnsupportedRvalue {
+        backtrace: Backtrace,
+        rvalue: mir::Rvalue<'tcx>,
+    },
+    UnsupportedStatement {
+        backtrace: Backtrace,
+        statement: mir::Statement<'tcx>,
+    },
+    UnsupportedConstantPointer {
+        backtrace: Backtrace,
+        dst: mir::Place<'tcx>,
+        src: mir::Operand<'tcx>,
+    },
+    UnsupportedPointerCast {
+        backtrace: Backtrace,
+        dst: mir::Place<'tcx>,
+        src: mir::Operand<'tcx>,
+    },
+}
+
+impl<'tcx> AnalysisError for SimpleAndersonError<'tcx> {
+    fn kind(&self) -> AnalysisErrorKind {
+        use AnalysisErrorKind::*;
+        use SimpleAndersonError::*;
+        match self {
+            ConstraintCheck => Unimplemented,
+            BodyNotFound { .. } => OutOfScope,
+            UnsupportedProjection { .. }
+            | UnsupportedRvalue { .. }
+            | UnsupportedStatement { .. }
+            | UnsupportedConstantPointer { .. }
+            | UnsupportedPointerCast { .. } => Unimplemented,
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 struct Place<'tcx> {
@@ -17,7 +66,6 @@ struct Place<'tcx> {
     deref_count: usize,
 }
 
-// TODO: add translation cache here
 pub struct SimpleAnderson<'tcx> {
     ccx: CruxCtxt<'tcx>,
     location_factory: LocationFactory<'tcx>,
@@ -26,6 +74,7 @@ pub struct SimpleAnderson<'tcx> {
     /// Collection of constraints
     constraints: Vec<HashSet<Constraint>>,
     local_var_map: HashMap<Instance<'tcx>, Vec<Location<'tcx>>>,
+    output: AnalysisOutputVec<'tcx>,
 }
 
 impl<'tcx> ConstraintSet for SimpleAnderson<'tcx> {
@@ -57,6 +106,7 @@ impl<'tcx> SimpleAnderson<'tcx> {
             call_stack: Vec::new(),
             constraints: Vec::new(),
             local_var_map: HashMap::new(),
+            output: Vec::new(),
         }
     }
 
@@ -64,23 +114,26 @@ impl<'tcx> SimpleAnderson<'tcx> {
         self.location_factory.clear();
         self.call_stack.clear();
         self.constraints.clear();
+        self.output.clear();
     }
 
     fn local_to_location(&self, local: mir::Local) -> Location<'tcx> {
         self.local_var_map[self.call_stack.last().unwrap()][local.index()]
     }
 
-    fn lower_mir_place(
-        &self,
-        place: &mir::Place<'tcx>,
-    ) -> std::result::Result<Place<'tcx>, Error<'tcx>> {
+    fn lower_mir_place(&self, place: &mir::Place<'tcx>) -> AnalysisResult<'tcx, Place<'tcx>> {
         let base = self.local_to_location(place.local);
 
         let mut count = 0;
         for projection in place.projection {
             match projection {
                 mir::ProjectionElem::Deref => count += 1,
-                _ => not_yet!("Projection: {:?}", projection),
+                _ => {
+                    return convert!(UnsupportedProjection {
+                        place: place.clone(),
+                    }
+                    .fail());
+                }
             }
         }
 
@@ -120,23 +173,27 @@ impl<'tcx> SimpleAnderson<'tcx> {
     }
 
     /// The main entry point of the analysis
-    pub fn analyze(&mut self, instance: Instance<'tcx>) -> Result<'tcx, ()> {
+    pub fn analyze(&mut self, instance: Instance<'tcx>) -> AnalysisOutputVec<'tcx> {
         self.clear();
-        self.visit_body(instance)?;
-
-        todo!("check constraints")
+        self.visit_body(instance);
+        self.output.push(convert!(ConstraintCheck.fail()));
+        std::mem::replace(&mut self.output, Vec::new())
     }
 
-    fn visit_body(&mut self, instance: Instance<'tcx>) -> Result<'tcx, ()> {
+    fn visit_body(&mut self, instance: Instance<'tcx>) {
         if self.analyzed(instance) {
-            return Ok(());
+            return;
         }
 
         // find MIR for the instance
         let body = self.ccx.instance_body(instance);
-        let body = match &*body {
+        let body = match body.as_ref() {
             Ok(body) => body,
-            Err(e) => return Err(e.clone()),
+            Err(e) => {
+                self.output
+                    .push(convert!(BodyNotFound { reason: e.clone() }.fail()));
+                return;
+            }
         };
 
         // instantiate local variables
@@ -159,24 +216,36 @@ impl<'tcx> SimpleAnderson<'tcx> {
                     Assign(box (ref dst, ref rvalue)) => {
                         use mir::Rvalue::*;
                         match rvalue {
-                            Use(operand) => self.handle_assign(body, dst, operand)?,
-                            Cast(_, ref operand, _) => self.handle_assign(body, dst, operand)?,
+                            Use(operand) => self.handle_assign(body, dst, operand),
+                            Cast(_, ref operand, _) => self.handle_assign(body, dst, operand),
 
-                            AddressOf(_, ref src) => self.handle_ref(body, dst, src)?,
-                            Ref(_, _, ref src) => self.handle_ref(body, dst, src)?,
+                            AddressOf(_, ref src) => self.handle_ref(body, dst, src),
+                            Ref(_, _, ref src) => self.handle_ref(body, dst, src),
 
                             BinaryOp(_, _, _) | CheckedBinaryOp(_, _, _) | UnaryOp(_, _) => (),
 
-                            // TODO: support more rvalue
-                            rvalue => not_yet!("Rvalue `{:?}`", rvalue),
+                            rvalue => {
+                                // TODO: support more rvalue
+                                self.output.push(convert!(UnsupportedRvalue {
+                                    rvalue: rvalue.clone()
+                                }
+                                .fail()));
+                                continue;
+                            }
                         }
                     }
 
                     // NOP
                     StorageLive(_) | StorageDead(_) | Nop => (),
 
-                    // TODO: support more statements
-                    _ => not_yet!("Statement `{:?}`", statement),
+                    _ => {
+                        // TODO: support more statements
+                        self.output.push(convert!(UnsupportedStatement {
+                            statement: statement.clone()
+                        }
+                        .fail()));
+                        continue;
+                    }
                 }
             }
 
@@ -184,8 +253,6 @@ impl<'tcx> SimpleAnderson<'tcx> {
         }
 
         self.call_stack.pop();
-
-        Ok(())
     }
 
     fn handle_assign<T>(
@@ -193,8 +260,7 @@ impl<'tcx> SimpleAnderson<'tcx> {
         local_decls: &T,
         dst: &mir::Place<'tcx>,
         src: &mir::Operand<'tcx>,
-    ) -> Result<'tcx, ()>
-    where
+    ) where
         T: mir::HasLocalDecls<'tcx>,
     {
         let src_is_ptr = self.is_operand_ptr(local_decls, src);
@@ -203,34 +269,37 @@ impl<'tcx> SimpleAnderson<'tcx> {
         if src_is_ptr && dst_is_ptr {
             match src {
                 mir::Operand::Copy(src) | mir::Operand::Move(src) => {
-                    let dst = self.lower_mir_place(dst)?;
-                    let src = self.lower_mir_place(src)?;
+                    let dst = unwrap_or_return!(self.output, self.lower_mir_place(dst));
+                    let src = unwrap_or_return!(self.output, self.lower_mir_place(src));
 
-                    self.handle_place_to_place(dst, src)?;
+                    self.handle_place_to_place(dst, src);
                 }
-                mir::Operand::Constant(_) => not_yet!("Constant pointer: {:?}", src),
+                mir::Operand::Constant(_) => {
+                    self.output.push(convert!(UnsupportedConstantPointer {
+                        dst: dst.clone(),
+                        src: src.clone(),
+                    }
+                    .fail()))
+                }
             }
         } else if dst_is_ptr && !src_is_ptr {
-            not_yet!("Cast to pointer: from `{:?}` to `{:?}`", src, dst);
+            self.output.push(convert!(UnsupportedConstantPointer {
+                dst: dst.clone(),
+                src: src.clone(),
+            }
+            .fail()))
         }
-
-        Ok(())
     }
 
-    fn handle_ref<T>(
-        &mut self,
-        local_decls: &T,
-        dst: &mir::Place<'tcx>,
-        src: &mir::Place<'tcx>,
-    ) -> Result<'tcx, ()>
+    fn handle_ref<T>(&mut self, local_decls: &T, dst: &mir::Place<'tcx>, src: &mir::Place<'tcx>)
     where
         T: mir::HasLocalDecls<'tcx>,
     {
         let dst_is_ptr = self.is_place_ptr(local_decls, dst);
         assert!(dst_is_ptr);
 
-        let dst = self.lower_mir_place(dst)?;
-        let src = self.lower_mir_place(src)?;
+        let dst = unwrap_or_return!(self.output, self.lower_mir_place(dst));
+        let src = unwrap_or_return!(self.output, self.lower_mir_place(src));
 
         if src.deref_count == 0 {
             if dst.deref_count == 0 {
@@ -259,13 +328,11 @@ impl<'tcx> SimpleAnderson<'tcx> {
                     base: src_base,
                     deref_count: src_deref_count - 1,
                 },
-            )?;
+            );
         }
-
-        Ok(())
     }
 
-    fn handle_place_to_place(&mut self, dst: Place<'tcx>, src: Place<'tcx>) -> Result<'tcx, ()> {
+    fn handle_place_to_place(&mut self, dst: Place<'tcx>, src: Place<'tcx>) {
         match (dst.deref_count, src.deref_count) {
             (0, 0) => self.add_constraint(dst.base.id, Constraint::Copy(src.base.id)),
             (0, _) => {
@@ -302,6 +369,5 @@ impl<'tcx> SimpleAnderson<'tcx> {
                 self.add_constraint(current_dst.base.id, Constraint::Store(current_src.base.id))
             }
         }
-        Ok(())
     }
 }

@@ -4,16 +4,31 @@ use rustc_hir::intravisit::{self, NestedVisitorMap, Visitor};
 use rustc_hir::{Block, HirId, ImplItemId, ItemKind, Node};
 use rustc_middle::ty::TyCtxt;
 
-use crate::algorithm::LocalTraitIter;
-use crate::error::Result;
-use crate::prelude::*;
-use crate::report::{crux_report, Report, ReportLevel};
+use snafu::{Backtrace, OptionExt, Snafu};
 
-fn drop_trait_def_id(tcx: TyCtxt<'_>) -> DefId {
-    tcx.lang_items()
-        .drop_trait()
-        .expect("Drop lang item should always exist")
+use crate::algorithm::LocalTraitIter;
+use crate::prelude::*;
+use crate::report::{Report, ReportLevel};
+
+#[derive(Debug, Snafu)]
+pub enum UnsafeDestructorError {
+    DropTraitNotFound,
+    InvalidHirId { backtrace: Backtrace },
+    PushPopBlock { backtrace: Backtrace },
 }
+
+impl AnalysisError for UnsafeDestructorError {
+    fn kind(&self) -> AnalysisErrorKind {
+        use AnalysisErrorKind::*;
+        use UnsafeDestructorError::*;
+        match self {
+            DropTraitNotFound => BrokenInvariant,
+            InvalidHirId { .. } => BrokenInvariant,
+            PushPopBlock { .. } => BrokenInvariant,
+        }
+    }
+}
+
 pub struct UnsafeDestructor<'tcx> {
     ccx: CruxCtxt<'tcx>,
 }
@@ -23,25 +38,37 @@ impl<'tcx> UnsafeDestructor<'tcx> {
         UnsafeDestructor { ccx }
     }
 
-    pub fn analyze(&mut self) -> Result<'tcx, ()> {
+    pub fn analyze(&mut self) -> AnalysisOutputVec<'tcx> {
+        fn drop_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
+            convert!(tcx.lang_items().drop_trait().context(DropTraitNotFound))
+        }
+
+        let mut vec = Vec::new();
+
         // key is DefId of trait, value is vec of HirId
         let mut visitor = visitor::UnsafeDestructorVisitor::new(self.ccx);
 
-        let drop_trait_def_id = drop_trait_def_id(self.ccx.tcx());
+        let drop_trait_def_id =
+            unwrap_or_return!(vec, drop_trait_def_id(self.ccx.tcx()), return vec);
         for impl_item in LocalTraitIter::new(self.ccx, drop_trait_def_id) {
-            if visitor.check_drop_unsafety(impl_item).unwrap() {
-                let tcx = self.ccx.tcx();
-                crux_report(Report::with_span(
-                    self.ccx.tcx(),
-                    ReportLevel::Warning,
-                    "UnsafeDestructor",
-                    "unsafe block detected in drop",
-                    tcx.hir().span(impl_item),
-                ));
+            match visitor.check_drop_unsafety(impl_item, drop_trait_def_id) {
+                Ok(true) => {
+                    let tcx = self.ccx.tcx();
+                    vec.push(Ok(Report::with_span(
+                        tcx,
+                        ReportLevel::Warning,
+                        "UnsafeDestructor",
+                        "unsafe block detected in drop",
+                        tcx.hir().span(impl_item),
+                    )));
+                }
+                Ok(false) => (),
+                Err(e) => vec.push(Err(e)),
             }
         }
 
-        Ok(())
+        vec.append(visitor.errors());
+        vec
     }
 }
 
@@ -54,6 +81,7 @@ mod visitor {
     pub struct UnsafeDestructorVisitor<'tcx> {
         ccx: CruxCtxt<'tcx>,
         drop_is_unsafe: bool,
+        errors: AnalysisOutputVec<'tcx>,
     }
 
     impl<'tcx> UnsafeDestructorVisitor<'tcx> {
@@ -61,14 +89,22 @@ mod visitor {
             UnsafeDestructorVisitor {
                 ccx,
                 drop_is_unsafe: false,
+                errors: Vec::new(),
             }
+        }
+
+        pub fn errors(&mut self) -> &mut AnalysisOutputVec<'tcx> {
+            &mut self.errors
         }
 
         /// Given an HIR ID of impl, checks whether `drop()` function contains
         /// unsafe or not. Returns `None` if the given HIR ID is not an impl for
         /// `Drop`.
-        pub fn check_drop_unsafety(&mut self, hir_id: HirId) -> Option<bool> {
-            let drop_trait_def_id = drop_trait_def_id(self.ccx.tcx());
+        pub fn check_drop_unsafety(
+            &mut self,
+            hir_id: HirId,
+            drop_trait_def_id: DefId,
+        ) -> AnalysisResult<'tcx, bool> {
             let map = self.ccx.tcx().hir();
             if_chain! {
                 if let Some(node) = map.find(hir_id);
@@ -80,10 +116,10 @@ mod visitor {
                     assert_eq!(items.len(), 1);
                     let drop_fn_item_ref = &items[0];
                     let drop_fn_impl_item_id = drop_fn_item_ref.id;
-                    return Some(self.check_drop_fn(drop_fn_impl_item_id));
+                    return Ok(self.check_drop_fn(drop_fn_impl_item_id));
                 }
             }
-            None
+            convert!(InvalidHirId.fail())
         }
 
         fn check_drop_fn(&mut self, drop_fn_impl_item_id: ImplItemId) -> bool {
@@ -108,7 +144,7 @@ mod visitor {
                     // TODO: implement heuristic analysis
                     self.drop_is_unsafe = true;
                 }
-                _ => panic!("push/pop unsafe should not exist"),
+                _ => self.errors.push(convert!(PushPopBlock.fail())),
             }
             intravisit::walk_block(self, block);
         }

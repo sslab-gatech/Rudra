@@ -19,6 +19,7 @@ pub fn setup_logging(verbosity: Verbosity) -> Result<(), fern::InitError> {
         Verbosity::Trace => base_config.level(LevelFilter::Trace),
     }
     .level_for(
+        // log >= debug on debug build and >= info on release build
         "crux-progress",
         if cfg!(debug_assertions) {
             LevelFilter::Debug

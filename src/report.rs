@@ -12,7 +12,7 @@ use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use serde::Serialize;
 
-static REPORT_LOGGER: OnceCell<Box<dyn ReportLogger>> = OnceCell::new();
+pub static REPORT_LOGGER: OnceCell<Box<dyn ReportLogger>> = OnceCell::new();
 
 /// Flushes the global report logger when dropped.
 pub struct FlushHandle {
@@ -42,10 +42,6 @@ pub fn default_report_logger() -> Box<dyn ReportLogger> {
         Some(val) => Box::new(FileLogger::new(val)),
         None => Box::new(StderrLogger::new()),
     }
-}
-
-pub fn crux_report(report: Report) {
-    REPORT_LOGGER.get().unwrap().log(report);
 }
 
 #[derive(Serialize, Debug)]

@@ -19,8 +19,6 @@ extern crate log as log_crate;
 pub mod algorithm;
 mod analysis;
 pub mod context;
-pub mod error;
-pub mod ext;
 pub mod ir;
 pub mod log;
 pub mod prelude;
@@ -29,26 +27,29 @@ pub mod utils;
 
 use rustc_middle::ty::TyCtxt;
 
+use snafu::ErrorCompat;
+
 use crate::analysis::solver::SolverW1;
 use crate::analysis::{CallGraph, SimpleAnderson, UnsafeDestructor};
 use crate::context::CruxCtxtOwner;
-use crate::error::Error;
 use crate::log::Verbosity;
+use crate::prelude::*;
+use crate::report::{Report, REPORT_LOGGER};
 
 // Insert rustc arguments at the beginning of the argument list that Crux wants to be
 // set per default, for maximal validation power.
 pub static CRUX_DEFAULT_ARGS: &[&str] = &["-Zalways-encode-mir", "-Zmir-opt-level=0", "--cfg=crux"];
 
 #[derive(Debug, Clone, Copy)]
-pub struct AnalysisConfig {
+pub struct CruxConfig {
     pub verbosity: Verbosity,
     pub unsafe_destructor_enabled: bool,
     pub simple_anderson_enabled: bool,
 }
 
-impl Default for AnalysisConfig {
+impl Default for CruxConfig {
     fn default() -> Self {
-        AnalysisConfig {
+        CruxConfig {
             verbosity: Verbosity::Normal,
             unsafe_destructor_enabled: true,
             simple_anderson_enabled: false,
@@ -90,7 +91,36 @@ where
     result
 }
 
-pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: AnalysisConfig) {
+fn handle<'tcx>(result: AnalysisResult<'tcx, Report>) {
+    use AnalysisErrorKind::*;
+    match result {
+        Ok(report) => {
+            REPORT_LOGGER.get().unwrap().log(report);
+        }
+        Err(e) => match e.kind() {
+            BrokenInvariant => {
+                error!("[{:?}] {}", e.kind(), e);
+                if let Some(backtrace) = ErrorCompat::backtrace(e.as_ref()) {
+                    error!("{}", backtrace);
+                }
+            }
+            Unimplemented => {
+                info!("[{:?}] {}", e.kind(), e);
+                if let Some(backtrace) = ErrorCompat::backtrace(e.as_ref()) {
+                    info!("{}", backtrace);
+                }
+            }
+            OutOfScope => {
+                debug!("[{:?}] {}", e.kind(), e);
+                if let Some(backtrace) = ErrorCompat::backtrace(e.as_ref()) {
+                    debug!("{}", backtrace);
+                }
+            }
+        },
+    }
+}
+
+pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxConfig) {
     // workaround to mimic arena lifetime
     let ccx_owner = CruxCtxtOwner::new(tcx);
     let ccx = &*Box::leak(Box::new(ccx_owner));
@@ -126,25 +156,13 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: AnalysisConfig) {
                     || def_path_string.starts_with("::crux_test")
                 {
                     info!("Found {:?}", local_instance);
-
-                    let result = simple_anderson.analyze(local_instance);
-
                     println!("Target {}", def_path_string);
-                    match result {
-                        Err(e @ Error::AnalysisUnimplemented(_)) => {
-                            error!("Analysis Unimplemented: {:?}", e);
-                        }
-                        Err(e @ Error::TranslationUnimplemented(_)) => {
-                            error!("Translation Unimplemented: {:?}", e);
-                        }
-                        Err(e) => {
-                            error!("Analysis failed with error: {:?}", e);
-                        }
-                        Ok(_) => {
-                            let _solver = SolverW1::solve(&simple_anderson);
-                            // TODO: report solver result
-                        }
+                    for result in simple_anderson.analyze(local_instance) {
+                        handle(result);
                     }
+
+                    let _solver = SolverW1::solve(&simple_anderson);
+                    // TODO: report solver result
                 }
             }
         })
@@ -154,19 +172,8 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: AnalysisConfig) {
     if config.unsafe_destructor_enabled {
         run_analysis("UnsafeDestructor", || {
             let mut unsafe_destructor = UnsafeDestructor::new(ccx);
-            let result = unsafe_destructor.analyze();
-
-            match result {
-                Err(e @ Error::AnalysisUnimplemented(_)) => {
-                    error!("Analysis Unimplemented: {:?}", e);
-                }
-                Err(e @ Error::TranslationUnimplemented(_)) => {
-                    error!("Translation Unimplemented: {:?}", e);
-                }
-                Err(e) => {
-                    error!("Analysis failed with error: {:?}", e);
-                }
-                Ok(_) => (),
+            for result in unsafe_destructor.analyze() {
+                handle(result);
             }
         })
     }
