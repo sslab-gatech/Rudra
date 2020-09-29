@@ -34,7 +34,7 @@ pub fn setup_logging(verbosity: Verbosity) -> Result<(), fern::InitError> {
             .format(|out, message, record| {
                 out.finish(format_args!(
                     "{} |PROGRESS-{:5}| {}",
-                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.6f"),
                     record.level(),
                     message
                 ))
@@ -49,7 +49,7 @@ pub fn setup_logging(verbosity: Verbosity) -> Result<(), fern::InitError> {
         .format(|out, message, record| {
             out.finish(format_args!(
                 "{} |{:5}| [{}] {}",
-                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.6f"),
                 record.level(),
                 record.target(),
                 message

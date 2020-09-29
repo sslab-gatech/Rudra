@@ -16,6 +16,9 @@ extern crate if_chain;
 #[macro_use]
 extern crate log as log_crate;
 
+#[macro_use]
+mod macros;
+
 pub mod algorithm;
 mod analysis;
 pub mod context;
@@ -27,14 +30,10 @@ pub mod utils;
 
 use rustc_middle::ty::TyCtxt;
 
-use snafu::ErrorCompat;
-
 use crate::analysis::solver::SolverW1;
 use crate::analysis::{CallGraph, SimpleAnderson, UnsafeDestructor};
 use crate::context::CruxCtxtOwner;
 use crate::log::Verbosity;
-use crate::prelude::*;
-use crate::report::{Report, REPORT_LOGGER};
 
 // Insert rustc arguments at the beginning of the argument list that Crux wants to be
 // set per default, for maximal validation power.
@@ -91,35 +90,6 @@ where
     result
 }
 
-fn handle<'tcx>(result: AnalysisResult<'tcx, Report>) {
-    use AnalysisErrorKind::*;
-    match result {
-        Ok(report) => {
-            REPORT_LOGGER.get().unwrap().log(report);
-        }
-        Err(e) => match e.kind() {
-            BrokenInvariant => {
-                error!("[{:?}] {}", e.kind(), e);
-                if let Some(backtrace) = ErrorCompat::backtrace(e.as_ref()) {
-                    error!("{}", backtrace);
-                }
-            }
-            Unimplemented => {
-                info!("[{:?}] {}", e.kind(), e);
-                if let Some(backtrace) = ErrorCompat::backtrace(e.as_ref()) {
-                    info!("{}", backtrace);
-                }
-            }
-            OutOfScope => {
-                debug!("[{:?}] {}", e.kind(), e);
-                if let Some(backtrace) = ErrorCompat::backtrace(e.as_ref()) {
-                    debug!("{}", backtrace);
-                }
-            }
-        },
-    }
-}
-
 pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxConfig) {
     // workaround to mimic arena lifetime
     let ccx_owner = CruxCtxtOwner::new(tcx);
@@ -157,9 +127,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxConfig) {
                 {
                     info!("Found {:?}", local_instance);
                     println!("Target {}", def_path_string);
-                    for result in simple_anderson.analyze(local_instance) {
-                        handle(result);
-                    }
+                    simple_anderson.analyze(local_instance);
 
                     let _solver = SolverW1::solve(&simple_anderson);
                     // TODO: report solver result
@@ -172,9 +140,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxConfig) {
     if config.unsafe_destructor_enabled {
         run_analysis("UnsafeDestructor", || {
             let mut unsafe_destructor = UnsafeDestructor::new(ccx);
-            for result in unsafe_destructor.analyze() {
-                handle(result);
-            }
+            unsafe_destructor.analyze();
         })
     }
 

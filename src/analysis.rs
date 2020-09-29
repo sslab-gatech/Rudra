@@ -1,6 +1,3 @@
-#[macro_use]
-mod macros;
-
 mod call_graph;
 mod simple_anderson;
 pub mod solver;
@@ -10,23 +7,45 @@ use rustc_middle::ty::Ty;
 
 use snafu::{Error, ErrorCompat};
 
-use crate::report::Report;
 pub use call_graph::CallGraph;
 pub use simple_anderson::SimpleAnderson;
 pub use unsafe_destructor::UnsafeDestructor;
 
 pub type AnalysisResult<'tcx, T> = Result<T, Box<dyn AnalysisError + 'tcx>>;
-pub type AnalysisOutputVec<'tcx> = Vec<AnalysisResult<'tcx, Report>>;
 
 pub trait AnalysisError: Error + ErrorCompat {
     fn kind(&self) -> AnalysisErrorKind;
+    fn log(&self) {
+        match self.kind() {
+            AnalysisErrorKind::Unreachable => {
+                error!("[{:?}] {}", self.kind(), self);
+                if let Some(backtrace) = ErrorCompat::backtrace(self) {
+                    error!("{}", backtrace);
+                }
+            }
+            AnalysisErrorKind::Unimplemented => {
+                info!("[{:?}] {}", self.kind(), self);
+                if let Some(backtrace) = ErrorCompat::backtrace(self) {
+                    info!("{}", backtrace);
+                }
+            }
+            AnalysisErrorKind::OutOfScope => {
+                debug!("[{:?}] {}", self.kind(), self);
+                if let Some(backtrace) = ErrorCompat::backtrace(self) {
+                    debug!("{}", backtrace);
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
 pub enum AnalysisErrorKind {
-    /// An error that should never happen; Normal programs would panic for it.
-    /// However, we want to avoid panic at all cost so this error.
-    BrokenInvariant,
+    /// An error that should never happen;
+    /// If this happens, that means some of our assumption / invariant is broken.
+    /// Normal programs would panic for it, but we want to avoid panic at all cost,
+    /// so this error exists.
+    Unreachable,
     /// A pattern that is not handled by our algorithm yet.
     Unimplemented,
     /// An expected failure, something like "we don't handle this by design",

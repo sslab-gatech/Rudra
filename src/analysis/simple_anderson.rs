@@ -74,7 +74,6 @@ pub struct SimpleAnderson<'tcx> {
     /// Collection of constraints
     constraints: Vec<HashSet<Constraint>>,
     local_var_map: HashMap<Instance<'tcx>, Vec<Location<'tcx>>>,
-    output: AnalysisOutputVec<'tcx>,
 }
 
 impl<'tcx> ConstraintSet for SimpleAnderson<'tcx> {
@@ -106,7 +105,6 @@ impl<'tcx> SimpleAnderson<'tcx> {
             call_stack: Vec::new(),
             constraints: Vec::new(),
             local_var_map: HashMap::new(),
-            output: Vec::new(),
         }
     }
 
@@ -114,7 +112,6 @@ impl<'tcx> SimpleAnderson<'tcx> {
         self.location_factory.clear();
         self.call_stack.clear();
         self.constraints.clear();
-        self.output.clear();
     }
 
     fn local_to_location(&self, local: mir::Local) -> Location<'tcx> {
@@ -173,11 +170,10 @@ impl<'tcx> SimpleAnderson<'tcx> {
     }
 
     /// The main entry point of the analysis
-    pub fn analyze(&mut self, instance: Instance<'tcx>) -> AnalysisOutputVec<'tcx> {
+    pub fn analyze(&mut self, instance: Instance<'tcx>) {
         self.clear();
         self.visit_body(instance);
-        self.output.push(convert!(ConstraintCheck.fail()));
-        std::mem::replace(&mut self.output, Vec::new())
+        log_err!(ConstraintCheck);
     }
 
     fn visit_body(&mut self, instance: Instance<'tcx>) {
@@ -190,8 +186,7 @@ impl<'tcx> SimpleAnderson<'tcx> {
         let body = match body.as_ref() {
             Ok(body) => body,
             Err(e) => {
-                self.output
-                    .push(convert!(BodyNotFound { reason: e.clone() }.fail()));
+                log_err!(BodyNotFound { reason: e.clone() });
                 return;
             }
         };
@@ -226,10 +221,9 @@ impl<'tcx> SimpleAnderson<'tcx> {
 
                             rvalue => {
                                 // TODO: support more rvalue
-                                self.output.push(convert!(UnsupportedRvalue {
+                                log_err!(UnsupportedRvalue {
                                     rvalue: rvalue.clone()
-                                }
-                                .fail()));
+                                });
                                 continue;
                             }
                         }
@@ -240,10 +234,9 @@ impl<'tcx> SimpleAnderson<'tcx> {
 
                     _ => {
                         // TODO: support more statements
-                        self.output.push(convert!(UnsupportedStatement {
+                        log_err!(UnsupportedStatement {
                             statement: statement.clone()
-                        }
-                        .fail()));
+                        });
                         continue;
                     }
                 }
@@ -269,25 +262,23 @@ impl<'tcx> SimpleAnderson<'tcx> {
         if src_is_ptr && dst_is_ptr {
             match src {
                 mir::Operand::Copy(src) | mir::Operand::Move(src) => {
-                    let dst = unwrap_or_return!(self.output, self.lower_mir_place(dst));
-                    let src = unwrap_or_return!(self.output, self.lower_mir_place(src));
+                    let dst = unwrap_or!(self.lower_mir_place(dst) => return);
+                    let src = unwrap_or!(self.lower_mir_place(src) => return);
 
                     self.handle_place_to_place(dst, src);
                 }
                 mir::Operand::Constant(_) => {
-                    self.output.push(convert!(UnsupportedConstantPointer {
+                    log_err!(UnsupportedConstantPointer {
                         dst: dst.clone(),
                         src: src.clone(),
-                    }
-                    .fail()))
+                    });
                 }
             }
         } else if dst_is_ptr && !src_is_ptr {
-            self.output.push(convert!(UnsupportedConstantPointer {
+            log_err!(UnsupportedConstantPointer {
                 dst: dst.clone(),
                 src: src.clone(),
-            }
-            .fail()))
+            });
         }
     }
 
@@ -298,8 +289,8 @@ impl<'tcx> SimpleAnderson<'tcx> {
         let dst_is_ptr = self.is_place_ptr(local_decls, dst);
         assert!(dst_is_ptr);
 
-        let dst = unwrap_or_return!(self.output, self.lower_mir_place(dst));
-        let src = unwrap_or_return!(self.output, self.lower_mir_place(src));
+        let dst = unwrap_or!(self.lower_mir_place(dst) => return);
+        let src = unwrap_or!(self.lower_mir_place(src) => return);
 
         if src.deref_count == 0 {
             if dst.deref_count == 0 {
