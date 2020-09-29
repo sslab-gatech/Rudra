@@ -65,7 +65,6 @@ fn main() -> Result<()> {
     // second stage - run rudra on them
     let _crate_list: Vec<_> = crate_list
         .into_par_iter()
-        // TODO: performance optimization with unsafe filtering (RUDRA-53)
         .filter_map(|(krate, path, _crate_stat)| -> Option<Crate> {
             // FIXME: add timeout (RUDRA-43)
             info!("Analysis start: {}", krate.latest_version_tag());

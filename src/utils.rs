@@ -4,8 +4,6 @@ use rustc_span::Span;
 
 use crate::compile_time_sysroot;
 
-// TODO: support dump to another file
-
 pub fn print_span<'tcx>(tcx: TyCtxt<'tcx>, span: &Span) {
     let source_map = tcx.sess.source_map();
     eprintln!(
