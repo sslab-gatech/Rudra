@@ -32,7 +32,7 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
     let mut headers = header::HeaderMap::new();
     headers.insert(
         header::USER_AGENT,
-        header::HeaderValue::from_static("crux crawler 0.1.0 (yechan@gatech.edu)"),
+        header::HeaderValue::from_static("rudra crawler 0.1.0 (yechan@gatech.edu)"),
     );
 
     Client::builder()
@@ -109,8 +109,9 @@ pub struct ScratchDir {
 
 impl ScratchDir {
     pub fn new() -> Self {
-        let path =
-            PathBuf::from(env::var("CRUX_SCRATCH_DIR").unwrap_or(String::from("../crux_scratch")));
+        let path = PathBuf::from(
+            env::var("RUDRA_SCRATCH_DIR").unwrap_or(String::from("../rudra_scratch")),
+        );
         info!("Using `{}` as scratch directory", path.to_string_lossy());
         ScratchDir { path }
     }
@@ -215,7 +216,7 @@ pub struct ReportDir {
 impl ReportDir {
     pub fn new() -> Self {
         let parent_path =
-            PathBuf::from(env::var("CRUX_REPORT_DIR").unwrap_or(String::from("../crux_report")));
+            PathBuf::from(env::var("RUDRA_REPORT_DIR").unwrap_or(String::from("../rudra_report")));
 
         let dt: DateTime<Local> = Local::now();
         let parent_path = parent_path.join(dt.format("%Y%m%d_%H%M%S").to_string());

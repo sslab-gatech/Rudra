@@ -11,7 +11,7 @@ test = true
 doctest = false
 
 [[bin]]
-name = "crux-runner"
+name = "rudra-runner"
 test = false
 doctest = false
 

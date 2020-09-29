@@ -13,7 +13,7 @@ type Graph<'tcx> = HashMap<Instance<'tcx>, Vec<Instance<'tcx>>>;
 
 // 'tcx: TyCtxt lifetime
 pub struct CallGraph<'tcx> {
-    ccx: CruxCtxt<'tcx>,
+    rcx: RudraCtxt<'tcx>,
     // this HashSet contains local mono items, which will be starting points of our analysis
     _entry: HashSet<Instance<'tcx>>,
     // this HashMap contains a call graph of all reachable instances
@@ -21,35 +21,35 @@ pub struct CallGraph<'tcx> {
 }
 
 impl<'tcx> CallGraph<'tcx> {
-    pub fn new(ccx: CruxCtxt<'tcx>) -> Self {
+    pub fn new(rcx: RudraCtxt<'tcx>) -> Self {
         let mut entry = HashSet::new();
         let mut graph = HashMap::new();
 
         // collect all mono items in the crate
-        let inlining_map = collect_crate_mono_items(ccx.tcx(), MonoItemCollectionMode::Lazy).1;
+        let inlining_map = collect_crate_mono_items(rcx.tcx(), MonoItemCollectionMode::Lazy).1;
         inlining_map.iter_accesses(|entry_mono_item, _| {
             if let MonoItem::Fn(entry_instance) = entry_mono_item {
                 entry.insert(entry_instance);
-                CallGraph::traverse(ccx, entry_instance, &mut graph);
+                CallGraph::traverse(rcx, entry_instance, &mut graph);
             } else {
                 trace!("Unhandled mono item: {:?}", entry_mono_item);
             }
         });
 
         CallGraph {
-            ccx,
+            rcx,
             _entry: entry,
             graph,
         }
     }
 
-    fn traverse(ccx: CruxCtxt<'tcx>, caller: Instance<'tcx>, graph: &mut Graph<'tcx>) {
+    fn traverse(rcx: RudraCtxt<'tcx>, caller: Instance<'tcx>, graph: &mut Graph<'tcx>) {
         use std::collections::hash_map::Entry;
 
         if let Entry::Vacant(entry) = graph.entry(caller) {
             // early insert to prevent infinite recursion
             let vec = entry.insert(Vec::new());
-            match ccx.instance_body(caller).as_ref() {
+            match rcx.instance_body(caller).as_ref() {
                 Ok(ir_body) => {
                     trace!("Instance: {:?}", caller);
 
@@ -64,7 +64,7 @@ impl<'tcx> CallGraph<'tcx> {
                     // clone here to make the borrow checker happy with the recursive call
                     for next_instance in vec.clone().into_iter() {
                         trace!("Call into {} -> {}", caller, next_instance);
-                        CallGraph::traverse(ccx, next_instance, graph);
+                        CallGraph::traverse(rcx, next_instance, graph);
                     }
                 }
                 Err(e) => debug!("Cannot instantiate MIR body: {:?}", e),
@@ -94,7 +94,7 @@ impl<'tcx> CallGraph<'tcx> {
 
     /// Local safe functions are potential entry points to our analysis
     pub fn local_safe_fn_iter(&self) -> impl Iterator<Item = Instance<'tcx>> + '_ {
-        let tcx = self.ccx.tcx();
+        let tcx = self.rcx.tcx();
         self.graph.iter().filter_map(move |(&instance, _)| {
             let def_id = instance.def.def_id();
             // check if it is local and safe function

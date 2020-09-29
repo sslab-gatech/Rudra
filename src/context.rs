@@ -26,21 +26,21 @@ pub enum MirInstantiationError<'tcx> {
     },
 }
 
-pub type CruxCtxt<'tcx> = &'tcx CruxCtxtOwner<'tcx>;
+pub type RudraCtxt<'tcx> = &'tcx RudraCtxtOwner<'tcx>;
 pub type TranslationResult<'tcx, T> = Result<T, MirInstantiationError<'tcx>>;
 
 /// Maps Instance to MIR and cache the result.
-pub struct CruxCtxtOwner<'tcx> {
+pub struct RudraCtxtOwner<'tcx> {
     tcx: TyCtxt<'tcx>,
     cache: DashMap<Instance<'tcx>, Rc<TranslationResult<'tcx, ir::Body<'tcx>>>>,
 }
 
-/// Visit MIR body and returns a Crux IR function
+/// Visit MIR body and returns a Rudra IR function
 /// Check rustc::mir::visit::Visitor for possible visit targets
 /// https://doc.rust-lang.org/nightly/nightly-rustc/rustc/mir/visit/trait.Visitor.html
-impl<'tcx> CruxCtxtOwner<'tcx> {
+impl<'tcx> RudraCtxtOwner<'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>) -> Self {
-        CruxCtxtOwner {
+        RudraCtxtOwner {
             tcx,
             cache: DashMap::new(),
         }

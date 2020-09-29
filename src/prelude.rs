@@ -7,8 +7,8 @@ use snafu::{Backtrace, Snafu};
 pub use snafu::{Error, ErrorCompat, IntoError, ResultExt};
 
 pub use crate::analysis::{AnalysisError, AnalysisErrorKind, AnalysisResult};
-pub use crate::context::CruxCtxt;
-pub use crate::report::crux_report;
+pub use crate::context::RudraCtxt;
+pub use crate::report::rudra_report;
 
 #[derive(Debug, Snafu)]
 pub enum ExtError {

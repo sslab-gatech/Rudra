@@ -38,13 +38,13 @@ pub fn init_report_logger(report_logger: Box<dyn ReportLogger>) -> FlushHandle {
 }
 
 pub fn default_report_logger() -> Box<dyn ReportLogger> {
-    match env::var_os("CRUX_REPORT_PATH") {
+    match env::var_os("RUDRA_REPORT_PATH") {
         Some(val) => Box::new(FileLogger::new(val)),
         None => Box::new(StderrLogger::new()),
     }
 }
 
-pub fn crux_report(report: Report) {
+pub fn rudra_report(report: Report) {
     REPORT_LOGGER.get().unwrap().log(report);
 }
 
@@ -176,9 +176,9 @@ impl ReportLogger for FileLogger {
                 toml::to_string_pretty(&Reports {
                     reports: reports_ref,
                 })
-                .expect("failed to serialize Crux report"),
+                .expect("failed to serialize Rudra report"),
             )
-            .expect("cannot write Crux report to file");
+            .expect("cannot write Rudra report to file");
         }
     }
 }

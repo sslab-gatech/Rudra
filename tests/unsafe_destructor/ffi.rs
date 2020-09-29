@@ -1,5 +1,5 @@
 /*!
-```crux-test
+```rudra-test
 test_type = "normal"
 expected_analyzers = []
 ```

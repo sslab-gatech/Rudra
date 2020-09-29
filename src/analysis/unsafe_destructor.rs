@@ -32,12 +32,12 @@ impl AnalysisError for UnsafeDestructorError {
 }
 
 pub struct UnsafeDestructor<'tcx> {
-    ccx: CruxCtxt<'tcx>,
+    rcx: RudraCtxt<'tcx>,
 }
 
 impl<'tcx> UnsafeDestructor<'tcx> {
-    pub fn new(ccx: CruxCtxt<'tcx>) -> Self {
-        UnsafeDestructor { ccx }
+    pub fn new(rcx: RudraCtxt<'tcx>) -> Self {
+        UnsafeDestructor { rcx }
     }
 
     pub fn analyze(&mut self) {
@@ -46,17 +46,17 @@ impl<'tcx> UnsafeDestructor<'tcx> {
         }
 
         // key is DefId of trait, value is vec of HirId
-        let drop_trait_def_id = unwrap_or!(drop_trait_def_id(self.ccx.tcx()) => return);
+        let drop_trait_def_id = unwrap_or!(drop_trait_def_id(self.rcx.tcx()) => return);
 
-        for impl_item in LocalTraitIter::new(self.ccx, drop_trait_def_id) {
+        for impl_item in LocalTraitIter::new(self.rcx, drop_trait_def_id) {
             match visitor::UnsafeDestructorVisitor::check_drop_unsafety(
-                self.ccx,
+                self.rcx,
                 impl_item,
                 drop_trait_def_id,
             ) {
                 true => {
-                    let tcx = self.ccx.tcx();
-                    crux_report(Report::with_span(
+                    let tcx = self.rcx.tcx();
+                    rudra_report(Report::with_span(
                         tcx,
                         ReportLevel::Warning,
                         "UnsafeDestructor",
@@ -77,15 +77,15 @@ mod visitor {
     /// checks if it contains any unsafe block. This approach will provide false
     /// positives, which are pruned by heuristics.
     pub struct UnsafeDestructorVisitor<'tcx> {
-        ccx: CruxCtxt<'tcx>,
+        rcx: RudraCtxt<'tcx>,
         unsafe_nest_level: usize,
         unsafe_found: bool,
     }
 
     impl<'tcx> UnsafeDestructorVisitor<'tcx> {
-        fn new(ccx: CruxCtxt<'tcx>) -> Self {
+        fn new(rcx: RudraCtxt<'tcx>) -> Self {
             UnsafeDestructorVisitor {
-                ccx,
+                rcx,
                 unsafe_nest_level: 0,
                 unsafe_found: false,
             }
@@ -95,13 +95,13 @@ mod visitor {
         /// unsafe or not. Returns `None` if the given HIR ID is not an impl for
         /// `Drop`.
         pub fn check_drop_unsafety(
-            ccx: CruxCtxt<'tcx>,
+            rcx: RudraCtxt<'tcx>,
             hir_id: HirId,
             drop_trait_def_id: DefId,
         ) -> bool {
-            let mut visitor = UnsafeDestructorVisitor::new(ccx);
+            let mut visitor = UnsafeDestructorVisitor::new(rcx);
 
-            let map = visitor.ccx.tcx().hir();
+            let map = visitor.rcx.tcx().hir();
             if_chain! {
                 if let Some(node) = map.find(hir_id);
                 if let Node::Item(item) = node;
@@ -135,7 +135,7 @@ mod visitor {
         type Map = rustc_middle::hir::map::Map<'tcx>;
 
         fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-            NestedVisitorMap::All(self.ccx.tcx().hir())
+            NestedVisitorMap::All(self.rcx.tcx().hir())
         }
 
         fn visit_block(&mut self, block: &'tcx Block<'tcx>) {
@@ -156,7 +156,7 @@ mod visitor {
         }
 
         fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
-            let tcx = self.ccx.tcx();
+            let tcx = self.rcx.tcx();
             if self.unsafe_nest_level > 0 {
                 // If non-extern unsafe function call is detected in unsafe block
                 if let Some(fn_def_id) = expr.ext().as_fn_def_id(tcx) {

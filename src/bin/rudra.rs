@@ -12,21 +12,21 @@ use std::env;
 use rustc_driver::Compilation;
 use rustc_interface::{interface::Compiler, Queries};
 
-use crux::log::Verbosity;
-use crux::report::{default_report_logger, init_report_logger};
-use crux::{analyze, compile_time_sysroot, progress_info, CruxConfig, CRUX_DEFAULT_ARGS};
+use rudra::log::Verbosity;
+use rudra::report::{default_report_logger, init_report_logger};
+use rudra::{analyze, compile_time_sysroot, progress_info, RudraConfig, RUDRA_DEFAULT_ARGS};
 
-struct CruxCompilerCalls {
-    config: CruxConfig,
+struct RudraCompilerCalls {
+    config: RudraConfig,
 }
 
-impl CruxCompilerCalls {
-    fn new(config: CruxConfig) -> CruxCompilerCalls {
-        CruxCompilerCalls { config }
+impl RudraCompilerCalls {
+    fn new(config: RudraConfig) -> RudraCompilerCalls {
+        RudraCompilerCalls { config }
     }
 }
 
-impl rustc_driver::Callbacks for CruxCompilerCalls {
+impl rustc_driver::Callbacks for RudraCompilerCalls {
     fn after_analysis<'tcx>(
         &mut self,
         compiler: &Compiler,
@@ -34,8 +34,8 @@ impl rustc_driver::Callbacks for CruxCompilerCalls {
     ) -> Compilation {
         compiler.session().abort_if_errors();
 
-        crux::log::setup_logging(self.config.verbosity).expect("Crux failed to initialize");
-        progress_info!("Crux started");
+        rudra::log::setup_logging(self.config.verbosity).expect("Rudra failed to initialize");
+        progress_info!("Rudra started");
 
         debug!("Input file name: {}", compiler.input().source_name());
         debug!("Crate name: {}", queries.crate_name().unwrap().peek_mut());
@@ -69,11 +69,11 @@ fn run_compiler(
         }
     }
 
-    // Some options have different defaults in Crux than in plain rustc; apply those by making
+    // Some options have different defaults in Rudra than in plain rustc; apply those by making
     // them the first arguments after the binary name (but later arguments can overwrite them).
     args.splice(
         1..1,
-        crux::CRUX_DEFAULT_ARGS.iter().map(ToString::to_string),
+        rudra::RUDRA_DEFAULT_ARGS.iter().map(ToString::to_string),
     );
 
     // Invoke compiler, and handle return code.
@@ -84,23 +84,23 @@ fn run_compiler(
     exit_code
 }
 
-fn parse_config() -> (CruxConfig, Vec<String>) {
+fn parse_config() -> (RudraConfig, Vec<String>) {
     // collect arguments
-    let mut config = CruxConfig::default();
+    let mut config = RudraConfig::default();
 
     let mut rustc_args = vec![];
     for arg in std::env::args() {
         match arg.as_str() {
-            "-Zcrux-enable-simple-anderson" => {
+            "-Zrudra-enable-simple-anderson" => {
                 config.simple_anderson_enabled = true;
             }
-            "-Zcrux-disable-simple-anderson" => {
+            "-Zrudra-disable-simple-anderson" => {
                 config.simple_anderson_enabled = false;
             }
-            "-Zcrux-enable-unsafe-destructor" => {
+            "-Zrudra-enable-unsafe-destructor" => {
                 config.unsafe_destructor_enabled = true;
             }
-            "-Zcrux-disable-unsafe-destructor" => {
+            "-Zrudra-disable-unsafe-destructor" => {
                 config.unsafe_destructor_enabled = false;
             }
             "-v" => config.verbosity = Verbosity::Verbose,
@@ -117,7 +117,7 @@ fn parse_config() -> (CruxConfig, Vec<String>) {
 fn main() {
     rustc_driver::install_ice_hook(); // ICE: Internal Compilation Error
 
-    let exit_code = if env::var_os("CRUX_BE_RUSTC").is_some() {
+    let exit_code = if env::var_os("RUDRA_BE_RUSTC").is_some() {
         // If the environment asks us to actually be rustc, then do that.
         rustc_driver::init_rustc_env_logger();
 
@@ -125,7 +125,7 @@ fn main() {
         let mut callbacks = rustc_driver::TimePassesCallbacks::default();
         run_compiler(env::args().collect(), &mut callbacks)
     } else {
-        // Otherwise, run Crux analysis
+        // Otherwise, run Rudra analysis
         let (config, mut rustc_args) = parse_config();
 
         // init rustc logger
@@ -146,12 +146,12 @@ fn main() {
         }
 
         // Finally, add the default flags all the way in the beginning, but after the binary name.
-        rustc_args.splice(1..1, CRUX_DEFAULT_ARGS.iter().map(ToString::to_string));
+        rustc_args.splice(1..1, RUDRA_DEFAULT_ARGS.iter().map(ToString::to_string));
 
         debug!("rustc arguments: {:?}", &rustc_args);
 
-        let exit_code = run_compiler(rustc_args, &mut CruxCompilerCalls::new(config));
-        progress_info!("Crux finished");
+        let exit_code = run_compiler(rustc_args, &mut RudraCompilerCalls::new(config));
+        progress_info!("Rudra finished");
         exit_code
     };
 

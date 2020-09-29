@@ -20,7 +20,7 @@ pub fn setup_logging(verbosity: Verbosity) -> Result<(), fern::InitError> {
     }
     .level_for(
         // log >= debug on debug build and >= info on release build
-        "crux-progress",
+        "rudra-progress",
         if cfg!(debug_assertions) {
             LevelFilter::Debug
         } else {
@@ -28,9 +28,9 @@ pub fn setup_logging(verbosity: Verbosity) -> Result<(), fern::InitError> {
         },
     );
 
-    if let Some(log_file_path) = env::var_os("CRUX_LOG_PATH") {
+    if let Some(log_file_path) = env::var_os("RUDRA_LOG_PATH") {
         let file_config = fern::Dispatch::new()
-            .filter(|metadata| metadata.target() == "crux-progress")
+            .filter(|metadata| metadata.target() == "rudra-progress")
             .format(|out, message, record| {
                 out.finish(format_args!(
                     "{} |PROGRESS-{:5}| {}",
@@ -44,7 +44,7 @@ pub fn setup_logging(verbosity: Verbosity) -> Result<(), fern::InitError> {
         base_config = base_config.chain(file_config);
     }
 
-    // stderr is captured and cached by Cargo, which leads to confusing output when used as `cargo crux`
+    // stderr is captured and cached by Cargo, which leads to confusing output when used as `cargo rudra`
     let stdout_config = fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
@@ -65,34 +65,34 @@ pub fn setup_logging(verbosity: Verbosity) -> Result<(), fern::InitError> {
 #[macro_export]
 macro_rules! progress_trace {
     ($($arg:tt)+) => (
-        ::log::trace!(target: "crux-progress", $($arg)+)
+        ::log::trace!(target: "rudra-progress", $($arg)+)
     )
 }
 
 #[macro_export]
 macro_rules! progress_debug {
     ($($arg:tt)+) => (
-        ::log::debug!(target: "crux-progress", $($arg)+)
+        ::log::debug!(target: "rudra-progress", $($arg)+)
     )
 }
 
 #[macro_export]
 macro_rules! progress_info {
     ($($arg:tt)+) => (
-        ::log::info!(target: "crux-progress", $($arg)+)
+        ::log::info!(target: "rudra-progress", $($arg)+)
     )
 }
 
 #[macro_export]
 macro_rules! progress_warn {
     ($($arg:tt)+) => (
-        ::log::warn!(target: "crux-progress", $($arg)+)
+        ::log::warn!(target: "rudra-progress", $($arg)+)
     )
 }
 
 #[macro_export]
 macro_rules! progress_error {
     ($($arg:tt)+) => (
-        ::log::error!(target: "crux-progress", $($arg)+)
+        ::log::error!(target: "rudra-progress", $($arg)+)
     )
 }

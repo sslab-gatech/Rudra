@@ -69,7 +69,7 @@ impl Crate {
     }
 
     /// Returns the latest version as `$CRATE_NAME-$CRATE_VERSION` form.
-    /// Example: `crux-0.1.0`.
+    /// Example: `rudra-0.1.0`.
     pub fn latest_version_tag(&self) -> String {
         let record = self.latest_version_record();
         format!("{}-{}", self.krate.name, record.num)

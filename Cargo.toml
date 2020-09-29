@@ -1,8 +1,8 @@
 [package]
-name = "crux"
+name = "rudra"
 version = "0.1.0"
 authors = ["Yechan Bae <yechan@gatech.edu>"]
-default-run = "crux"
+default-run = "rudra"
 edition = "2018"
 exclude = ["samples"]
 
@@ -13,12 +13,12 @@ test = true
 doctest = false
 
 [[bin]]
-name = "crux"
+name = "rudra"
 test = false
 doctest = false
 
 [[bin]]
-name = "cargo-crux"
+name = "cargo-rudra"
 test = false
 doctest = false
 

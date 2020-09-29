@@ -9,8 +9,8 @@ pub struct LocalTraitIter {
 }
 
 impl LocalTraitIter {
-    pub fn new<'tcx>(ccx: CruxCtxt<'tcx>, trait_def_id: DefId) -> Self {
-        let local_trait_impl_map = ccx.tcx().all_local_trait_impls(LOCAL_CRATE);
+    pub fn new<'tcx>(rcx: RudraCtxt<'tcx>, trait_def_id: DefId) -> Self {
+        let local_trait_impl_map = rcx.tcx().all_local_trait_impls(LOCAL_CRATE);
         let impl_id_vec = local_trait_impl_map
             .get(&trait_def_id)
             .map(Clone::clone)

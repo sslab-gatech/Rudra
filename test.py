@@ -8,11 +8,11 @@ import os.path
 
 from multiprocessing.pool import ThreadPool
 
-print("Make sure you've installed Crux with `install-[debug|release].sh`")
+print("Make sure you've installed the latest Rudra with `install-[debug|release].sh`")
 
 
 class TestCase:
-    PREFIX = b"/*!\n```crux-test\n"
+    PREFIX = b"/*!\n```rudra-test\n"
 
     def __init__(self, path):
         self.path = path
@@ -30,7 +30,7 @@ class TestCase:
             lines = poc_file.readlines()
             # Two line prefix:
             # /*!
-            # ```crux-test
+            # ```rudra-test
             # <parse this portion as toml>
             # ````
             idx = lines.index("```\n")
@@ -71,11 +71,11 @@ def run_test(test_case):
     metadata = test_case.metadata()
     test_type = metadata["test_type"]
     try:
-        with tempfile.NamedTemporaryFile(prefix="crux") as report_file:
+        with tempfile.NamedTemporaryFile(prefix="rudra") as report_file:
             env_dict = dict(os.environ)
-            env_dict["CRUX_REPORT_PATH"] = report_file.name
+            env_dict["RUDRA_REPORT_PATH"] = report_file.name
             output = subprocess.run(
-                ["crux", "--crate-type", "lib", test_case.path],
+                ["rudra", "--crate-type", "lib", test_case.path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 env=env_dict,

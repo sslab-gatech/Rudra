@@ -32,23 +32,24 @@ use rustc_middle::ty::TyCtxt;
 
 use crate::analysis::solver::SolverW1;
 use crate::analysis::{CallGraph, SimpleAnderson, UnsafeDestructor};
-use crate::context::CruxCtxtOwner;
+use crate::context::RudraCtxtOwner;
 use crate::log::Verbosity;
 
-// Insert rustc arguments at the beginning of the argument list that Crux wants to be
+// Insert rustc arguments at the beginning of the argument list that Rudra wants to be
 // set per default, for maximal validation power.
-pub static CRUX_DEFAULT_ARGS: &[&str] = &["-Zalways-encode-mir", "-Zmir-opt-level=0", "--cfg=crux"];
+pub static RUDRA_DEFAULT_ARGS: &[&str] =
+    &["-Zalways-encode-mir", "-Zmir-opt-level=0", "--cfg=rudra"];
 
 #[derive(Debug, Clone, Copy)]
-pub struct CruxConfig {
+pub struct RudraConfig {
     pub verbosity: Verbosity,
     pub unsafe_destructor_enabled: bool,
     pub simple_anderson_enabled: bool,
 }
 
-impl Default for CruxConfig {
+impl Default for RudraConfig {
     fn default() -> Self {
-        CruxConfig {
+        RudraConfig {
             verbosity: Verbosity::Normal,
             unsafe_destructor_enabled: true,
             simple_anderson_enabled: false,
@@ -56,7 +57,7 @@ impl Default for CruxConfig {
     }
 }
 
-/// Returns the "default sysroot" that Crux will use if no `--sysroot` flag is set.
+/// Returns the "default sysroot" that Rudra will use if no `--sysroot` flag is set.
 /// Should be a compile-time constant.
 pub fn compile_time_sysroot() -> Option<String> {
     // option_env! is replaced to a constant at compile time
@@ -75,7 +76,7 @@ pub fn compile_time_sysroot() -> Option<String> {
     Some(match (home, toolchain) {
         (Some(home), Some(toolchain)) => format!("{}/toolchains/{}", home, toolchain),
         _ => option_env!("RUST_SYSROOT")
-            .expect("To build Crux without rustup, set the `RUST_SYSROOT` env var at build time")
+            .expect("To build Rudra without rustup, set the `RUST_SYSROOT` env var at build time")
             .to_owned(),
     })
 }
@@ -90,10 +91,10 @@ where
     result
 }
 
-pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxConfig) {
+pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: RudraConfig) {
     // workaround to mimic arena lifetime
-    let ccx_owner = CruxCtxtOwner::new(tcx);
-    let ccx = &*Box::leak(Box::new(ccx_owner));
+    let rcx_owner = RudraCtxtOwner::new(tcx);
+    let rcx = &*Box::leak(Box::new(rcx_owner));
 
     // shadow the variable tcx
     #[allow(unused_variables)]
@@ -101,7 +102,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxConfig) {
 
     // collect DefId of all bodies
     let call_graph = run_analysis("CallGraph", || {
-        let call_graph = CallGraph::new(ccx);
+        let call_graph = CallGraph::new(rcx);
         info!(
             "Found {} functions in the call graph",
             call_graph.num_functions()
@@ -112,10 +113,10 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxConfig) {
     // Simple anderson analysis
     if config.simple_anderson_enabled {
         run_analysis("SimpleAnderson", || {
-            let mut simple_anderson = SimpleAnderson::new(ccx);
+            let mut simple_anderson = SimpleAnderson::new(rcx);
 
             for local_instance in call_graph.local_safe_fn_iter() {
-                let def_path_string = ccx
+                let def_path_string = rcx
                     .tcx()
                     .hir()
                     .def_path(local_instance.def.def_id().expect_local())
@@ -123,7 +124,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxConfig) {
 
                 // TODO: remove these temporary setups
                 if def_path_string == "::buffer[0]::{{impl}}[2]::from[0]"
-                    || def_path_string.starts_with("::crux_test")
+                    || def_path_string.starts_with("::rudra_test")
                 {
                     info!("Found {:?}", local_instance);
                     println!("Target {}", def_path_string);
@@ -139,7 +140,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxConfig) {
     // Unsafe destructor analysis
     if config.unsafe_destructor_enabled {
         run_analysis("UnsafeDestructor", || {
-            let mut unsafe_destructor = UnsafeDestructor::new(ccx);
+            let mut unsafe_destructor = UnsafeDestructor::new(rcx);
             unsafe_destructor.analyze();
         })
     }
@@ -147,18 +148,18 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: CruxConfig) {
     // TODO: remove these temporary setups
     // Call graph testing
     for local_instance in call_graph.local_safe_fn_iter() {
-        let def_path_string = ccx
+        let def_path_string = rcx
             .tcx()
             .hir()
             .def_path(local_instance.def.def_id().expect_local())
             .to_string_no_crate();
 
         if def_path_string == "::buffer[0]::{{impl}}[2]::from[0]"
-            || def_path_string.starts_with("::crux_test")
+            || def_path_string.starts_with("::rudra_test")
         {
             info!("Found {:?}", local_instance);
             for &instance in call_graph.reachable_set(local_instance).iter() {
-                utils::print_mir(ccx.tcx(), instance);
+                utils::print_mir(rcx.tcx(), instance);
             }
         }
     }

@@ -1,5 +1,5 @@
 /*!
-```crux-test
+```rudra-test
 test_type = "fp"
 expected_analyzers = ["UnsafeDestructor"]
 ```

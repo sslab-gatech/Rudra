@@ -6,7 +6,7 @@ struct MyStruct {
     y: i32,
 }
 
-pub fn crux_test_struct() {
+pub fn rudra_test_struct() {
     // dbg!(MyStruct { x: 1, y: 2 });
 
     let p: *const i32;

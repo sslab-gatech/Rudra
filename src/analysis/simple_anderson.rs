@@ -67,7 +67,7 @@ struct Place<'tcx> {
 }
 
 pub struct SimpleAnderson<'tcx> {
-    ccx: CruxCtxt<'tcx>,
+    rcx: RudraCtxt<'tcx>,
     location_factory: LocationFactory<'tcx>,
     /// Analysis call stack
     call_stack: Vec<Instance<'tcx>>,
@@ -98,9 +98,9 @@ impl<'tcx> ConstraintSet for SimpleAnderson<'tcx> {
 }
 
 impl<'tcx> SimpleAnderson<'tcx> {
-    pub fn new(ccx: CruxCtxt<'tcx>) -> Self {
+    pub fn new(rcx: RudraCtxt<'tcx>) -> Self {
         SimpleAnderson {
-            ccx,
+            rcx,
             location_factory: LocationFactory::new(),
             call_stack: Vec::new(),
             constraints: Vec::new(),
@@ -154,7 +154,7 @@ impl<'tcx> SimpleAnderson<'tcx> {
         local_decls: &impl mir::HasLocalDecls<'tcx>,
         operand: &mir::Operand<'tcx>,
     ) -> bool {
-        operand.ty(local_decls, self.ccx.tcx()).is_any_ptr()
+        operand.ty(local_decls, self.rcx.tcx()).is_any_ptr()
     }
 
     fn is_place_ptr(
@@ -162,7 +162,7 @@ impl<'tcx> SimpleAnderson<'tcx> {
         local_decls: &impl mir::HasLocalDecls<'tcx>,
         place: &mir::Place<'tcx>,
     ) -> bool {
-        place.ty(local_decls, self.ccx.tcx()).ty.is_any_ptr()
+        place.ty(local_decls, self.rcx.tcx()).ty.is_any_ptr()
     }
 
     fn add_constraint(&mut self, dst_id: NodeId, constraint: Constraint) {
@@ -182,7 +182,7 @@ impl<'tcx> SimpleAnderson<'tcx> {
         }
 
         // find MIR for the instance
-        let body = self.ccx.instance_body(instance);
+        let body = self.rcx.instance_body(instance);
         let body = match body.as_ref() {
             Ok(body) => body,
             Err(e) => {

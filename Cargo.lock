@@ -280,33 +280,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crux"
-version = "0.1.0"
-dependencies = [
- "cargo_metadata",
- "chrono",
- "dashmap",
- "fern",
- "if_chain",
- "log",
- "once_cell",
- "parking_lot 0.11.0",
- "rustc_driver",
- "rustc_errors",
- "rustc_hir",
- "rustc_index",
- "rustc_interface",
- "rustc_middle",
- "rustc_mir",
- "rustc_span",
- "rustc_version",
- "serde",
- "serde_json",
- "snafu",
- "toml",
-]
-
-[[package]]
 name = "dashmap"
 version = "3.11.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -889,6 +862,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2e9bed56f6272bd85d9d06d1aaeef80c5fddc78a82199eb36dceb5f94e7d934"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "rudra"
+version = "0.1.0"
+dependencies = [
+ "cargo_metadata",
+ "chrono",
+ "dashmap",
+ "fern",
+ "if_chain",
+ "log",
+ "once_cell",
+ "parking_lot 0.11.0",
+ "rustc_driver",
+ "rustc_errors",
+ "rustc_hir",
+ "rustc_index",
+ "rustc_interface",
+ "rustc_middle",
+ "rustc_mir",
+ "rustc_span",
+ "rustc_version",
+ "serde",
+ "serde_json",
+ "snafu",
+ "toml",
 ]
 
 [[package]]

@@ -16,7 +16,7 @@ use crawl::{refresh_never, ReportDir, ScratchDir};
 
 fn setup_logging() {
     dotenv::dotenv().ok();
-    let log_var_name = "CRUX_RUNNER_LOG";
+    let log_var_name = "RUDRA_RUNNER_LOG";
 
     if let None = env::var_os(log_var_name) {
         env::set_var(log_var_name, "info");
@@ -62,12 +62,12 @@ fn main() -> Result<()> {
         })
         .collect();
 
-    // second stage - run crux on them
+    // second stage - run rudra on them
     let _crate_list: Vec<_> = crate_list
         .into_par_iter()
-        // TODO: performance optimization with unsafe filtering (CRUX-53)
+        // TODO: performance optimization with unsafe filtering (RUDRA-53)
         .filter_map(|(krate, path, _crate_stat)| -> Option<Crate> {
-            // FIXME: add timeout (CRUX-43)
+            // FIXME: add timeout (RUDRA-43)
             info!("Analysis start: {}", krate.latest_version_tag());
 
             let report_path = report_dir
@@ -78,12 +78,12 @@ fn main() -> Result<()> {
                 .log_path()
                 .join(format!("log-{}", krate.latest_version_tag()));
 
-            let crux_output = run_command_with_env(
-                "cargo crux",
+            let rudra_output = run_command_with_env(
+                "cargo rudra",
                 &path,
                 &[
-                    ("CRUX_REPORT_PATH", &report_path),
-                    ("CRUX_LOG_PATH", &log_path),
+                    ("RUDRA_REPORT_PATH", &report_path),
+                    ("RUDRA_LOG_PATH", &log_path),
                 ],
             );
             info!("Analysis end: {}", krate.latest_version_tag());
@@ -93,7 +93,7 @@ fn main() -> Result<()> {
                 warn!("Failed to clean {}", krate.latest_version_tag());
             }
 
-            match crux_output {
+            match rudra_output {
                 Ok(output) => {
                     let log_file = OpenOptions::new().append(true).create(true).open(&log_path);
                     if let Ok(mut file) = log_file {
@@ -116,7 +116,7 @@ fn main() -> Result<()> {
                 }
                 Err(e) => {
                     error!(
-                        "Failed to execute `cargo crux` on {}: {}",
+                        "Failed to execute `cargo rudra` on {}: {}",
                         krate.latest_version_tag(),
                         e
                     );

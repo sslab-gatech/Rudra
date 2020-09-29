@@ -9,22 +9,22 @@ use std::process::Command;
 
 use rustc_version::VersionMeta;
 
-use crux::log::{self, Verbosity};
-use crux::{progress_error, progress_info};
+use rudra::log::{self, Verbosity};
+use rudra::{progress_error, progress_info};
 
-const CARGO_CRUX_HELP: &str = r#"Tests crates with Crux
+const CARGO_RUDRA_HELP: &str = r#"Tests crates with Rudra
 Usage:
-    cargo crux [<cargo options>] [--] [<rustc/crux options>...]
+    cargo rudra [<cargo options>] [--] [<rustc/rudra options>...]
 
 Common options:
     -h, --help               Print this message
 
 Other [options] are the same as `cargo check`. Everything after the first "--" is
-passed verbatim to Crux.
+passed verbatim to Rudra.
 "#;
 
 fn show_help() {
-    println!("{}", CARGO_CRUX_HELP);
+    println!("{}", CARGO_RUDRA_HELP);
 }
 
 fn show_error(msg: impl AsRef<str>) -> ! {
@@ -72,8 +72,8 @@ fn get_first_arg_with_rs_suffix() -> Option<String> {
 }
 
 fn version_info() -> VersionMeta {
-    VersionMeta::for_command(Command::new(find_crux()))
-        .expect("failed to determine underlying rustc version of Crux")
+    VersionMeta::for_command(Command::new(find_rudra()))
+        .expect("failed to determine underlying rustc version of Rudra")
 }
 
 fn list_targets() -> impl Iterator<Item = cargo_metadata::Target> {
@@ -111,7 +111,7 @@ fn list_targets() -> impl Iterator<Item = cargo_metadata::Target> {
             }
         })
         .unwrap_or_else(|| {
-            show_error("This seems to be a workspace, which is not supported by cargo-crux");
+            show_error("This seems to be a workspace, which is not supported by cargo-rudra");
         });
     let package = metadata.packages.remove(package_index);
 
@@ -119,16 +119,16 @@ fn list_targets() -> impl Iterator<Item = cargo_metadata::Target> {
     package.targets.into_iter()
 }
 
-/// Returns the path to the `crux` binary
-fn find_crux() -> PathBuf {
+/// Returns the path to the `rudra` binary
+fn find_rudra() -> PathBuf {
     let mut path = std::env::current_exe().expect("current executable path invalid");
-    path.set_file_name("crux");
+    path.set_file_name("rudra");
     path
 }
 
-/// Make sure that the `crux` and `rustc` binary are from the same sysroot.
-/// This can be violated e.g. when crux is locally built and installed with a different
-/// toolchain than what is used when `cargo crux` is run.
+/// Make sure that the `rudra` and `rustc` binary are from the same sysroot.
+/// This can be violated e.g. when rudra is locally built and installed with a different
+/// toolchain than what is used when `cargo rudra` is run.
 fn test_sysroot_consistency() {
     fn get_sysroot(mut cmd: Command) -> PathBuf {
         let out = cmd
@@ -151,16 +151,16 @@ fn test_sysroot_consistency() {
     }
 
     let rustc_sysroot = get_sysroot(Command::new("rustc"));
-    let crux_sysroot = get_sysroot(Command::new(find_crux()));
+    let rudra_sysroot = get_sysroot(Command::new(find_rudra()));
 
-    if rustc_sysroot != crux_sysroot {
+    if rustc_sysroot != rudra_sysroot {
         show_error(format!(
-            "crux was built for a different sysroot than the rustc in your current toolchain.\n\
-             Make sure you use the same toolchain to run crux that you used to build it!\n\
+            "rudra was built for a different sysroot than the rustc in your current toolchain.\n\
+             Make sure you use the same toolchain to run rudra that you used to build it!\n\
              rustc sysroot: `{}`\n\
-             crux sysroot: `{}`",
+             rudra sysroot: `{}`",
             rustc_sysroot.display(),
-            crux_sysroot.display()
+            rudra_sysroot.display()
         ));
     }
 }
@@ -187,30 +187,32 @@ fn clean_target(target_name: &str) {
 }
 
 fn main() {
-    // Check for version and help flags even when invoked as `cargo-crux`.
+    // Check for version and help flags even when invoked as `cargo-rudra`.
     if std::env::args().any(|a| a == "--help" || a == "-h") {
         show_help();
         return;
     }
 
-    log::setup_logging(Verbosity::Normal).expect("Crux failed to initialize");
+    log::setup_logging(Verbosity::Normal).expect("Rudra failed to initialize");
 
-    if let Some("crux") = std::env::args().nth(1).as_ref().map(AsRef::as_ref) {
-        progress_info!("Running cargo crux");
-        // This arm is for when `cargo crux` is called. We call `cargo rustc` for each applicable target,
-        // but with the `RUSTC` env var set to the `cargo-crux` binary so that we come back in the other branch,
-        // and dispatch the invocations to `rustc` and `crux`, respectively.
-        in_cargo_crux();
+    if let Some("rudra") = std::env::args().nth(1).as_ref().map(AsRef::as_ref) {
+        progress_info!("Running cargo rudra");
+        // This arm is for when `cargo rudra` is called. We call `cargo rustc` for each applicable target,
+        // but with the `RUSTC` env var set to the `cargo-rudra` binary so that we come back in the other branch,
+        // and dispatch the invocations to `rustc` and `rudra`, respectively.
+        in_cargo_rudra();
     } else if let Some("rustc") = std::env::args().nth(1).as_ref().map(AsRef::as_ref) {
-        // This arm is executed when `cargo-crux` runs `cargo rustc` with the `RUSTC_WRAPPER` env var set to itself:
-        // dependencies get dispatched to `rustc`, the final test/binary to `crux`.
+        // This arm is executed when `cargo-rudra` runs `cargo rustc` with the `RUSTC_WRAPPER` env var set to itself:
+        // dependencies get dispatched to `rustc`, the final test/binary to `rudra`.
         inside_cargo_rustc();
     } else {
-        show_error("`cargo-crux` must be called with either `crux` or `rustc` as first argument.");
+        show_error(
+            "`cargo-rudra` must be called with either `rudra` or `rustc` as first argument.",
+        );
     }
 }
 
-fn in_cargo_crux() {
+fn in_cargo_rudra() {
     let verbose = has_arg_flag("-v");
 
     // Some basic sanity checks
@@ -235,7 +237,7 @@ fn in_cargo_crux() {
 
     // Ensure "lib" targets are compiled first
     for target in list_targets() {
-        // Skip `cargo crux`
+        // Skip `cargo rudra`
         let mut args = std::env::args().skip(2);
         let kind = target
             .kind
@@ -244,7 +246,7 @@ fn in_cargo_crux() {
 
         // Now we run `cargo check $FLAGS $ARGS`, giving the user the
         // change to add additional arguments. `FLAGS` is set to identify
-        // this target. The user gets to control what gets actually passed to Crux.
+        // this target. The user gets to control what gets actually passed to Rudra.
         let mut cmd = Command::new("cargo");
         cmd.arg("check");
         match kind.as_str() {
@@ -285,10 +287,10 @@ fn in_cargo_crux() {
             cmd.arg(version_info().host);
         }
 
-        // Add suffix to CRUX_REPORT_PATH
-        if let Ok(report) = env::var("CRUX_REPORT_PATH") {
+        // Add suffix to RUDRA_REPORT_PATH
+        if let Ok(report) = env::var("RUDRA_REPORT_PATH") {
             cmd.env(
-                "CRUX_REPORT_PATH",
+                "RUDRA_REPORT_PATH",
                 format!("{}-{}-{}", report, kind, &target.name),
             );
         }
@@ -300,7 +302,7 @@ fn in_cargo_crux() {
         // these arguments.
         let args_vec: Vec<String> = args.collect();
         cmd.env(
-            "CRUX_ARGS",
+            "RUDRA_ARGS",
             serde_json::to_string(&args_vec).expect("failed to serialize args"),
         );
 
@@ -308,17 +310,21 @@ fn in_cargo_crux() {
         // i.e., the first argument is `rustc` -- which is what we use in `main` to distinguish
         // the two codepaths.
         if env::var_os("RUSTC_WRAPPER").is_some() {
-            println!("WARNING: Ignoring existing `RUSTC_WRAPPER` environment variable, Crux does not support wrapping.");
+            println!("WARNING: Ignoring existing `RUSTC_WRAPPER` environment variable, Rudra does not support wrapping.");
         }
 
         let path = std::env::current_exe().expect("current executable path invalid");
         cmd.env("RUSTC_WRAPPER", path);
         if verbose {
-            cmd.env("CRUX_VERBOSE", ""); // this makes `inside_cargo_rustc` verbose.
+            cmd.env("RUDRA_VERBOSE", ""); // this makes `inside_cargo_rustc` verbose.
             eprintln!("+ {:?}", cmd);
         }
 
-        progress_info!("Running crux for target {}:{}", kind.as_str(), &target.name);
+        progress_info!(
+            "Running rudra for target {}:{}",
+            kind.as_str(),
+            &target.name
+        );
         let exit_status = cmd
             .spawn()
             .expect("could not run cargo check")
@@ -336,12 +342,12 @@ fn inside_cargo_rustc() {
     /// the "target" architecture, in contrast to the "host" architecture.
     /// Host crates are for build scripts and proc macros and still need to
     /// be built like normal; target crates need to be built for or interpreted
-    /// by Crux.
+    /// by Rudra.
     ///
     /// Currently, we detect this by checking for "--target=", which is
     /// never set for host crates. This matches what rustc bootstrap does,
     /// which hopefully makes it "reliable enough". This relies on us always
-    /// invoking cargo itself with `--target`, which `in_cargo_crux` ensures.
+    /// invoking cargo itself with `--target`, which `in_cargo_rudra` ensures.
     fn contains_target_flag() -> bool {
         get_arg_flag_value("--target").is_some()
     }
@@ -369,7 +375,7 @@ fn inside_cargo_rustc() {
 
     fn run_command(mut cmd: Command) {
         // Run it.
-        let verbose = std::env::var_os("CRUX_VERBOSE").is_some();
+        let verbose = std::env::var_os("RUDRA_VERBOSE").is_some();
         if verbose {
             eprintln!("+ {:?}", cmd);
         }
@@ -384,34 +390,34 @@ fn inside_cargo_rustc() {
         }
     }
 
-    // TODO: Miri sets custom sysroot here, check if it is needed for us (CRUX-30)
+    // TODO: Miri sets custom sysroot here, check if it is needed for us (RUDRA-30)
 
-    let needs_crux_analysis = contains_target_flag() && is_target_crate();
-    if needs_crux_analysis {
-        let mut cmd = Command::new(find_crux());
-        cmd.args(std::env::args().skip(2)); // skip `cargo-crux rustc`
+    let needs_rudra_analysis = contains_target_flag() && is_target_crate();
+    if needs_rudra_analysis {
+        let mut cmd = Command::new(find_rudra());
+        cmd.args(std::env::args().skip(2)); // skip `cargo-rudra rustc`
 
-        // This is the local crate that we want to analyze with Crux.
+        // This is the local crate that we want to analyze with Rudra.
         // (Testing `target_crate` is needed to exclude build scripts.)
-        // We deserialize the arguments that are meant for Crux from the special
-        // environment variable "CRUX_ARGS", and feed them to the 'crux' binary.
+        // We deserialize the arguments that are meant for Rudra from the special
+        // environment variable "RUDRA_ARGS", and feed them to the 'rudra' binary.
         //
         // `env::var` is okay here, well-formed JSON is always UTF-8.
-        let magic = std::env::var("CRUX_ARGS").expect("missing CRUX_ARGS");
-        let crux_args: Vec<String> =
-            serde_json::from_str(&magic).expect("failed to deserialize CRUX_ARGS");
-        cmd.args(crux_args);
+        let magic = std::env::var("RUDRA_ARGS").expect("missing RUDRA_ARGS");
+        let rudra_args: Vec<String> =
+            serde_json::from_str(&magic).expect("failed to deserialize RUDRA_ARGS");
+        cmd.args(rudra_args);
 
         run_command(cmd);
     }
 
     // Libraries might be used for dependency, so we need to analyze and build it.
-    if !needs_crux_analysis || is_crate_type_lib() {
-        let mut cmd = Command::new(find_crux());
-        cmd.args(std::env::args().skip(2)); // skip `cargo-crux rustc`
+    if !needs_rudra_analysis || is_crate_type_lib() {
+        let mut cmd = Command::new(find_rudra());
+        cmd.args(std::env::args().skip(2)); // skip `cargo-rudra rustc`
 
         // We want to compile, not interpret.
-        cmd.env("CRUX_BE_RUSTC", "1");
+        cmd.env("RUDRA_BE_RUSTC", "1");
 
         run_command(cmd);
     }
