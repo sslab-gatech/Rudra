@@ -64,6 +64,43 @@ fn get_arg_flag_value(name: &str) -> Option<String> {
     }
 }
 
+fn any_arg_flag<F>(name: &str, mut check: F) -> bool
+where
+    F: FnMut(&str) -> bool,
+{
+    // Stop searching at `--`.
+    let mut args = std::env::args().take_while(|val| val != "--");
+    loop {
+        let arg = match args.next() {
+            Some(arg) => arg,
+            None => return false,
+        };
+        if !arg.starts_with(name) {
+            continue;
+        }
+
+        // Strip leading `name`.
+        let suffix = &arg[name.len()..];
+        let value = if suffix.is_empty() {
+            // This argument is exactly `name`; the next one is the value.
+            match args.next() {
+                Some(arg) => arg,
+                None => return false,
+            }
+        } else if suffix.starts_with('=') {
+            // This argument is `name=value`; get the value.
+            // Strip leading `=`.
+            suffix[1..].to_owned()
+        } else {
+            return false;
+        };
+
+        if check(&value) {
+            return true;
+        }
+    }
+}
+
 /// Finds the first argument ends with `.rs`.
 fn get_first_arg_with_rs_suffix() -> Option<String> {
     // Stop searching at `--`.
@@ -76,7 +113,7 @@ fn version_info() -> VersionMeta {
         .expect("failed to determine underlying rustc version of Rudra")
 }
 
-fn list_targets() -> impl Iterator<Item = cargo_metadata::Target> {
+fn cargo_package() -> cargo_metadata::Package {
     // We need to get the manifest, and then the metadata, to enumerate targets.
     let manifest_path =
         get_arg_flag_value("--manifest-path").map(|m| Path::new(&m).canonicalize().unwrap());
@@ -113,10 +150,8 @@ fn list_targets() -> impl Iterator<Item = cargo_metadata::Target> {
         .unwrap_or_else(|| {
             show_error("This seems to be a workspace, which is not supported by cargo-rudra");
         });
-    let package = metadata.packages.remove(package_index);
 
-    // Finally we got the list of targets to build
-    package.targets.into_iter()
+    metadata.packages.remove(package_index)
 }
 
 /// Returns the path to the `rudra` binary
@@ -165,12 +200,12 @@ fn test_sysroot_consistency() {
     }
 }
 
-fn clean_target(target_name: &str) {
+fn clean_package(package_name: &str) {
     let mut cmd = Command::new("cargo");
     cmd.arg("clean");
 
     cmd.arg("-p");
-    cmd.arg(target_name);
+    cmd.arg(package_name);
 
     cmd.arg("--target");
     cmd.arg(version_info().host);
@@ -201,6 +236,7 @@ fn main() {
         // but with the `RUSTC` env var set to the `cargo-rudra` binary so that we come back in the other branch,
         // and dispatch the invocations to `rustc` and `rudra`, respectively.
         in_cargo_rudra();
+        progress_info!("cargo rudra finished");
     } else if let Some("rustc") = std::env::args().nth(1).as_ref().map(AsRef::as_ref) {
         // This arm is executed when `cargo-rudra` runs `cargo rustc` with the `RUSTC_WRAPPER` env var set to itself:
         // dependencies get dispatched to `rustc`, the final test/binary to `rudra`.
@@ -212,6 +248,17 @@ fn main() {
     }
 }
 
+fn target_kind(target: &cargo_metadata::Target) -> &str {
+    if target.kind.iter().any(|s| s == "lib" || s == "rlib") {
+        "lib"
+    } else {
+        target
+            .kind
+            .get(0)
+            .expect("badly formatted cargo metadata: target::kind is an empty array")
+    }
+}
+
 fn in_cargo_rudra() {
     let verbose = has_arg_flag("-v");
 
@@ -219,12 +266,15 @@ fn in_cargo_rudra() {
     test_sysroot_consistency();
 
     // Now run the command.
-    let mut targets: Vec<_> = list_targets().collect();
+    let package = cargo_package();
+    let mut targets: Vec<_> = package.targets.into_iter().collect();
+
+    // Ensure `lib` is compiled before `bin`
     targets.sort_by(|t1, t2| {
         use std::cmp::Ordering;
 
-        let t1_kind = t1.kind.get(0).unwrap();
-        let t2_kind = t2.kind.get(0).unwrap();
+        let t1_kind = target_kind(t1);
+        let t2_kind = target_kind(t2);
 
         if t1_kind < t2_kind {
             Ordering::Greater
@@ -235,30 +285,26 @@ fn in_cargo_rudra() {
         }
     });
 
-    // Ensure "lib" targets are compiled first
-    for target in list_targets() {
+    for target in targets {
         // Skip `cargo rudra`
         let mut args = std::env::args().skip(2);
-        let kind = target
-            .kind
-            .get(0)
-            .expect("badly formatted cargo metadata: target::kind is an empty array");
+        let kind = target_kind(&target);
 
         // Now we run `cargo check $FLAGS $ARGS`, giving the user the
         // change to add additional arguments. `FLAGS` is set to identify
         // this target. The user gets to control what gets actually passed to Rudra.
         let mut cmd = Command::new("cargo");
         cmd.arg("check");
-        match kind.as_str() {
+        match kind {
             "bin" => {
                 // Analyze all the binaries.
                 cmd.arg("--bin").arg(&target.name);
             }
-            "lib" => {
+            "lib" | "rlib" => {
                 // There can be only one lib in a crate.
                 cmd.arg("--lib");
                 // Clean the result to disable Cargo's freshness check
-                clean_target(&target.name);
+                clean_package(&package.name);
             }
             s => {
                 warn!("Target {}:{} is not supported", s, &target.name);
@@ -320,11 +366,7 @@ fn in_cargo_rudra() {
             eprintln!("+ {:?}", cmd);
         }
 
-        progress_info!(
-            "Running rudra for target {}:{}",
-            kind.as_str(),
-            &target.name
-        );
+        progress_info!("Running rudra for target {}:{}", kind, &target.name);
         let exit_status = cmd
             .spawn()
             .expect("could not run cargo check")
@@ -367,10 +409,7 @@ fn inside_cargo_rustc() {
     }
 
     fn is_crate_type_lib() -> bool {
-        match get_arg_flag_value("--crate-type") {
-            Some(val) if val == "lib" => true,
-            _ => false,
-        }
+        any_arg_flag("--crate-type", |s| s == "lib" || s == "rlib")
     }
 
     fn run_command(mut cmd: Command) {

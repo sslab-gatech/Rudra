@@ -1,5 +1,3 @@
-#![feature(try_blocks)]
-
 use std::env;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -7,12 +5,31 @@ use std::path::PathBuf;
 
 use log::*;
 use rayon::prelude::*;
+use structopt::{clap::arg_enum, StructOpt};
 
 use crawl::error::Result;
 use crawl::krate::Crate;
-use crawl::stat::CrateStat;
 use crawl::utils::*;
 use crawl::{refresh_never, ReportDir, ScratchDir};
+
+arg_enum! {
+    #[derive(Debug)]
+    enum Selection {
+        First,
+        Top,
+        Random,
+    }
+}
+
+#[derive(Debug, StructOpt)]
+#[structopt(name = "rudra-runner", about = "Run Rudra on crates.io")]
+struct Opt {
+    #[structopt(short, long, possible_values = &Selection::variants(), case_insensitive = true, default_value = "first")]
+    select: Selection,
+
+    #[structopt(short = "n")]
+    count: Option<usize>,
+}
 
 fn setup_logging() {
     dotenv::dotenv().ok();
@@ -26,13 +43,15 @@ fn setup_logging() {
 
 fn setup_rayon() {
     rayon::ThreadPoolBuilder::new()
-        .num_threads(num_cpus::get())
+        .num_threads(std::cmp::min(16, num_cpus::get()))
         .stack_size(8 * 1024 * 1024)
         .build_global()
         .expect("Failed to initialize thread pool");
 }
 
 fn main() -> Result<()> {
+    let opt = Opt::from_args();
+
     setup_logging();
     setup_rayon();
 
@@ -43,17 +62,11 @@ fn main() -> Result<()> {
 
     // first stage - fetching crate
     // Add `.take(val)` after `.into_par_iter()` for a quick local test
-    let crate_list: Vec<_> = crate_list
+    let mut crate_list: Vec<_> = crate_list
         .into_par_iter()
-        .filter_map(|krate| -> Option<(Crate, PathBuf, CrateStat)> {
-            let result: Result<(PathBuf, CrateStat)> = try {
-                let path = scratch_dir.fetch_latest_version(&krate)?;
-                let crate_stat = crawl::stat::stat(&path)?;
-                (path, crate_stat)
-            };
-
-            match result {
-                Ok((path, crate_stat)) => Some((krate, path, crate_stat)),
+        .filter_map(|krate| -> Option<(Crate, PathBuf)> {
+            match scratch_dir.fetch_latest_version(&krate) {
+                Ok(path) => Some((krate, path)),
                 Err(e) => {
                     warn!("{}: {}", krate.latest_version_tag(), &e);
                     None
@@ -62,10 +75,27 @@ fn main() -> Result<()> {
         })
         .collect();
 
+    if let Some(count) = opt.count {
+        match opt.select {
+            Selection::First => (),
+            Selection::Top => {
+                crate_list
+                    .sort_by_key(|krate| std::u64::MAX - krate.0.latest_version_record().downloads);
+                crate_list.truncate(count);
+            }
+            Selection::Random => {
+                use rand::seq::SliceRandom;
+                let mut rng = rand::thread_rng();
+                crate_list.as_mut_slice().shuffle(&mut rng);
+            }
+        }
+        crate_list.truncate(count)
+    }
+
     // second stage - run rudra on them
     let _crate_list: Vec<_> = crate_list
         .into_par_iter()
-        .filter_map(|(krate, path, _crate_stat)| -> Option<Crate> {
+        .filter_map(|(krate, path)| -> Option<Crate> {
             // FIXME: add timeout (RUDRA-43)
             info!("Analysis start: {}", krate.latest_version_tag());
 

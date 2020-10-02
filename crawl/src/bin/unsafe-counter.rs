@@ -63,14 +63,14 @@ fn setup_logging() {
     let log_var_name = "UNSAFE_COUNTER_LOG";
 
     if let None = env::var_os(log_var_name) {
-        env::set_var(log_var_name, "info,tokei::language_type=error");
+        env::set_var(log_var_name, "info,tokei::language::language_type=error");
     }
     pretty_env_logger::init_custom_env(log_var_name);
 }
 
 fn setup_rayon() {
     rayon::ThreadPoolBuilder::new()
-        .num_threads(num_cpus::get())
+        .num_threads(std::cmp::min(16, num_cpus::get()))
         .stack_size(8 * 1024 * 1024) // syn requires bigger stack
         .build_global()
         .expect("Failed to initialize thread pool");

@@ -8,7 +8,7 @@ Rudra is a static analyzer to detect common undefined behaviors in Rust programs
 
 - UNSAFE_COUNTER_LOG
   - Adjust logging level for `unsafe-counter`. Use `.env` file at your discretion.
-  - Default: `info,tokei::language_type=error`
+  - Default: `info,tokei::language::language_type=error`
 
 ### Rudra Runner
 
