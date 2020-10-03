@@ -1,7 +1,7 @@
 //! Unsafe destructor detector
 use rustc_hir::def_id::DefId;
 use rustc_hir::intravisit::{self, NestedVisitorMap, Visitor};
-use rustc_hir::{Block, Expr, HirId, ImplItemId, ItemKind, Node, Unsafety};
+use rustc_hir::{Block, BodyId, Expr, HirId, ImplItemId, ImplItemKind, ItemKind, Node, Unsafety};
 use rustc_middle::ty::TyCtxt;
 
 use snafu::{Backtrace, OptionExt, Snafu};
@@ -112,11 +112,10 @@ mod visitor {
                     if items.len() == 1 {
                         let drop_fn_item_ref = &items[0];
                         let drop_fn_impl_item_id = drop_fn_item_ref.id;
-                        return visitor.check_drop_fn(drop_fn_impl_item_id);
-                    } else {
-                        log_err!(UnexpectedDropItem);
-                        return false;
+                        return visitor.check_impl_item(drop_fn_impl_item_id);
                     }
+                    log_err!(UnexpectedDropItem);
+                    return false;
                 }
             }
 
@@ -124,9 +123,20 @@ mod visitor {
             false
         }
 
-        fn check_drop_fn(&mut self, drop_fn_impl_item_id: ImplItemId) -> bool {
+        fn check_impl_item(&mut self, impl_item_id: ImplItemId) -> bool {
+            let impl_item = self.rcx.tcx().hir().impl_item(impl_item_id);
+            if let ImplItemKind::Fn(_sig, body_id) = &impl_item.kind {
+                self.check_body(*body_id)
+            } else {
+                log_err!(UnexpectedDropItem);
+                false
+            }
+        }
+
+        fn check_body(&mut self, body_id: BodyId) -> bool {
             self.unsafe_found = false;
-            self.visit_nested_impl_item(drop_fn_impl_item_id);
+            let body = self.rcx.tcx().hir().body(body_id);
+            self.visit_body(body);
             self.unsafe_found
         }
     }
@@ -135,7 +145,7 @@ mod visitor {
         type Map = rustc_middle::hir::map::Map<'tcx>;
 
         fn nested_visit_map(&mut self) -> NestedVisitorMap<Self::Map> {
-            NestedVisitorMap::All(self.rcx.tcx().hir())
+            NestedVisitorMap::OnlyBodies(self.rcx.tcx().hir())
         }
 
         fn visit_block(&mut self, block: &'tcx Block<'tcx>) {

@@ -35,16 +35,17 @@ impl rustc_driver::Callbacks for RudraCompilerCalls {
         compiler.session().abort_if_errors();
 
         rudra::log::setup_logging(self.config.verbosity).expect("Rudra failed to initialize");
-        progress_info!("Rudra started");
 
         debug!("Input file name: {}", compiler.input().source_name());
         debug!("Crate name: {}", queries.crate_name().unwrap().peek_mut());
 
+        progress_info!("Rudra started");
         queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
             analyze(tcx, self.config);
         });
-        compiler.session().abort_if_errors();
+        progress_info!("Rudra finished");
 
+        compiler.session().abort_if_errors();
         Compilation::Stop
     }
 }
@@ -151,7 +152,6 @@ fn main() {
         debug!("rustc arguments: {:?}", &rustc_args);
 
         let exit_code = run_compiler(rustc_args, &mut RudraCompilerCalls::new(config));
-        progress_info!("Rudra finished");
         exit_code
     };
 

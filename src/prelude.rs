@@ -14,6 +14,7 @@ pub use crate::report::rudra_report;
 pub enum ExtError {
     PathExpected { backtrace: Backtrace },
     NonFunctionType { backtrace: Backtrace },
+    InvalidOwner { backtrace: Backtrace },
     UnhandledCall { backtrace: Backtrace },
 }
 
@@ -24,6 +25,7 @@ impl AnalysisError for ExtError {
         match self {
             PathExpected { .. } => Unreachable,
             NonFunctionType { .. } => Unreachable,
+            InvalidOwner { .. } => Unreachable,
             UnhandledCall { .. } => Unimplemented,
         }
     }
@@ -106,6 +108,11 @@ impl<'tcx> ExprExtension<'tcx> {
     /// Returns `Some(def_id)` if expression is a function
     /// Returns `None` if expression is not a function or error happens
     pub fn as_fn_def_id(self, tcx: TyCtxt<'tcx>) -> Option<DefId> {
+        if !tcx.has_typeck_results(self.expr.hir_id.owner) {
+            log_err!(InvalidOwner);
+            return None;
+        }
+
         let typeck_tables = tcx.typeck(self.expr.hir_id.owner);
         trace!("as_fn_def_id() on {:?}", self.expr);
         match self.expr.kind {
