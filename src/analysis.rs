@@ -19,20 +19,26 @@ pub trait AnalysisError: Error + ErrorCompat {
         match self.kind() {
             AnalysisErrorKind::Unreachable => {
                 error!("[{:?}] {}", self.kind(), self);
-                if let Some(backtrace) = ErrorCompat::backtrace(self) {
-                    error!("{}", backtrace);
+                if cfg!(feature = "backtraces") {
+                    if let Some(backtrace) = ErrorCompat::backtrace(self) {
+                        error!("Backtrace:\n{:?}", backtrace);
+                    }
                 }
             }
             AnalysisErrorKind::Unimplemented => {
                 info!("[{:?}] {}", self.kind(), self);
-                if let Some(backtrace) = ErrorCompat::backtrace(self) {
-                    info!("{}", backtrace);
+                if cfg!(feature = "backtraces") {
+                    if let Some(backtrace) = ErrorCompat::backtrace(self) {
+                        info!("Backtrace:\n{:?}", backtrace);
+                    }
                 }
             }
             AnalysisErrorKind::OutOfScope => {
                 debug!("[{:?}] {}", self.kind(), self);
-                if let Some(backtrace) = ErrorCompat::backtrace(self) {
-                    debug!("{}", backtrace);
+                if cfg!(feature = "backtraces") {
+                    if let Some(backtrace) = ErrorCompat::backtrace(self) {
+                        debug!("Backtrace:\n{:?}", backtrace);
+                    }
                 }
             }
         }

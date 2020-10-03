@@ -1,3 +1,4 @@
+#![feature(backtrace)]
 #![feature(box_patterns)]
 #![feature(rustc_private)]
 #![feature(try_blocks)]

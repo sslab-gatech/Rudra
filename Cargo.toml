@@ -34,7 +34,7 @@ parking_lot = "0.11"
 rustc_version = "0.2.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.56"
-snafu = "0.6.8"
+snafu = "0.6"
 toml = "0.5.6"
 
 # let rust-analyzer read the source
@@ -48,6 +48,7 @@ rustc_mir = { path = "../rust-nightly-2020-08-26/src/librustc_mir", optional = t
 rustc_span = { path = "../rust-nightly-2020-08-26/src/librustc_span", optional = true }
 
 [features]
+backtraces = ["snafu/backtraces", "snafu/backtraces-impl-backtrace-crate"]
 rust-analyzer = [
     "rustc_driver",
     "rustc_errors",

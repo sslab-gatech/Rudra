@@ -12,9 +12,9 @@ pub use crate::report::rudra_report;
 
 #[derive(Debug, Snafu)]
 pub enum ExtError {
-    PathExpected { backtrace: Backtrace },
     NonFunctionType { backtrace: Backtrace },
     InvalidOwner { backtrace: Backtrace },
+    UnsupportedCall { backtrace: Backtrace },
     UnhandledCall { backtrace: Backtrace },
 }
 
@@ -23,9 +23,9 @@ impl AnalysisError for ExtError {
         use AnalysisErrorKind::*;
         use ExtError::*;
         match self {
-            PathExpected { .. } => Unreachable,
             NonFunctionType { .. } => Unreachable,
             InvalidOwner { .. } => Unreachable,
+            UnsupportedCall { .. } => OutOfScope,
             UnhandledCall { .. } => Unimplemented,
         }
     }
@@ -127,8 +127,13 @@ impl<'tcx> ExprExtension<'tcx> {
                         }
                     }
                 }
+                ExprKind::Field(..) => {
+                    // Example: (self.0)(self.1, self.2);
+                    log_err!(UnsupportedCall);
+                    None
+                }
                 _ => {
-                    log_err!(PathExpected);
+                    log_err!(UnhandledCall);
                     None
                 }
             },
