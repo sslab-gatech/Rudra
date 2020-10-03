@@ -43,7 +43,7 @@ fn setup_logging() {
 
 fn setup_rayon() {
     rayon::ThreadPoolBuilder::new()
-        .num_threads(std::cmp::min(16, num_cpus::get()))
+        .num_threads(num_cpus::get())
         .stack_size(8 * 1024 * 1024)
         .build_global()
         .expect("Failed to initialize thread pool");
@@ -96,7 +96,6 @@ fn main() -> Result<()> {
     let _crate_list: Vec<_> = crate_list
         .into_par_iter()
         .filter_map(|(krate, path)| -> Option<Crate> {
-            // FIXME: add timeout (RUDRA-43)
             info!("Analysis start: {}", krate.latest_version_tag());
 
             let report_path = report_dir
@@ -108,7 +107,7 @@ fn main() -> Result<()> {
                 .join(format!("log-{}", krate.latest_version_tag()));
 
             let rudra_output = run_command_with_env(
-                "cargo rudra",
+                "cargo rudra -j 1",
                 &path,
                 &[
                     ("RUDRA_REPORT_PATH", &report_path),

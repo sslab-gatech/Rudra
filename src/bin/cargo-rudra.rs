@@ -8,8 +8,11 @@ extern crate log as log_crate;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 
 use rustc_version::VersionMeta;
+
+use wait_timeout::ChildExt;
 
 use rudra::log::{self, Verbosity};
 use rudra::{progress_error, progress_info};
@@ -369,15 +372,23 @@ fn in_cargo_rudra() {
         }
 
         progress_info!("Running rudra for target {}:{}", kind, &target.name);
-        let exit_status = cmd
-            .spawn()
-            .expect("could not run cargo check")
-            .wait()
-            .expect("failed to wait for cargo?");
-
-        if !exit_status.success() {
-            show_error("Finished with non-zero exit code");
-        }
+        let mut child = cmd.spawn().expect("could not run cargo check");
+        // 1 hour timeout
+        match child
+            .wait_timeout(Duration::from_secs(60 * 60))
+            .expect("failed to wait for subprocess")
+        {
+            Some(exit_status) => {
+                if !exit_status.success() {
+                    show_error("Finished with non-zero exit code");
+                }
+            }
+            None => {
+                child.kill().expect("failed to kill subprocess");
+                child.wait().expect("failed to wait for subprocess");
+                show_error("Killed due to timeout");
+            }
+        };
     }
 }
 
