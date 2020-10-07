@@ -32,7 +32,7 @@ pub mod utils;
 use rustc_middle::ty::TyCtxt;
 
 use crate::analysis::solver::SolverW1;
-use crate::analysis::{CallGraph, SimpleAnderson, UnsafeDestructor};
+use crate::analysis::{CallGraph, SimpleAnderson, UnsafeDestructor, SendSyncChecker};
 use crate::context::RudraCtxtOwner;
 use crate::log::Verbosity;
 
@@ -47,6 +47,7 @@ pub struct RudraConfig {
     pub call_graph_enabled: bool,
     pub unsafe_destructor_enabled: bool,
     pub simple_anderson_enabled: bool,
+    pub send_sync_enabled: bool,
 }
 
 impl Default for RudraConfig {
@@ -56,6 +57,7 @@ impl Default for RudraConfig {
             call_graph_enabled: false,
             unsafe_destructor_enabled: true,
             simple_anderson_enabled: false,
+            send_sync_enabled: true,
         }
     }
 }
@@ -108,6 +110,14 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: RudraConfig) {
         run_analysis("UnsafeDestructor", || {
             let mut unsafe_destructor = UnsafeDestructor::new(rcx);
             unsafe_destructor.analyze();
+        })
+    }
+
+    // Send/Sync analysis
+    if config.send_sync_enabled {
+        run_analysis("SendSyncChecker", || {
+            let mut send_sync_checker = SendSyncChecker::new(rcx);
+            send_sync_checker.analyze();
         })
     }
 

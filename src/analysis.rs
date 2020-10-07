@@ -2,6 +2,7 @@ mod call_graph;
 mod simple_anderson;
 pub mod solver;
 mod unsafe_destructor;
+mod send_sync_checker;
 
 use rustc_middle::ty::Ty;
 
@@ -10,6 +11,7 @@ use snafu::{Error, ErrorCompat};
 pub use call_graph::CallGraph;
 pub use simple_anderson::SimpleAnderson;
 pub use unsafe_destructor::UnsafeDestructor;
+pub use send_sync_checker::SendSyncChecker;
 
 pub type AnalysisResult<'tcx, T> = Result<T, Box<dyn AnalysisError + 'tcx>>;
 

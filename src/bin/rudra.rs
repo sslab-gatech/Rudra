@@ -105,6 +105,8 @@ fn parse_config() -> (RudraConfig, Vec<String>) {
             "-Zrudra-disable-unsafe-destructor" => {
                 config.unsafe_destructor_enabled = false;
             }
+            "-Zrudra-enable-send-sync" => config.send_sync_enabled = true,
+            "-Zrudra-disable-send-sync" => config.send_sync_enabled = false,
             "-v" => config.verbosity = Verbosity::Verbose,
             "-vv" => config.verbosity = Verbosity::Trace,
             _ => {
