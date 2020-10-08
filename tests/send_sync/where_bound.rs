@@ -14,7 +14,7 @@ where
 
 unsafe impl<P> Sync for Atom3<P>
 where
-    P: Display + Clone
+    P: Copy + Clone
 { }
 
 struct Atom4<P>(P);
