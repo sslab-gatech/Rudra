@@ -1,12 +1,11 @@
 //! Unsafe Send/Sync impl detector
 use rustc_hir::def_id::DefId;
-use rustc_hir::{HirId, ItemKind, Node};
 use rustc_hir::{GenericBound, WherePredicate};
-use rustc_hir::lang_items::LangItem;
-use rustc_span::symbol::sym;
+use rustc_hir::{HirId, ItemKind, Node};
 use rustc_middle::ty::TyCtxt;
+use rustc_span::symbol::sym;
 
-use snafu::{Backtrace, OptionExt, Snafu};
+use snafu::{OptionExt, Snafu};
 
 use crate::algorithm::LocalTraitIter;
 use crate::prelude::*;
@@ -26,15 +25,11 @@ impl<'tcx> SendSyncChecker<'tcx> {
         self.analyze_sync();
     }
 
-    /// Detect cases where the wrapper of T implements `Send`, but T may not be `Send` 
+    /// Detect cases where the wrapper of T implements `Send`, but T may not be `Send`
     fn analyze_send(&mut self) {
         if let Some(send_trait_def_id) = self.rcx.tcx().get_diagnostic_item(sym::send_trait) {
             for impl_item in LocalTraitIter::new(self.rcx, send_trait_def_id) {
-                if find_suspicious_send_or_sync(
-                    self.rcx,
-                    impl_item,
-                    send_trait_def_id
-                ) {
+                if find_suspicious_send_or_sync(self.rcx, impl_item, send_trait_def_id) {
                     let tcx = self.rcx.tcx();
                     rudra_report(Report::with_span(
                         tcx,
@@ -56,13 +51,9 @@ impl<'tcx> SendSyncChecker<'tcx> {
         }
         // key is DefId of trait, value is vec of HirId
         let sync_trait_def_id = unwrap_or!(sync_trait_def_id(self.rcx.tcx()) => return);
-    
+
         for impl_item in LocalTraitIter::new(self.rcx, sync_trait_def_id) {
-            if find_suspicious_send_or_sync(
-                self.rcx,
-                impl_item,
-                sync_trait_def_id
-            ) {
+            if find_suspicious_send_or_sync(self.rcx, impl_item, sync_trait_def_id) {
                 let tcx = self.rcx.tcx();
                 rudra_report(Report::with_span(
                     tcx,
@@ -73,12 +64,10 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 ));
             }
         }
-
     }
 }
 
-
-pub fn find_suspicious_send_or_sync<'tcx>(
+fn find_suspicious_send_or_sync<'tcx>(
     rcx: RudraCtxt<'tcx>,
     hir_id: HirId,
     send_or_sync_trait_def_id: DefId,
@@ -90,7 +79,7 @@ pub fn find_suspicious_send_or_sync<'tcx>(
         if let ItemKind::Impl {
             ref generics,
             of_trait: Some(ref trait_ref),
-            .. 
+            ..
         } = item.kind;
         if Some(send_or_sync_trait_def_id) == trait_ref.trait_def_id();
         then {
@@ -107,7 +96,7 @@ pub fn find_suspicious_send_or_sync<'tcx>(
                     }
                 }
             }
-        
+
             // Inspect trait bounds in `where` clause
             for where_predicate in generics.where_clause.predicates {
                 if let WherePredicate::BoundPredicate(x) = where_predicate {
@@ -128,10 +117,9 @@ pub fn find_suspicious_send_or_sync<'tcx>(
     return true;
 }
 
-
 #[derive(Debug, Snafu)]
 pub enum SendSyncError {
-    CatchAll
+    CatchAll,
 }
 
 impl AnalysisError for SendSyncError {
@@ -139,7 +127,7 @@ impl AnalysisError for SendSyncError {
         use AnalysisErrorKind::*;
         use SendSyncError::*;
         match self {
-            _ => Unreachable,
+            CatchAll => Unreachable,
         }
     }
 }

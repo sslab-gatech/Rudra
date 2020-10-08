@@ -75,7 +75,7 @@ cd rust-nightly-08-26
 git checkout bf4342114
 ```
 
-Add to workspace setting:
+Add to workspace setting (`.vscode/settings.json`):
 ```
 {
     "rust-analyzer.cargo.features": [
