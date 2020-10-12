@@ -47,6 +47,7 @@ rustc_interface = { path = "../rust-nightly-2020-08-26/src/librustc_interface", 
 rustc_middle = { path = "../rust-nightly-2020-08-26/src/librustc_middle", optional = true }
 rustc_mir = { path = "../rust-nightly-2020-08-26/src/librustc_mir", optional = true }
 rustc_span = { path = "../rust-nightly-2020-08-26/src/librustc_span", optional = true }
+rustc_data_structures = { path = "../rust-nightly-2020-08-26/src/librustc_data_structures", optional = true}
 
 [features]
 backtraces = ["snafu/backtraces", "snafu/backtraces-impl-backtrace-crate"]
@@ -58,4 +59,5 @@ rust-analyzer = [
     "rustc_interface",
     "rustc_middle",
     "rustc_span",
+    "rustc_data_structures",
 ]
