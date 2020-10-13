@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import subprocess
 import tempfile
-import toml
+import tomlkit
 import traceback
 import os
 import os.path
@@ -35,7 +35,7 @@ class TestCase:
             # ````
             idx = lines.index("```\n")
             toml_str = ''.join(lines[2:idx])
-            return toml.loads(toml_str)
+            return tomlkit.loads(toml_str)
 
     def __repr__(self):
         return "TestCase(%s)" % self.path
@@ -81,7 +81,8 @@ def run_test(test_case):
                 env=env_dict,
                 check=True,
             )
-            reports = toml.load(report_file.name)
+            with open(report_file.name) as report_file_handle:
+                reports = tomlkit.loads(report_file_handle.read())
             expected_analyzers = set(metadata["expected_analyzers"])
             if "reports" in reports:
                 reported_analyzers = set(map(lambda report: report["analyzer"], reports["reports"]))

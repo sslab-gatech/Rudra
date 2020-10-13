@@ -934,6 +934,7 @@ dependencies = [
  "log",
  "once_cell",
  "parking_lot 0.11.0",
+ "rustc_data_structures",
  "rustc_driver",
  "rustc_errors",
  "rustc_hir",
