@@ -33,7 +33,7 @@ pub mod utils;
 use rustc_middle::ty::TyCtxt;
 
 use crate::analysis::solver::SolverW1;
-use crate::analysis::{CallGraph, SimpleAnderson, UnsafeDestructor, SendSyncChecker};
+use crate::analysis::{CallGraph, SendSyncChecker, SimpleAnderson, UnsafeDestructor};
 use crate::context::RudraCtxtOwner;
 use crate::log::Verbosity;
 

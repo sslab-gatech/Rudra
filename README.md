@@ -54,7 +54,7 @@ export RUSTFLAGS="-L $HOME/.rustup/toolchains/${RUDRA_RUST_CHANNEL}-x86_64-unkno
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.rustup/toolchains/${RUDRA_RUST_CHANNEL}-x86_64-unknown-linux-gnu/lib"
 
 # Test your installation
-cargo run -- --crate-type lib samples/trivial_escape.rs
+cargo run -- --crate-type lib tests/trivial_escape.rs
 ```
 
 Don't forget to add `.env` file for your local development. See "Configurations" for an example.

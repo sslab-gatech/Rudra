@@ -6,4 +6,4 @@ expected_analyzers = []
 !*/
 
 struct Atom<P>(P);
-unsafe impl<P: Copy + Sync> Sync for Atom<P> {}
+unsafe impl<P: Ord + Sync> Sync for Atom<P> {}
