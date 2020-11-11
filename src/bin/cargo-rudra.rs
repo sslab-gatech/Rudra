@@ -6,6 +6,7 @@
 extern crate log as log_crate;
 
 use std::env;
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
@@ -253,14 +254,42 @@ fn main() {
     }
 }
 
-fn target_kind(target: &cargo_metadata::Target) -> &str {
-    if target.kind.iter().any(|s| s == "lib" || s == "rlib") {
-        "lib"
-    } else {
-        target
-            .kind
-            .get(0)
-            .expect("badly formatted cargo metadata: target::kind is an empty array")
+#[repr(u8)]
+enum TargetKind {
+    Library = 0,
+    Bin,
+    Unknown,
+}
+
+impl TargetKind {
+    fn is_lib_str(s: &str) -> bool {
+        s == "lib" || s == "rlib" || s == "staticlib"
+    }
+}
+
+impl From<&cargo_metadata::Target> for TargetKind {
+    fn from(target: &cargo_metadata::Target) -> Self {
+        if target.kind.iter().any(|s| TargetKind::is_lib_str(s)) {
+            TargetKind::Library
+        } else if let Some("bin") = target.kind.get(0).map(|s| s.as_ref()) {
+            TargetKind::Bin
+        } else {
+            TargetKind::Unknown
+        }
+    }
+}
+
+impl Display for TargetKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                TargetKind::Library => "lib",
+                TargetKind::Bin => "bin",
+                TargetKind::Unknown => "unknown",
+            }
+        )
     }
 }
 
@@ -275,25 +304,12 @@ fn in_cargo_rudra() {
     let mut targets: Vec<_> = package.targets.into_iter().collect();
 
     // Ensure `lib` is compiled before `bin`
-    targets.sort_by(|t1, t2| {
-        use std::cmp::Ordering;
-
-        let t1_kind = target_kind(t1);
-        let t2_kind = target_kind(t2);
-
-        if t1_kind < t2_kind {
-            Ordering::Greater
-        } else if t1_kind == t2_kind {
-            Ordering::Equal
-        } else {
-            Ordering::Less
-        }
-    });
+    targets.sort_by_key(|target| TargetKind::from(target) as u8);
 
     for target in targets {
         // Skip `cargo rudra`
         let mut args = std::env::args().skip(2);
-        let kind = target_kind(&target);
+        let kind = TargetKind::from(&target);
 
         // Now we run `cargo check $FLAGS $ARGS`, giving the user the
         // change to add additional arguments. `FLAGS` is set to identify
@@ -301,18 +317,22 @@ fn in_cargo_rudra() {
         let mut cmd = Command::new("cargo");
         cmd.arg("check");
         match kind {
-            "bin" => {
+            TargetKind::Bin => {
                 // Analyze all the binaries.
                 cmd.arg("--bin").arg(&target.name);
             }
-            "lib" | "rlib" => {
+            TargetKind::Library => {
                 // There can be only one lib in a crate.
                 cmd.arg("--lib");
                 // Clean the result to disable Cargo's freshness check
                 clean_package(&package.name);
             }
-            s => {
-                warn!("Target {}:{} is not supported", s, &target.name);
+            TargetKind::Unknown => {
+                warn!(
+                    "Target {}:{} is not supported",
+                    target.kind.as_slice().join("/"),
+                    &target.name
+                );
                 continue;
             }
         }
@@ -422,7 +442,7 @@ fn inside_cargo_rustc() {
     }
 
     fn is_crate_type_lib() -> bool {
-        any_arg_flag("--crate-type", |s| s == "lib" || s == "rlib")
+        any_arg_flag("--crate-type", TargetKind::is_lib_str)
     }
 
     fn run_command(mut cmd: Command) {
