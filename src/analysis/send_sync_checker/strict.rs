@@ -18,14 +18,25 @@ impl<'tcx> SendSyncChecker<'tcx> {
             if let ItemKind::Impl {
                 ref generics,
                 of_trait: Some(ref trait_ref),
+                self_ty,
                 ..
             } = item.kind;
             if Some(sync_trait_def_id) == trait_ref.trait_def_id();
+            // Search for definition for 'the struct of the impl'.
+            if let TyKind::Path(QPath::Resolved(_, path)) = self_ty.kind;
+            if let rustc_hir::def::Res::Def(_, did) = path.res;
+            if let Some(local_def_id) = did.as_local();
+            let hir_id_of_struct = map.local_def_id_to_hir_id(local_def_id);
+            if let Some(Node::Item(ref struct_item)) = map.find(hir_id_of_struct);
+            if let ItemKind::Struct(VariantData::Struct(struct_fields, _), _) = struct_item.kind;
             then {
                 // If `impl Sync` doesn't involve generic parameters, don't catch it.
                 if generics.params.len() == 0 {
                     return false;
                 }
+
+                // Check for `PhantomData<T>`
+                let phantom_indices = self.phantom_indices(struct_fields, did);
 
                 // At the end, this set contains `Symbol.as_u32()`s of generic params that aren't `Sync`
                 let mut suspicious_generic_params = FxHashSet::default();
@@ -36,6 +47,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                     &[sync_trait_def_id],
                     generics.params,
                     &mut suspicious_generic_params,
+                    &phantom_indices[..],
                 );
 
                 // Inspect trait bounds in where clause.
@@ -66,16 +78,28 @@ impl<'tcx> SendSyncChecker<'tcx> {
             if let ItemKind::Impl {
                 ref generics,
                 of_trait: Some(ref trait_ref),
+                self_ty,
                 ..
             } = item.kind;
             if Some(send_trait_def_id) == trait_ref.trait_def_id();
+            // Search for definition for 'the struct of the impl'.
+            if let TyKind::Path(QPath::Resolved(_, path)) = self_ty.kind;
+            if let rustc_hir::def::Res::Def(_, did) = path.res;
+            if let Some(local_def_id) = did.as_local();
+            let hir_id_of_struct = map.local_def_id_to_hir_id(local_def_id);
+            if let Some(Node::Item(ref struct_item)) = map.find(hir_id_of_struct);
+            if let ItemKind::Struct(VariantData::Struct(struct_fields, _), _) = struct_item.kind;
             then {
                 // If `impl Send` doesn't involve generic parameters, don't catch it.
                 if generics.params.len() == 0 {
                     return false;
                 }
 
-                // At the end, this set only contain `Symbol.as_u32()`s of generic params that don't implement `Send`
+                // Check for `PhantomData<T>`
+                let phantom_indices = self.phantom_indices(struct_fields, did);
+
+                // At the end, this set should only contain `Symbol.as_u32()`s of generic params
+                // which may cause safety issues in the `Send` impl.
                 let mut suspicious_generic_params = FxHashSet::default();
 
                 // Inspect immediate trait bounds on generic parameters
@@ -83,11 +107,12 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 self.initialize_suspects(
                     &[send_trait_def_id, sync_trait_def_id, copy_trait_def_id],
                     generics.params,
-                    &mut suspicious_generic_params
+                    &mut suspicious_generic_params,
+                    &phantom_indices[..]
                 );
 
                 // Inspect trait bounds in `where` clause.
-                // Filter out suspects that have `Send` bound in where clause.
+                // Filter out suspects that are `Send` or `Copy` in where clause.
                 self.filter_suspects(
                     &[send_trait_def_id, sync_trait_def_id, copy_trait_def_id],
                     generics.where_clause.predicates,
@@ -107,9 +132,13 @@ impl<'tcx> SendSyncChecker<'tcx> {
         target_trait_def_ids: &[DefId],
         generic_params: &[GenericParam],
         suspicious_generic_params: &mut FxHashSet<u32>,
+        phantom_indices: &[u32],
     ) {
         // Inspect immediate trait bounds on generic parameters
-        for generic_param in generic_params {
+        for (idx, generic_param) in generic_params.iter().enumerate() {
+            if phantom_indices.contains(&(idx as u32)) {
+                continue;
+            }
             if let GenericParamKind::Type { .. } = generic_param.kind {
                 let mut suspicious = true;
 
@@ -181,5 +210,42 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 }
             }
         }
+    }
+
+    /// For a given struct,
+    /// return the indices of `T`s that are inside `PhantomData<T>`
+    fn phantom_indices(
+        &self,
+        struct_fields: &[StructField],
+        struct_did: DefId
+    ) -> Vec<u32> {
+        let mut phantom_params = vec![];
+        for x in struct_fields {
+            if let TyKind::Path(QPath::Resolved(_, b)) = x.ty.kind {
+                if let rustc_hir::def::Res::Def(DefKind::Struct, phantom_did) = b.res {
+                    let type_name = self.rcx.tcx().item_name(phantom_did).to_ident_string();
+                    if type_name == "PhantomData" {
+                        for segment in b.segments {
+                            for generic_arg in segment.generic_args().args {
+                                if let GenericArg::Type(ty) = generic_arg {
+                                    if let TyKind::Path(QPath::Resolved(_, inner_path)) = &ty.kind {
+                                        if let rustc_hir::def::Res::Def(_, inner_did) = inner_path.res {
+                                            phantom_params.push(inner_did);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let mut phantom_indices = vec![];
+        for struct_generic_param in &self.rcx.tcx().generics_of(struct_did).params {
+            if phantom_params.contains(&struct_generic_param.def_id) {
+                phantom_indices.push(struct_generic_param.index);
+            }
+        }
+        return phantom_indices;
     }
 }

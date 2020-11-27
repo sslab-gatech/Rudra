@@ -6,10 +6,11 @@ mod relaxed;
 mod strict;
 
 use rustc_data_structures::fx::FxHashSet;
+use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
 use rustc_hir::QPath;
-use rustc_hir::{GenericBound, GenericParam, GenericParamKind, WherePredicate};
-use rustc_hir::{HirId, ItemKind, Node, TyKind};
+use rustc_hir::{GenericArg, GenericBound, GenericParam, GenericParamKind, WherePredicate};
+use rustc_hir::{HirId, ItemKind, Node, TyKind, VariantData, StructField};
 use rustc_middle::ty::{PredicateAtom, TyCtxt};
 use rustc_span::symbol::sym;
 
