@@ -42,8 +42,15 @@ impl<'tcx> SendSyncChecker<'tcx> {
             if let Some(send_trait_def_id) = self.rcx.tcx().get_diagnostic_item(sym::send_trait);
             if let Some(sync_trait_def_id) = self.rcx.tcx().get_diagnostic_item(sym::sync_trait);
             then {
+                let copy_trait_def_id = unwrap_or!(copy_trait_def_id(self.rcx.tcx()) => return);
+
                 for impl_item in LocalTraitIter::new(self.rcx, send_trait_def_id) {
-                    if self.suspicious_send_strict(impl_item, send_trait_def_id, sync_trait_def_id) {
+                    if self.suspicious_send_strict(
+                        impl_item,
+                        send_trait_def_id,
+                        sync_trait_def_id,
+                        copy_trait_def_id
+                    ) {
                         let tcx = self.rcx.tcx();
                         rudra_report(Report::with_span(
                             tcx,
@@ -60,10 +67,6 @@ impl<'tcx> SendSyncChecker<'tcx> {
 
     /// Detect cases where the wrapper of T implements `Sync`, but T may not be `Sync`
     fn analyze_sync(&self) {
-        // Check Sync Trait
-        fn sync_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
-            convert!(tcx.lang_items().sync_trait().context(CatchAll))
-        }
         // key is DefId of trait, value is vec of HirId
         let sync_trait_def_id = unwrap_or!(sync_trait_def_id(self.rcx.tcx()) => return);
 
@@ -80,6 +83,16 @@ impl<'tcx> SendSyncChecker<'tcx> {
             }
         }
     }
+}
+
+/// Check Copy Trait
+fn copy_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
+    convert!(tcx.lang_items().copy_trait().context(CatchAll))
+}
+
+/// Check Sync Trait
+fn sync_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
+    convert!(tcx.lang_items().sync_trait().context(CatchAll))
 }
 
 #[derive(Debug, Snafu)]

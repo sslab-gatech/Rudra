@@ -31,12 +31,15 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 let mut suspicious_generic_params = FxHashSet::default();
 
                 // Inspect immediate trait bounds on generic parameters
+                // to initialize set of suspects that may not be `Sync`
                 self.initialize_suspects(
                     &[sync_trait_def_id],
                     generics.params,
                     &mut suspicious_generic_params,
                 );
 
+                // Inspect trait bounds in where clause.
+                // Filter out suspects that have `Sync` bound in where clause.
                 self.filter_suspects(
                     &[sync_trait_def_id],
                     generics.where_clause.predicates,
@@ -54,6 +57,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
         hir_id: HirId,
         send_trait_def_id: DefId,
         sync_trait_def_id: DefId,
+        copy_trait_def_id: DefId,
     ) -> bool {
         let map = self.rcx.tcx().hir();
         if_chain! {
@@ -77,7 +81,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 // Inspect immediate trait bounds on generic parameters
                 // to initialize set of suspects that may not be `Send`
                 self.initialize_suspects(
-                    &[send_trait_def_id, sync_trait_def_id],
+                    &[send_trait_def_id, sync_trait_def_id, copy_trait_def_id],
                     generics.params,
                     &mut suspicious_generic_params
                 );
@@ -85,7 +89,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 // Inspect trait bounds in `where` clause.
                 // Filter out suspects that have `Send` bound in where clause.
                 self.filter_suspects(
-                    &[send_trait_def_id, sync_trait_def_id],
+                    &[send_trait_def_id, sync_trait_def_id, copy_trait_def_id],
                     generics.where_clause.predicates,
                     &mut suspicious_generic_params
                 );
