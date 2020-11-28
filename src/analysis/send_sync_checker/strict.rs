@@ -35,7 +35,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                     return false;
                 }
 
-                // Check for `PhantomData<T>`
+                // Find indices of generic params which are enclosed inside PhantomType<T>
                 let phantom_indices = self.phantom_indices(struct_fields, did);
 
                 // At the end, this set contains `Symbol.as_u32()`s of generic params that aren't `Sync`
@@ -95,7 +95,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                     return false;
                 }
 
-                // Check for `PhantomData<T>`
+                // Find indices of generic params which are enclosed inside PhantomType<T>
                 let phantom_indices = self.phantom_indices(struct_fields, did);
 
                 // At the end, this set should only contain `Symbol.as_u32()`s of generic params
