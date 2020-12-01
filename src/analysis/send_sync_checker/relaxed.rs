@@ -1,8 +1,9 @@
 //! Unsafe Send/Sync impl detector (relaxed)
+#![allow(dead_code)]
 
 use super::*;
 
-/// We may not use the relaxed versions at all,
+// We may not use the relaxed versions at all,
 // but keeping them alive just in case..
 impl<'tcx> SendSyncChecker<'tcx> {
     /// Detect suspicious `Send` with relaxed rules.
