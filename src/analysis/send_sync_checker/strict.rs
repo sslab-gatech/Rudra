@@ -22,13 +22,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 ..
             } = item.kind;
             if Some(sync_trait_def_id) == trait_ref.trait_def_id();
-            // Search for definition for 'the struct of the impl'.
-            if let TyKind::Path(QPath::Resolved(_, path)) = self_ty.kind;
-            if let rustc_hir::def::Res::Def(_, did) = path.res;
-            if let Some(local_def_id) = did.as_local();
-            let hir_id_of_struct = map.local_def_id_to_hir_id(local_def_id);
-            if let Some(Node::Item(ref struct_item)) = map.find(hir_id_of_struct);
-            if let ItemKind::Struct(VariantData::Struct(struct_fields, _), _) = struct_item.kind;
+            if let Some((struct_def_id, struct_fields)) = fetch_structfields(&map, &self_ty);
             then {
                 // If `impl Sync` doesn't involve generic parameters, don't catch it.
                 if generics.params.len() == 0 {
@@ -36,7 +30,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 }
 
                 // Find indices of generic params which are enclosed inside PhantomType<T>
-                let phantom_indices = self.phantom_indices(struct_fields, did);
+                let phantom_indices = self.phantom_indices(struct_fields, struct_def_id);
 
                 // At the end, this set contains `Symbol.as_u32()`s of generic params that aren't `Sync`
                 let mut suspicious_generic_params = FxHashSet::default();
@@ -82,13 +76,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 ..
             } = item.kind;
             if Some(send_trait_def_id) == trait_ref.trait_def_id();
-            // Search for definition for 'the struct of the impl'.
-            if let TyKind::Path(QPath::Resolved(_, path)) = self_ty.kind;
-            if let rustc_hir::def::Res::Def(_, did) = path.res;
-            if let Some(local_def_id) = did.as_local();
-            let hir_id_of_struct = map.local_def_id_to_hir_id(local_def_id);
-            if let Some(Node::Item(ref struct_item)) = map.find(hir_id_of_struct);
-            if let ItemKind::Struct(VariantData::Struct(struct_fields, _), _) = struct_item.kind;
+            if let Some((struct_def_id, struct_fields)) = fetch_structfields(&map, &self_ty);
             then {
                 // If `impl Send` doesn't involve generic parameters, don't catch it.
                 if generics.params.len() == 0 {
@@ -96,7 +84,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 }
 
                 // Find indices of generic params which are enclosed inside PhantomType<T>
-                let phantom_indices = self.phantom_indices(struct_fields, did);
+                let phantom_indices = self.phantom_indices(struct_fields, struct_def_id);
 
                 // At the end, this set should only contain `Symbol.as_u32()`s of generic params
                 // which may cause safety issues in the `Send` impl.
@@ -247,5 +235,26 @@ impl<'tcx> SendSyncChecker<'tcx> {
             }
         }
         return phantom_indices;
+    }
+}
+
+/// Using the given HIR map & type info,
+/// return Option<(`DefId` of struct, &[StructField])>
+fn fetch_structfields<'tcx>(
+    map: &'tcx Map,
+    struct_ty: &Ty
+) -> Option<(DefId, &'tcx [StructField<'tcx>])> {
+    if_chain! {
+        if let TyKind::Path(QPath::Resolved(_, path)) = struct_ty.kind;
+        if let rustc_hir::def::Res::Def(_, struct_def_id) = path.res;
+        if let Some(local_def_id) = struct_def_id.as_local();
+        let hir_id_of_struct = map.local_def_id_to_hir_id(local_def_id);
+        if let Some(Node::Item(ref struct_item)) = map.find(hir_id_of_struct);
+        if let ItemKind::Struct(VariantData::Struct(struct_fields, _), _) = struct_item.kind;
+        then {
+            Some((struct_def_id, struct_fields))
+        } else {
+            None
+        }
     }
 }
