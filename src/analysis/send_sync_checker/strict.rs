@@ -202,25 +202,57 @@ impl<'tcx> SendSyncChecker<'tcx> {
 
     /// For a given struct,
     /// return the indices of `T`s that are inside `PhantomData<T>`
-    fn phantom_indices(
-        &self,
-        struct_fields: &[StructField],
-        struct_did: DefId
-    ) -> Vec<u32> {
-        let mut phantom_params = vec![];
+    fn phantom_indices(&self, struct_fields: &[StructField], struct_did: DefId) -> Vec<u32> {
+
+        // dirty helper fn to find generic parameters nested within given `TyKind`s.
+        // returns a vector that include DefIds of embedded generic parameters.
+        // note: return vector can include DefIds of non-leaf inner nodes
+        //       (e.g. DefId of `Option<T>` from `Box<Option<T>>`)
+        fn dig(mut ty_kinds: Vec<&TyKind>) -> Vec<DefId> {
+            let mut phantom_params = vec![];
+
+            use TyKind::*;
+            while let Some(ty_kind) = ty_kinds.pop() {
+                match ty_kind {
+                    Ptr(mut_ty) | Rptr(_, mut_ty) => ty_kinds.push(&mut_ty.ty.kind),
+                    Slice(ty) | Array(ty, _) => ty_kinds.push(&ty.kind),
+                    Tup(ty_arr) => {
+                        for ty in ty_arr.iter() {
+                            ty_kinds.push(&ty.kind);
+                        }
+                    }
+                    Path(QPath::Resolved(_, path)) => {
+                        if let Def(x, did) = path.res {
+                            phantom_params.push(did);
+
+                            use DefKind::*;
+                            if x == Struct || x == Enum || x == Union {
+                                for segment in path.segments {
+                                    for gen_arg in segment.generic_args().args {
+                                        if let GenericArg::Type(ty) = gen_arg {
+                                            ty_kinds.push(&ty.kind);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            return phantom_params;
+        }
+
+        let mut ty_kinds = vec![];
         for x in struct_fields {
             if let TyKind::Path(QPath::Resolved(_, b)) = x.ty.kind {
-                if let rustc_hir::def::Res::Def(DefKind::Struct, phantom_did) = b.res {
+                if let Def(DefKind::Struct, phantom_did) = b.res {
                     let type_name = self.rcx.tcx().item_name(phantom_did).to_ident_string();
                     if type_name == "PhantomData" {
                         for segment in b.segments {
-                            for generic_arg in segment.generic_args().args {
-                                if let GenericArg::Type(ty) = generic_arg {
-                                    if let TyKind::Path(QPath::Resolved(_, inner_path)) = &ty.kind {
-                                        if let rustc_hir::def::Res::Def(_, inner_did) = inner_path.res {
-                                            phantom_params.push(inner_did);
-                                        }
-                                    }
+                            for gen_arg in segment.generic_args().args {
+                                if let GenericArg::Type(ty) = gen_arg {
+                                    ty_kinds.push(&ty.kind);
                                 }
                             }
                         }
@@ -228,6 +260,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 }
             }
         }
+        let phantom_params = dig(ty_kinds);
         let mut phantom_indices = vec![];
         for struct_generic_param in &self.rcx.tcx().generics_of(struct_did).params {
             if phantom_params.contains(&struct_generic_param.def_id) {
@@ -242,7 +275,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
 /// return Option<(`DefId` of struct, &[StructField])>
 fn fetch_structfields<'tcx>(
     map: &'tcx Map,
-    struct_ty: &Ty
+    struct_ty: &Ty,
 ) -> Option<(DefId, &'tcx [StructField<'tcx>])> {
     if_chain! {
         if let TyKind::Path(QPath::Resolved(_, path)) = struct_ty.kind;

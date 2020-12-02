@@ -7,11 +7,10 @@ mod strict;
 
 use rustc_data_structures::fx::FxHashSet;
 use rustc_hir::def::DefKind;
+use rustc_hir::def::Res::Def;
 use rustc_hir::def_id::DefId;
-use rustc_hir::QPath;
 use rustc_hir::{GenericArg, GenericBound, GenericParam, GenericParamKind, WherePredicate};
-use rustc_hir::{HirId, ItemKind, Node, TyKind, VariantData, StructField};
-use rustc_hir::Ty;
+use rustc_hir::{HirId, ItemKind, Node, QPath, StructField, Ty, TyKind, VariantData};
 use rustc_middle::hir::map::Map;
 use rustc_middle::ty::{PredicateAtom, TyCtxt};
 use rustc_span::symbol::sym;
