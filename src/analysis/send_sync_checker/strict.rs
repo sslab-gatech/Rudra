@@ -5,12 +5,12 @@ use super::*;
 impl<'tcx> SendSyncChecker<'tcx> {
     /// Detect suspicious Sync with strict rules.
     /// Report if any of the generic parameters of `impl Sync` aren't Sync.
-    pub fn suspicious_sync_strict(
+    pub fn suspicious_sync(
         &self,
         // HirId of the `Impl Sync` item
         hir_id: HirId,
         sync_trait_def_id: DefId,
-    ) -> bool {
+    ) -> Option<DefId> {
         let map = self.rcx.tcx().hir();
         if_chain! {
             if let Some(node) = map.find(hir_id);
@@ -26,7 +26,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
             then {
                 // If `impl Sync` doesn't involve generic parameters, don't catch it.
                 if generics.params.len() == 0 {
-                    return false;
+                    return None;
                 }
 
                 // Find indices of generic params which are enclosed inside PhantomType<T>
@@ -52,19 +52,23 @@ impl<'tcx> SendSyncChecker<'tcx> {
                     &mut suspicious_generic_params,
                 );
 
-                return !suspicious_generic_params.is_empty();
+                return if suspicious_generic_params.is_empty() {
+                    None
+                } else {
+                    Some(struct_def_id)
+                };
             }
         }
-        return false;
+        return None;
     }
 
-    pub fn suspicious_send_strict(
+    pub fn suspicious_send(
         &self,
         hir_id: HirId,
         send_trait_def_id: DefId,
         sync_trait_def_id: DefId,
         copy_trait_def_id: DefId,
-    ) -> bool {
+    ) -> Option<DefId> {
         let map = self.rcx.tcx().hir();
         if_chain! {
             if let Some(node) = map.find(hir_id);
@@ -80,7 +84,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
             then {
                 // If `impl Send` doesn't involve generic parameters, don't catch it.
                 if generics.params.len() == 0 {
-                    return false;
+                    return None;
                 }
 
                 // Find indices of generic params which are enclosed inside PhantomType<T>
@@ -107,10 +111,14 @@ impl<'tcx> SendSyncChecker<'tcx> {
                     &mut suspicious_generic_params
                 );
 
-                return !suspicious_generic_params.is_empty();
+                return if suspicious_generic_params.is_empty() {
+                    None
+                } else {
+                    Some(struct_def_id)
+                };
             }
         }
-        return false;
+        return None;
     }
 
     /// To `suspicious_generic_params`,
@@ -283,9 +291,14 @@ fn fetch_structfields<'tcx>(
         if let Some(local_def_id) = struct_def_id.as_local();
         let hir_id_of_struct = map.local_def_id_to_hir_id(local_def_id);
         if let Some(Node::Item(ref struct_item)) = map.find(hir_id_of_struct);
-        if let ItemKind::Struct(VariantData::Struct(struct_fields, _), _) = struct_item.kind;
+        if let ItemKind::Struct(x, _) = &struct_item.kind;
         then {
-            Some((struct_def_id, struct_fields))
+            match x {
+                VariantData::Struct(struct_fields, _) | VariantData::Tuple(struct_fields, _) => {
+                    Some((struct_def_id, struct_fields))
+                }
+                _ => None
+            }
         } else {
             None
         }
