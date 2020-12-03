@@ -211,6 +211,31 @@ impl<'tcx> SendSyncChecker<'tcx> {
     /// For a given struct,
     /// return the indices of `T`s that are inside `PhantomData<T>`
     fn phantom_indices(&self, struct_fields: &[StructField], struct_did: DefId) -> Vec<u32> {
+        let mut ty_kinds = vec![];
+        for x in struct_fields {
+            if let TyKind::Path(QPath::Resolved(_, b)) = x.ty.kind {
+                if let Def(DefKind::Struct, phantom_did) = b.res {
+                    let type_name = self.rcx.tcx().item_name(phantom_did).to_ident_string();
+                    if type_name == "PhantomData" {
+                        for segment in b.segments {
+                            for gen_arg in segment.generic_args().args {
+                                if let GenericArg::Type(ty) = gen_arg {
+                                    ty_kinds.push(&ty.kind);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let phantom_params = dig(ty_kinds);
+        let mut phantom_indices = vec![];
+        for struct_generic_param in &self.rcx.tcx().generics_of(struct_did).params {
+            if phantom_params.contains(&struct_generic_param.def_id) {
+                phantom_indices.push(struct_generic_param.index);
+            }
+        }
+        return phantom_indices;
 
         // dirty helper fn to find generic parameters nested within given `TyKind`s.
         // returns a vector that include DefIds of embedded generic parameters.
@@ -250,32 +275,6 @@ impl<'tcx> SendSyncChecker<'tcx> {
             }
             return phantom_params;
         }
-
-        let mut ty_kinds = vec![];
-        for x in struct_fields {
-            if let TyKind::Path(QPath::Resolved(_, b)) = x.ty.kind {
-                if let Def(DefKind::Struct, phantom_did) = b.res {
-                    let type_name = self.rcx.tcx().item_name(phantom_did).to_ident_string();
-                    if type_name == "PhantomData" {
-                        for segment in b.segments {
-                            for gen_arg in segment.generic_args().args {
-                                if let GenericArg::Type(ty) = gen_arg {
-                                    ty_kinds.push(&ty.kind);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        let phantom_params = dig(ty_kinds);
-        let mut phantom_indices = vec![];
-        for struct_generic_param in &self.rcx.tcx().generics_of(struct_did).params {
-            if phantom_params.contains(&struct_generic_param.def_id) {
-                phantom_indices.push(struct_generic_param.index);
-            }
-        }
-        return phantom_indices;
     }
 }
 

@@ -87,15 +87,16 @@ impl<'tcx> SendSyncChecker<'tcx> {
         for impl_item in LocalTraitIter::new(self.rcx, sync_trait_def_id) {
             if let Some(struct_def_id) = self.suspicious_sync(impl_item, sync_trait_def_id) {
                 let tcx = self.rcx.tcx();
-                report_map.entry(struct_def_id).or_insert(Vec::with_capacity(2)).push(
-                    Report::with_span(
+                report_map
+                    .entry(struct_def_id)
+                    .or_insert(Vec::with_capacity(2))
+                    .push(Report::with_span(
                         tcx,
                         ReportLevel::Warning,
                         "SendSyncChecker",
                         "Suspicious impl of `Sync` found",
                         tcx.hir().span(impl_item),
-                    )
-                );
+                    ));
             }
         }
     }
