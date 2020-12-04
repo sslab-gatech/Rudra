@@ -211,24 +211,86 @@ impl<'tcx> SendSyncChecker<'tcx> {
     /// For a given struct,
     /// return the indices of `T`s that are inside `PhantomData<T>`
     fn phantom_indices(&self, struct_fields: &[StructField], struct_did: DefId) -> Vec<u32> {
-        let mut ty_kinds = vec![];
-        for x in struct_fields {
-            if let TyKind::Path(QPath::Resolved(_, b)) = x.ty.kind {
-                if let Def(DefKind::Struct, phantom_did) = b.res {
-                    let type_name = self.rcx.tcx().item_name(phantom_did).to_ident_string();
-                    if type_name == "PhantomData" {
-                        for segment in b.segments {
-                            for gen_arg in segment.generic_args().args {
-                                if let GenericArg::Type(ty) = gen_arg {
-                                    ty_kinds.push(&ty.kind);
+        use TyKind::*;
+        use DefKind::*;
+
+        let mut seed_ty_kinds = struct_fields.iter().map(|x| &x.ty.kind).collect::<Vec<&TyKind>>();
+        let mut phantom_ty_kinds = Vec::<&TyKind>::new();
+
+        // Find `T`s that are not within `PhantomData<_>`
+        let mut non_phantom_params = vec![];
+        while let Some(ty_kind) = seed_ty_kinds.pop() {
+            match ty_kind {
+                Ptr(mut_ty) | Rptr(_, mut_ty) => seed_ty_kinds.push(&mut_ty.ty.kind),
+                Slice(ty) | Array(ty, _) => seed_ty_kinds.push(&ty.kind),
+                Tup(ty_arr) => {
+                    for ty in ty_arr.iter() {
+                        seed_ty_kinds.push(&ty.kind);
+                    }
+                }
+                Path(QPath::Resolved(_, path)) => {
+                    if let Def(x, did) = path.res {
+                        non_phantom_params.push(did);
+
+                        let type_name = self.rcx.tcx().item_name(did).to_ident_string();
+                        let mystery_bag = if type_name == "PhantomData" {
+                            &mut phantom_ty_kinds
+                        } else {
+                            &mut seed_ty_kinds
+                        };
+
+                        if x == Struct || x == Enum || x == Union {
+                            for segment in path.segments {
+                                for gen_arg in segment.generic_args().args {
+                                    if let GenericArg::Type(ty) = gen_arg {
+                                        mystery_bag.push(&ty.kind);
+                                    }
+                                }
+                            }   
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Find `T`s that are within `PhantomData<_>`
+        let mut phantom_params = vec![];
+        while let Some(ty_kind) = phantom_ty_kinds.pop() {
+            match ty_kind {
+                Ptr(mut_ty) | Rptr(_, mut_ty) => phantom_ty_kinds.push(&mut_ty.ty.kind),
+                Slice(ty) | Array(ty, _) => phantom_ty_kinds.push(&ty.kind),
+                Tup(ty_arr) => {
+                    for ty in ty_arr.iter() {
+                        phantom_ty_kinds.push(&ty.kind);
+                    }
+                }
+                Path(QPath::Resolved(_, path)) => {
+                    if let Def(x, did) = path.res {
+                        phantom_params.push(did);
+
+                        if x == Struct || x == Enum || x == Union {
+                            for segment in path.segments {
+                                for gen_arg in segment.generic_args().args {
+                                    if let GenericArg::Type(ty) = gen_arg {
+                                        phantom_ty_kinds.push(&ty.kind);
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                _ => {}
             }
         }
-        let phantom_params = dig(ty_kinds);
+
+        // Check for params that are both inside & outside of `PhantomData<_>`
+        for x in non_phantom_params.into_iter() {
+            if let Some(idx) = phantom_params.iter().position(|e| *e == x) {
+                phantom_params.remove(idx);
+            }
+        }
+
         let mut phantom_indices = vec![];
         for struct_generic_param in &self.rcx.tcx().generics_of(struct_did).params {
             if phantom_params.contains(&struct_generic_param.def_id) {
@@ -236,45 +298,6 @@ impl<'tcx> SendSyncChecker<'tcx> {
             }
         }
         return phantom_indices;
-
-        // dirty helper fn to find generic parameters nested within given `TyKind`s.
-        // returns a vector that include DefIds of embedded generic parameters.
-        // note: return vector can include DefIds of non-leaf inner nodes
-        //       (e.g. DefId of `Option<T>` from `Box<Option<T>>`)
-        fn dig(mut ty_kinds: Vec<&TyKind>) -> Vec<DefId> {
-            let mut phantom_params = vec![];
-
-            use TyKind::*;
-            while let Some(ty_kind) = ty_kinds.pop() {
-                match ty_kind {
-                    Ptr(mut_ty) | Rptr(_, mut_ty) => ty_kinds.push(&mut_ty.ty.kind),
-                    Slice(ty) | Array(ty, _) => ty_kinds.push(&ty.kind),
-                    Tup(ty_arr) => {
-                        for ty in ty_arr.iter() {
-                            ty_kinds.push(&ty.kind);
-                        }
-                    }
-                    Path(QPath::Resolved(_, path)) => {
-                        if let Def(x, did) = path.res {
-                            phantom_params.push(did);
-
-                            use DefKind::*;
-                            if x == Struct || x == Enum || x == Union {
-                                for segment in path.segments {
-                                    for gen_arg in segment.generic_args().args {
-                                        if let GenericArg::Type(ty) = gen_arg {
-                                            ty_kinds.push(&ty.kind);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            return phantom_params;
-        }
     }
 }
 
