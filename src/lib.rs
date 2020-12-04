@@ -117,7 +117,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: RudraConfig) {
     // Send/Sync analysis
     if config.send_sync_enabled {
         run_analysis("SendSyncChecker", || {
-            let mut send_sync_checker = SendSyncChecker::new(rcx);
+            let send_sync_checker = SendSyncChecker::new(rcx);
             send_sync_checker.analyze();
         })
     }
