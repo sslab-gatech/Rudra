@@ -211,10 +211,13 @@ impl<'tcx> SendSyncChecker<'tcx> {
     /// For a given struct,
     /// return the indices of `T`s that are inside `PhantomData<T>`
     fn phantom_indices(&self, struct_fields: &[StructField], struct_did: DefId) -> Vec<u32> {
-        use TyKind::*;
         use DefKind::*;
+        use TyKind::*;
 
-        let mut seed_ty_kinds = struct_fields.iter().map(|x| &x.ty.kind).collect::<Vec<&TyKind>>();
+        let mut seed_ty_kinds = struct_fields
+            .iter()
+            .map(|x| &x.ty.kind)
+            .collect::<Vec<&TyKind>>();
         let mut phantom_ty_kinds = Vec::<&TyKind>::new();
 
         // Find `T`s that are not within `PhantomData<_>`
@@ -246,7 +249,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                                         mystery_bag.push(&ty.kind);
                                     }
                                 }
-                            }   
+                            }
                         }
                     }
                 }
