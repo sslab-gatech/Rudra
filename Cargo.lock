@@ -938,6 +938,7 @@ dependencies = [
  "rustc_driver",
  "rustc_errors",
  "rustc_hir",
+ "rustc_hir_pretty",
  "rustc_index",
  "rustc_interface",
  "rustc_middle",

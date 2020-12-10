@@ -34,14 +34,16 @@ Rudra is a static analyzer to detect common undefined behaviors in Rust programs
 
 ## Development Setup
 
-You need nightly Rust for Rudra and custom Miri for PoC testing.
+You need a specific version of nightly Rust for Rudra development.
+
+(TODO: Check again about MIRI testing)
 
 ```
 # Toolchain setup
 rustup install nightly-2020-08-26
+rustup default nightly-2020-08-26
 rustup component add rustc-dev
 rustup component add miri
-rustup default nightly-2020-08-26
 
 # Environment variable setup, put these in your `.bashrc`
 export RUDRA_RUST_CHANNEL=nightly-2020-08-26
@@ -54,7 +56,7 @@ export RUSTFLAGS="-L $HOME/.rustup/toolchains/${RUDRA_RUST_CHANNEL}-x86_64-unkno
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.rustup/toolchains/${RUDRA_RUST_CHANNEL}-x86_64-unknown-linux-gnu/lib"
 
 # Test your installation
-cargo run -- --crate-type lib tests/trivial_escape.rs
+python test.py
 ```
 
 Don't forget to add `.env` file for your local development. See "Configurations" for an example.
@@ -73,19 +75,14 @@ cd ..
 git clone https://github.com/rust-lang/rust.git rust-nightly-2020-08-26
 cd rust-nightly-08-26
 git checkout bf4342114
+git submodule init
+git submodule update
 ```
 
-Add to workspace setting (`.vscode/settings.json`):
+Then, add this to the workspace setting (`.vscode/settings.json`):
 ```
 {
-    "rust-analyzer.cargo.features": [
-        "rust-analyzer"
-    ],
-    "rust-analyzer.checkOnSave.extraArgs": [
-        "--target-dir",
-        "/home/yechan/rudra-project/rudra/target/check"
-    ],
-    "rust-analyzer.checkOnSave.features": []
+    "rust-analyzer.checkOnSave.features": "<your path to rust-nightly-2020-08-26>/Cargo.toml"
 }
 ```
 
