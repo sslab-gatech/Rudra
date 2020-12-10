@@ -123,7 +123,7 @@ fn phantom_indices<'tcx>(
     substs: &'tcx List<subst::GenericArg<'tcx>>,
 ) -> Vec<u32> {
     // Store indices of gen_params that are in/out of `PhantomData<_>`
-    let (mut in_phantom, mut out_phantom) = (vec![], vec![]);
+    let (mut in_phantom, mut out_phantom) = (FxHashSet::default(), FxHashSet::default());
 
     for variant in &adt_def.variants {
         for field in &variant.fields {
@@ -138,7 +138,7 @@ fn phantom_indices<'tcx>(
                         for x in inner_ty.walk() {
                             if let GenericArgKind::Type(ph_ty) = x.unpack() {
                                 if let ty::TyKind::Param(ty) = ph_ty.kind {
-                                    in_phantom.push(ty.index);
+                                    in_phantom.insert(ty.index);
                                 }
                             }
                         }
@@ -146,7 +146,7 @@ fn phantom_indices<'tcx>(
                     }
 
                     if let ty::TyKind::Param(ty) = inner_ty.kind {
-                        out_phantom.push(ty.index);
+                        out_phantom.insert(ty.index);
                     }
                 }
             }
@@ -154,11 +154,10 @@ fn phantom_indices<'tcx>(
     }
 
     // Check for params that are both inside & outside of `PhantomData<_>`
-    for x in out_phantom.into_iter() {
-        if let Some(idx) = in_phantom.iter().position(|e| *e == x) {
-            in_phantom.remove(idx);
-        }
-    }
+    let in_phantom = in_phantom
+        .into_iter()
+        .filter(|e| !out_phantom.contains(e))
+        .collect();
 
     return in_phantom;
 }
