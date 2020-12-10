@@ -38,27 +38,5 @@ snafu = "0.6"
 toml = "0.5.6"
 wait-timeout = "0.2"
 
-# let rust-analyzer read the source
-rustc_driver = { path = "../rust-nightly-2020-08-26/src/librustc_driver", optional = true }
-rustc_errors = { path = "../rust-nightly-2020-08-26/src/librustc_errors", optional = true }
-rustc_hir = { path = "../rust-nightly-2020-08-26/src/librustc_hir", optional = true }
-rustc_hir_pretty = { path = "../rust-nightly-2020-08-26/src/librustc_hir_pretty", optional = true}
-rustc_index = { path = "../rust-nightly-2020-08-26/src/librustc_index", optional = true }
-rustc_interface = { path = "../rust-nightly-2020-08-26/src/librustc_interface", optional = true }
-rustc_middle = { path = "../rust-nightly-2020-08-26/src/librustc_middle", optional = true }
-rustc_mir = { path = "../rust-nightly-2020-08-26/src/librustc_mir", optional = true }
-rustc_span = { path = "../rust-nightly-2020-08-26/src/librustc_span", optional = true }
-rustc_data_structures = { path = "../rust-nightly-2020-08-26/src/librustc_data_structures", optional = true}
-
 [features]
 backtraces = ["snafu/backtraces", "snafu/backtraces-impl-backtrace-crate"]
-rust-analyzer = [
-    "rustc_driver",
-    "rustc_errors",
-    "rustc_hir",
-    "rustc_index",
-    "rustc_interface",
-    "rustc_middle",
-    "rustc_span",
-    "rustc_data_structures",
-]
