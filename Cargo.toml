@@ -42,6 +42,7 @@ wait-timeout = "0.2"
 rustc_driver = { path = "../rust-nightly-2020-08-26/src/librustc_driver", optional = true }
 rustc_errors = { path = "../rust-nightly-2020-08-26/src/librustc_errors", optional = true }
 rustc_hir = { path = "../rust-nightly-2020-08-26/src/librustc_hir", optional = true }
+rustc_hir_pretty = { path = "../rust-nightly-2020-08-26/src/librustc_hir_pretty", optional = true}
 rustc_index = { path = "../rust-nightly-2020-08-26/src/librustc_index", optional = true }
 rustc_interface = { path = "../rust-nightly-2020-08-26/src/librustc_interface", optional = true }
 rustc_middle = { path = "../rust-nightly-2020-08-26/src/librustc_middle", optional = true }

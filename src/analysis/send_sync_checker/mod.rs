@@ -79,6 +79,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                         "SendSyncChecker",
                         "Suspicious impl of `Send` found",
                         tcx.hir().span(impl_hir_id),
+                        impl_hir_id,
                     ));
             }
         }
@@ -107,6 +108,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                         "SendSyncChecker",
                         "Suspicious impl of `Sync` found",
                         tcx.hir().span(impl_hir_id),
+                        impl_hir_id,
                     ));
             }
         }

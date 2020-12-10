@@ -1,3 +1,4 @@
+use rustc_hir::hir_id::HirId;
 use rustc_middle::ty::TyCtxt;
 use rustc_span::Span;
 
@@ -77,16 +78,25 @@ impl Report {
         analyzer: T,
         description: U,
         span: Span,
+        item_hir_id: HirId,
     ) -> Report
     where
         T: Into<Cow<'static, str>>,
         U: Into<Cow<'static, str>>,
     {
         let source_map = tcx.sess.source_map();
+        let source = if span.from_expansion() {
+            let map = tcx.hir();
+            // User-Friendly report for macro-generated code
+            rustc_hir_pretty::to_string(map.krate(), |state| {
+                state.print_item(map.item(item_hir_id));
+            })
+        } else {
+            source_map
+                .span_to_snippet(span)
+                .unwrap_or_else(|e| format!("unable to get source: {:?}", e))
+        };
         let location = source_map.span_to_string(span);
-        let source = source_map
-            .span_to_snippet(span)
-            .unwrap_or_else(|e| format!("unable to get source: {:?}", e));
 
         Report {
             level,
