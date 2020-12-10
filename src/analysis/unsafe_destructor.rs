@@ -62,6 +62,7 @@ impl<'tcx> UnsafeDestructor<'tcx> {
                         "UnsafeDestructor",
                         "unsafe block detected in drop",
                         tcx.hir().span(impl_item),
+                        impl_item,
                     ));
                 }
                 false => (),
