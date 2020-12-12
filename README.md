@@ -82,7 +82,7 @@ git submodule update
 Then, add this to the workspace setting (`.vscode/settings.json`):
 ```
 {
-    "rust-analyzer.checkOnSave.features": "<your path to rust-nightly-2020-08-26>/Cargo.toml"
+    "rust-analyzer.rustcSource": "<your path to rust-nightly-2020-08-26>/Cargo.toml"
 }
 ```
 
