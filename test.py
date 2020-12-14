@@ -75,7 +75,13 @@ def run_test(test_case):
             env_dict = dict(os.environ)
             env_dict["RUDRA_REPORT_PATH"] = report_file.name
             output = subprocess.run(
-                ["rudra", "--crate-type", "lib", test_case.path],
+                [
+                    "rudra",
+                    "-Zrudra-enable-unsafe-destructor",
+                    "--crate-type",
+                    "lib",
+                    test_case.path
+                ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 env=env_dict,

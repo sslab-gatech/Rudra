@@ -14,7 +14,8 @@ impl<'tcx> Graph for ir::Body<'tcx> {
 
     fn next(&self, id: usize) -> Vec<usize> {
         self.basic_blocks[id]
-            .original_terminator
+            .terminator
+            .original
             .successors()
             .map(|block| block.index())
             .collect()

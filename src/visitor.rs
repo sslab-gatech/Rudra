@@ -22,7 +22,7 @@ impl<'tcx> RelatedFnCollector<'tcx> {
 
         tcx.hir().krate().visit_all_item_likes(&mut collector);
 
-        todo!()
+        collector.hash_map
     }
 }
 

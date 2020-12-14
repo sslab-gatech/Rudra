@@ -1,8 +1,15 @@
-use rustc_hir::def::Res;
-use rustc_hir::def_id::DefId;
-use rustc_hir::{Expr, ExprKind, Unsafety};
-use rustc_middle::ty::{self, subst::SubstsRef, Instance, ParamEnv, Ty, TyCtxt};
+use rustc_hir::{
+    def::Res,
+    def_id::{CrateNum, DefId},
+    Expr, ExprKind, Unsafety,
+};
+use rustc_middle::ty::{
+    self,
+    subst::{GenericArg, SubstsRef},
+    Instance, ParamEnv, Ty, TyCtxt,
+};
 
+use rustc_span::Symbol;
 use snafu::{Backtrace, Snafu};
 pub use snafu::{Error, ErrorCompat, IntoError, ResultExt};
 
@@ -86,6 +93,132 @@ impl<'tcx> TyCtxtExtension<'tcx> {
             }
             _ => convert!(NonFunctionType.fail()),
         }
+    }
+
+    // `clippy_lints::utils::match_def_path` + rustc's `LateContext::match_def_path`
+    pub fn match_def_path(self, def_id: DefId, syms: &[&str]) -> bool {
+        let syms = syms
+            .iter()
+            .map(|p| Symbol::intern(p))
+            .collect::<Vec<Symbol>>();
+
+        let names = self.get_def_path(def_id);
+        names.len() == syms.len() && names.into_iter().zip(syms.iter()).all(|(a, &b)| a == b)
+    }
+
+    // rustc's `LateContext::get_def_path`
+    pub fn get_def_path(&self, def_id: DefId) -> Vec<Symbol> {
+        use rustc_hir::definitions::{DefPathData, DisambiguatedDefPathData};
+        use ty::print::Printer;
+
+        pub struct AbsolutePathPrinter<'tcx> {
+            pub tcx: TyCtxt<'tcx>,
+        }
+
+        impl<'tcx> Printer<'tcx> for AbsolutePathPrinter<'tcx> {
+            type Error = !;
+
+            type Path = Vec<Symbol>;
+            type Region = ();
+            type Type = ();
+            type DynExistential = ();
+            type Const = ();
+
+            fn tcx(&self) -> TyCtxt<'tcx> {
+                self.tcx
+            }
+
+            fn print_region(self, _region: ty::Region<'_>) -> Result<Self::Region, Self::Error> {
+                Ok(())
+            }
+
+            fn print_type(self, _ty: Ty<'tcx>) -> Result<Self::Type, Self::Error> {
+                Ok(())
+            }
+
+            fn print_dyn_existential(
+                self,
+                _predicates: &'tcx ty::List<ty::ExistentialPredicate<'tcx>>,
+            ) -> Result<Self::DynExistential, Self::Error> {
+                Ok(())
+            }
+
+            fn print_const(self, _ct: &'tcx ty::Const<'tcx>) -> Result<Self::Const, Self::Error> {
+                Ok(())
+            }
+
+            fn path_crate(self, cnum: CrateNum) -> Result<Self::Path, Self::Error> {
+                Ok(vec![self.tcx.original_crate_name(cnum)])
+            }
+
+            fn path_qualified(
+                self,
+                self_ty: Ty<'tcx>,
+                trait_ref: Option<ty::TraitRef<'tcx>>,
+            ) -> Result<Self::Path, Self::Error> {
+                if trait_ref.is_none() {
+                    if let ty::Adt(def, substs) = self_ty.kind {
+                        return self.print_def_path(def.did, substs);
+                    }
+                }
+
+                // This shouldn't ever be needed, but just in case:
+                Ok(vec![match trait_ref {
+                    Some(trait_ref) => Symbol::intern(&format!("{:?}", trait_ref)),
+                    None => Symbol::intern(&format!("<{}>", self_ty)),
+                }])
+            }
+
+            fn path_append_impl(
+                self,
+                print_prefix: impl FnOnce(Self) -> Result<Self::Path, Self::Error>,
+                _disambiguated_data: &DisambiguatedDefPathData,
+                self_ty: Ty<'tcx>,
+                trait_ref: Option<ty::TraitRef<'tcx>>,
+            ) -> Result<Self::Path, Self::Error> {
+                let mut path = print_prefix(self)?;
+
+                // This shouldn't ever be needed, but just in case:
+                path.push(match trait_ref {
+                    Some(trait_ref) => Symbol::intern(&format!(
+                        "<impl {} for {}>",
+                        trait_ref.print_only_trait_path(),
+                        self_ty
+                    )),
+                    None => Symbol::intern(&format!("<impl {}>", self_ty)),
+                });
+
+                Ok(path)
+            }
+
+            fn path_append(
+                self,
+                print_prefix: impl FnOnce(Self) -> Result<Self::Path, Self::Error>,
+                disambiguated_data: &DisambiguatedDefPathData,
+            ) -> Result<Self::Path, Self::Error> {
+                let mut path = print_prefix(self)?;
+
+                // Skip `::{{constructor}}` on tuple/unit structs.
+                if let DefPathData::Ctor = disambiguated_data.data {
+                    return Ok(path);
+                }
+
+                path.push(disambiguated_data.data.as_symbol());
+                Ok(path)
+            }
+
+            fn path_generic_args(
+                self,
+                print_prefix: impl FnOnce(Self) -> Result<Self::Path, Self::Error>,
+                _args: &[GenericArg<'tcx>],
+            ) -> Result<Self::Path, Self::Error> {
+                print_prefix(self)
+            }
+        }
+
+        AbsolutePathPrinter { tcx: self.tcx }
+            .print_def_path(def_id, &[])
+            .unwrap()
     }
 }
 

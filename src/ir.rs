@@ -13,14 +13,7 @@ use rustc_middle::{
 #[derive(Debug)]
 pub struct Terminator<'tcx> {
     pub kind: TerminatorKind<'tcx>,
-}
-
-impl<'tcx> Terminator<'tcx> {
-    pub fn unimplemented(msg: impl Into<Cow<'static, str>>) -> Self {
-        Terminator {
-            kind: TerminatorKind::Unimplemented(msg.into()),
-        }
-    }
+    pub original: mir::Terminator<'tcx>,
 }
 
 #[derive(Debug)]
@@ -43,7 +36,6 @@ pub enum TerminatorKind<'tcx> {
 pub struct BasicBlock<'tcx> {
     pub statements: Vec<mir::Statement<'tcx>>,
     pub terminator: Terminator<'tcx>,
-    pub original_terminator: mir::Terminator<'tcx>,
     pub is_cleanup: bool,
 }
 
@@ -62,5 +54,11 @@ pub struct Body<'tcx> {
 impl<'tcx> mir::HasLocalDecls<'tcx> for Body<'tcx> {
     fn local_decls(&self) -> &IndexVec<mir::Local, mir::LocalDecl<'tcx>> {
         &self.original_decls
+    }
+}
+
+impl<'tcx> Body<'tcx> {
+    pub fn terminators(&self) -> impl Iterator<Item = &Terminator<'tcx>> {
+        self.basic_blocks.iter().map(|block| &block.terminator)
     }
 }

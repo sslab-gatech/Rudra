@@ -16,6 +16,14 @@ pub enum MirInstantiationError {
     NotAvailable { def_id: DefId },
 }
 
+impl AnalysisError for MirInstantiationError {
+    fn kind(&self) -> AnalysisErrorKind {
+        match self {
+            MirInstantiationError::NotAvailable { .. } => AnalysisErrorKind::OutOfScope,
+        }
+    }
+}
+
 pub type RudraCtxt<'tcx> = &'tcx RudraCtxtOwner<'tcx>;
 pub type TranslationResult<'tcx, T> = Result<T, MirInstantiationError>;
 
@@ -99,17 +107,16 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
             .map(|statement| statement.clone())
             .collect::<Vec<_>>();
 
-        let original_terminator = basic_block
-            .terminator
-            .as_ref()
-            .expect("Terminator should not be empty at this point")
-            .clone();
-        let terminator = self.translate_terminator(&original_terminator)?;
+        let terminator = self.translate_terminator(
+            basic_block
+                .terminator
+                .as_ref()
+                .expect("Terminator should not be empty at this point"),
+        )?;
 
         Ok(ir::BasicBlock {
             statements,
             terminator,
-            original_terminator,
             is_cleanup: basic_block.is_cleanup,
         })
     }
@@ -164,6 +171,7 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
                     format!("Unknown terminator: {:?}", terminator).into(),
                 ),
             },
+            original: terminator.clone(),
         })
     }
 

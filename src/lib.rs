@@ -2,6 +2,7 @@
 #![feature(box_patterns)]
 #![feature(rustc_private)]
 #![feature(try_blocks)]
+#![feature(never_type)]
 
 extern crate rustc_data_structures;
 extern crate rustc_driver;
@@ -28,6 +29,7 @@ pub mod graph;
 pub mod ir;
 pub mod iter;
 pub mod log;
+pub mod paths;
 pub mod prelude;
 pub mod report;
 pub mod utils;
