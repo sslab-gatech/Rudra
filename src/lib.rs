@@ -35,10 +35,7 @@ pub mod visitor;
 
 use rustc_middle::ty::TyCtxt;
 
-use crate::analysis::solver::SolverW1;
-use crate::analysis::{
-    CallGraph, PanicSafetyChecker, SendSyncChecker, SimpleAnderson, UnsafeDestructor,
-};
+use crate::analysis::{PanicSafetyChecker, SendSyncChecker, UnsafeDestructor};
 use crate::context::RudraCtxtOwner;
 use crate::log::Verbosity;
 
@@ -50,9 +47,7 @@ pub static RUDRA_DEFAULT_ARGS: &[&str] =
 #[derive(Debug, Clone, Copy)]
 pub struct RudraConfig {
     pub verbosity: Verbosity,
-    pub call_graph_enabled: bool,
     pub unsafe_destructor_enabled: bool,
-    pub simple_anderson_enabled: bool,
     pub send_sync_enabled: bool,
     pub panic_safety_enabled: bool,
 }
@@ -61,9 +56,7 @@ impl Default for RudraConfig {
     fn default() -> Self {
         RudraConfig {
             verbosity: Verbosity::Normal,
-            call_graph_enabled: false,
             unsafe_destructor_enabled: false,
-            simple_anderson_enabled: false,
             send_sync_enabled: true,
             panic_safety_enabled: true,
         }
@@ -135,63 +128,5 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: RudraConfig) {
             let panic_safety_checker = PanicSafetyChecker::new(rcx);
             panic_safety_checker.analyze();
         })
-    }
-
-    if config.call_graph_enabled {
-        // collect DefId of all bodies
-        let call_graph = run_analysis("CallGraph", || {
-            let call_graph = CallGraph::new(rcx);
-            info!(
-                "Found {} functions in the call graph",
-                call_graph.num_functions()
-            );
-            call_graph
-        });
-
-        // Simple anderson analysis
-        if config.simple_anderson_enabled {
-            run_analysis("SimpleAnderson", || {
-                let mut simple_anderson = SimpleAnderson::new(rcx);
-
-                for local_instance in call_graph.local_safe_fn_iter() {
-                    let def_path_string = rcx
-                        .tcx()
-                        .hir()
-                        .def_path(local_instance.def.def_id().expect_local())
-                        .to_string_no_crate();
-
-                    // TODO: remove these temporary setups
-                    if def_path_string == "::buffer[0]::{{impl}}[2]::from[0]"
-                        || def_path_string.starts_with("::rudra_test")
-                    {
-                        info!("Found {:?}", local_instance);
-                        println!("Target {}", def_path_string);
-                        simple_anderson.analyze(local_instance);
-
-                        let _solver = SolverW1::solve(&simple_anderson);
-                        // TODO: report solver result
-                    }
-                }
-            })
-        }
-
-        // TODO: remove these temporary setups
-        // Call graph testing
-        for local_instance in call_graph.local_safe_fn_iter() {
-            let def_path_string = rcx
-                .tcx()
-                .hir()
-                .def_path(local_instance.def.def_id().expect_local())
-                .to_string_no_crate();
-
-            if def_path_string == "::buffer[0]::{{impl}}[2]::from[0]"
-                || def_path_string.starts_with("::rudra_test")
-            {
-                info!("Found {:?}", local_instance);
-                for &instance in call_graph.reachable_set(local_instance).iter() {
-                    utils::print_mir(rcx.tcx(), instance);
-                }
-            }
-        }
     }
 }

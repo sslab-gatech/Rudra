@@ -4,7 +4,7 @@ use crate::ir;
 
 pub trait Graph {
     fn len(&self) -> usize;
-    fn next(&self, id: usize) -> Vec<usize>;
+    fn successors(&self, id: usize) -> Vec<usize>;
 }
 
 impl<'tcx> Graph for ir::Body<'tcx> {
@@ -12,22 +12,12 @@ impl<'tcx> Graph for ir::Body<'tcx> {
         self.basic_blocks.len()
     }
 
-    fn next(&self, id: usize) -> Vec<usize> {
-        use ir::TerminatorKind::*;
-        match self.basic_blocks[id].terminator.kind {
-            Goto(n) => vec![n],
-            Return => Vec::new(),
-            StaticCall {
-                cleanup,
-                destination: (_, destination_block),
-                ..
-            } => match cleanup {
-                Some(cleanup_block) => vec![destination_block, cleanup_block],
-                None => vec![destination_block],
-            },
-            Unimplemented(_) => Vec::new(),
-            Dummy(_) => Vec::new(),
-        }
+    fn successors(&self, id: usize) -> Vec<usize> {
+        self.basic_blocks[id]
+            .original_terminator
+            .successors()
+            .map(|block| block.index())
+            .collect()
     }
 }
 
@@ -100,7 +90,7 @@ impl<'a, G: Graph> Scc<'a, G> {
         let num_group = state.nodes_in_group.len();
         let mut group_graph = vec![Vec::new(); num_group];
         for from in 0..num_node {
-            for to in graph.next(from).into_iter() {
+            for to in graph.successors(from).into_iter() {
                 let from_group = state.group_of_node[from];
                 let to_group = state.group_of_node[to];
                 if from_group != to_group {
@@ -136,7 +126,7 @@ impl<'a, G: Graph> Scc<'a, G> {
         state.stack.push(node);
 
         let mut low_link = state.index[node];
-        for next in graph.next(node).into_iter() {
+        for next in graph.successors(node).into_iter() {
             if state.index[next] == 0 {
                 // not visited yet
                 low_link = min(low_link, Scc::traverse(graph, state, next));

@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
-use rustc_hir::{BodyId, HirId};
-use rustc_middle::mir;
-use rustc_middle::ty::{self, Instance, InstanceDef, TyCtxt, TyKind};
+use rustc_hir::{def_id::DefId, BodyId, HirId};
+use rustc_middle::mir::{self, TerminatorKind};
+use rustc_middle::ty::{TyCtxt, TyKind};
 
 use dashmap::DashMap;
 use snafu::Snafu;
@@ -12,29 +12,17 @@ use crate::prelude::*;
 use crate::visitor::{RelatedFnCollector, RelatedItemMap};
 
 #[derive(Debug, Snafu, Clone)]
-pub enum MirInstantiationError<'tcx> {
-    Foreign {
-        instance: Instance<'tcx>,
-    },
-    Virtual {
-        instance: Instance<'tcx>,
-    },
-    NotAvailable {
-        instance: Instance<'tcx>,
-    },
-    UnknownDef {
-        instance: Instance<'tcx>,
-        def: InstanceDef<'tcx>,
-    },
+pub enum MirInstantiationError {
+    NotAvailable { def_id: DefId },
 }
 
 pub type RudraCtxt<'tcx> = &'tcx RudraCtxtOwner<'tcx>;
-pub type TranslationResult<'tcx, T> = Result<T, MirInstantiationError<'tcx>>;
+pub type TranslationResult<'tcx, T> = Result<T, MirInstantiationError>;
 
 /// Maps Instance to MIR and cache the result.
 pub struct RudraCtxtOwner<'tcx> {
     tcx: TyCtxt<'tcx>,
-    translation_cache: DashMap<Instance<'tcx>, Rc<TranslationResult<'tcx, ir::Body<'tcx>>>>,
+    translation_cache: DashMap<DefId, Rc<TranslationResult<'tcx, ir::Body<'tcx>>>>,
     related_item_cache: RelatedItemMap,
 }
 
@@ -64,16 +52,13 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
             .flat_map(|(&k, v)| v.iter().map(move |&body_id| (k, body_id)))
     }
 
-    pub fn instance_body(
-        &self,
-        instance: Instance<'tcx>,
-    ) -> Rc<TranslationResult<'tcx, ir::Body<'tcx>>> {
+    pub fn translate_body(&self, def_id: DefId) -> Rc<TranslationResult<'tcx, ir::Body<'tcx>>> {
         let tcx = self.tcx();
-        let result = self.translation_cache.entry(instance).or_insert_with(|| {
+        let result = self.translation_cache.entry(def_id).or_insert_with(|| {
             Rc::new(
                 try {
-                    let mir_body = Self::find_fn(tcx, instance)?;
-                    self.translate_body(instance, mir_body)?
+                    let mir_body = Self::find_fn(tcx, def_id)?;
+                    self.translate_body_impl(mir_body)?
                 },
             )
         });
@@ -81,9 +66,8 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
         result.clone()
     }
 
-    fn translate_body(
+    fn translate_body_impl(
         &self,
-        instance: Instance<'tcx>,
         body: &mir::Body<'tcx>,
     ) -> TranslationResult<'tcx, ir::Body<'tcx>> {
         let local_decls = body
@@ -95,7 +79,7 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
         let basic_blocks: Vec<_> = body
             .basic_blocks()
             .iter()
-            .map(|basic_block| self.translate_basic_block(instance, basic_block))
+            .map(|basic_block| self.translate_basic_block(basic_block))
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(ir::Body {
@@ -107,7 +91,6 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
 
     fn translate_basic_block(
         &self,
-        instance: Instance<'tcx>,
         basic_block: &mir::BasicBlockData<'tcx>,
     ) -> TranslationResult<'tcx, ir::BasicBlock<'tcx>> {
         let statements = basic_block
@@ -116,34 +99,30 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
             .map(|statement| statement.clone())
             .collect::<Vec<_>>();
 
-        let terminator = self.translate_terminator(
-            instance,
-            basic_block
-                .terminator
-                .as_ref()
-                .expect("Terminator should not be empty at this point"),
-        )?;
+        let original_terminator = basic_block
+            .terminator
+            .as_ref()
+            .expect("Terminator should not be empty at this point")
+            .clone();
+        let terminator = self.translate_terminator(&original_terminator)?;
 
         Ok(ir::BasicBlock {
             statements,
             terminator,
+            original_terminator,
             is_cleanup: basic_block.is_cleanup,
         })
     }
 
     fn translate_terminator(
         &self,
-        instance: Instance<'tcx>,
         terminator: &mir::Terminator<'tcx>,
     ) -> TranslationResult<'tcx, ir::Terminator<'tcx>> {
-        let caller_substs = instance.substs;
-
-        use mir::TerminatorKind::*;
         Ok(ir::Terminator {
             kind: match &terminator.kind {
-                Goto { target } => ir::TerminatorKind::Goto(target.index()),
-                Return => ir::TerminatorKind::Return,
-                Call {
+                TerminatorKind::Goto { target } => ir::TerminatorKind::Goto(target.index()),
+                TerminatorKind::Return => ir::TerminatorKind::Return,
+                TerminatorKind::Call {
                     func: func_operand,
                     args,
                     destination,
@@ -151,40 +130,35 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
                     ..
                 } => {
                     let cleanup = cleanup.clone().map(|block| block.index());
-                    let destination = {
-                        if let Some((place, block)) = destination {
-                            (place.clone(), block.index())
-                        } else {
-                            return Ok(ir::Terminator::unimplemented(
-                                "function call does not return",
-                            ));
-                        }
-                    };
+                    let destination = destination
+                        .clone()
+                        .map(|(place, block)| (place, block.index()));
 
                     if let mir::Operand::Constant(box func) = func_operand {
                         let func_ty = func.literal.ty;
                         match func_ty.kind {
-                            TyKind::FnDef(def_id, callee_substs) => {
-                                let instance = self
-                                    .tcx()
-                                    .ext()
-                                    .monomorphic_resolve(def_id, callee_substs, caller_substs)
-                                    .expect("Unexpected resolve failure");
+                            TyKind::FnDef(def_id, _callee_substs) => {
                                 ir::TerminatorKind::StaticCall {
-                                    target: instance,
+                                    callee_did: def_id,
                                     args: args.clone(),
                                     cleanup,
                                     destination,
                                 }
                             }
-                            TyKind::FnPtr(_) => {
-                                ir::TerminatorKind::Unimplemented("function pointer".into())
-                            }
+                            TyKind::FnPtr(_) => ir::TerminatorKind::FnPtr {
+                                value: func.literal.val.clone(),
+                            },
                             _ => panic!("invalid callee of type {:?}", func_ty),
                         }
                     } else {
                         ir::TerminatorKind::Unimplemented("non-constant function call".into())
                     }
+                }
+                TerminatorKind::Drop { .. } | TerminatorKind::DropAndReplace { .. } => {
+                    // TODO: implement Drop and DropAndReplace terminators
+                    ir::TerminatorKind::Unimplemented(
+                        format!("TODO terminator: {:?}", terminator).into(),
+                    )
                 }
                 _ => ir::TerminatorKind::Unimplemented(
                     format!("Unknown terminator: {:?}", terminator).into(),
@@ -197,55 +171,19 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
         ir::LocalDecl { ty: local_decl.ty }
     }
 
-    /// Try to find MIR function body with given Instance
-    /// this is a combined version of MIRI's find_fn + Rust InterpCx's load_mir
+    /// Try to find MIR function body with def_id.
     fn find_fn(
         tcx: TyCtxt<'tcx>,
-        instance: Instance<'tcx>,
-    ) -> Result<&'tcx mir::Body<'tcx>, MirInstantiationError<'tcx>> {
-        // TODO: apply hooks in rustc MIR evaluator based on this
-        // https://github.com/rust-lang/miri/blob/1037f69bf6dcf73dfbe06453336eeae61ba7c51f/src/shims/mod.rs
-
-        // currently we don't handle any foreign item
-        if tcx.is_foreign_item(instance.def_id()) {
-            return Foreign { instance }.fail();
-        }
-
-        // based on rustc InterpCx's `load_mir()`
-        // https://doc.rust-lang.org/nightly/nightly-rustc/src/rustc_mir/interpret/eval_context.rs.html
-        let def_id = instance.def.with_opt_param();
-        if let Some(def) = def_id.as_local() {
-            if tcx.has_typeck_results(def.did) {
-                if let Some(_) = tcx.typeck_opt_const_arg(def).tainted_by_errors {
-                    // type check failure; shouldn't happen since we already ran `cargo check`
-                    panic!("Type check failed for an item: {:?}", &instance);
-                }
-            }
-        }
-
-        match instance.def {
-            ty::InstanceDef::Item(def) => {
-                if tcx.is_mir_available(def.did) {
-                    if let Some((did, param_did)) = def.as_const_arg() {
-                        Ok(tcx.optimized_mir_of_const_arg((did, param_did)))
-                    } else {
-                        Ok(tcx.optimized_mir(def.did))
-                    }
-                } else {
-                    debug!(
-                        "Skipping an item {:?}, no MIR available for this item",
-                        &instance
-                    );
-                    NotAvailable { instance }.fail()
-                }
-            }
-            ty::InstanceDef::DropGlue(_, _) => Ok(tcx.instance_mir(instance.def)),
-            ty::InstanceDef::Virtual(_, _) => Virtual { instance }.fail(),
-            _ => UnknownDef {
-                instance,
-                def: instance.def,
-            }
-            .fail(),
+        def_id: DefId,
+    ) -> Result<&'tcx mir::Body<'tcx>, MirInstantiationError> {
+        if tcx.is_mir_available(def_id) {
+            Ok(tcx.optimized_mir(def_id))
+        } else {
+            debug!(
+                "Skipping an item {:?}, no MIR available for this item",
+                def_id
+            );
+            NotAvailable { def_id }.fail()
         }
     }
 }

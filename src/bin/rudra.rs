@@ -93,12 +93,6 @@ fn parse_config() -> (RudraConfig, Vec<String>) {
     let mut rustc_args = vec![];
     for arg in std::env::args() {
         match arg.as_str() {
-            "-Zrudra-enable-simple-anderson" => {
-                config.simple_anderson_enabled = true;
-            }
-            "-Zrudra-disable-simple-anderson" => {
-                config.simple_anderson_enabled = false;
-            }
             "-Zrudra-enable-unsafe-destructor" => {
                 config.unsafe_destructor_enabled = true;
             }
@@ -107,6 +101,8 @@ fn parse_config() -> (RudraConfig, Vec<String>) {
             }
             "-Zrudra-enable-send-sync" => config.send_sync_enabled = true,
             "-Zrudra-disable-send-sync" => config.send_sync_enabled = false,
+            "-Zrudra-enable-panic-safety" => config.panic_safety_enabled = true,
+            "-Zrudra-disable-panic-safety" => config.panic_safety_enabled = false,
             "-v" => config.verbosity = Verbosity::Verbose,
             "-vv" => config.verbosity = Verbosity::Trace,
             _ => {

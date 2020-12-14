@@ -1,11 +1,14 @@
 //! Reduced MIR intended to cover many common use cases while keeping the analysis pipeline manageable.
-//! Use the original MIR definition and support all the features would be ideal, but on the other hand it also would be unrealistic for a research project.
-//! We pay the tradeoff up front here, instead of spreading `unimplemented!` all over the place.
+//! Note that this is a translation of non-monomorphized, generic MIR.
+
 use std::borrow::Cow;
 
+use rustc_hir::def_id::DefId;
 use rustc_index::vec::IndexVec;
-use rustc_middle::mir;
-use rustc_middle::ty::{Instance, Ty};
+use rustc_middle::{
+    mir,
+    ty::{self, Ty},
+};
 
 #[derive(Debug)]
 pub struct Terminator<'tcx> {
@@ -25,19 +28,22 @@ pub enum TerminatorKind<'tcx> {
     Goto(usize),
     Return,
     StaticCall {
-        target: Instance<'tcx>,
+        callee_did: DefId,
         args: Vec<mir::Operand<'tcx>>,
         cleanup: Option<usize>,
-        destination: (mir::Place<'tcx>, usize),
+        destination: Option<(mir::Place<'tcx>, usize)>,
+    },
+    FnPtr {
+        value: ty::ConstKind<'tcx>,
     },
     Unimplemented(Cow<'static, str>),
-    Dummy(&'tcx i32),
 }
 
 #[derive(Debug)]
 pub struct BasicBlock<'tcx> {
     pub statements: Vec<mir::Statement<'tcx>>,
     pub terminator: Terminator<'tcx>,
+    pub original_terminator: mir::Terminator<'tcx>,
     pub is_cleanup: bool,
 }
 
