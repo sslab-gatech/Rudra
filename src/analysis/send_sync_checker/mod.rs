@@ -73,12 +73,11 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 self.report_map
                     .entry(adt_def_id)
                     .or_insert(Vec::with_capacity(2))
-                    .push(Report::with_span(
+                    .push(Report::with_hir_id(
                         tcx,
                         ReportLevel::Warning,
                         "SendSyncChecker",
                         "Suspicious impl of `Send` found",
-                        tcx.hir().span(impl_hir_id),
                         impl_hir_id,
                     ));
             }
@@ -102,12 +101,11 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 self.report_map
                     .entry(struct_def_id)
                     .or_insert(Vec::with_capacity(2))
-                    .push(Report::with_span(
+                    .push(Report::with_hir_id(
                         tcx,
                         ReportLevel::Warning,
                         "SendSyncChecker",
                         "Suspicious impl of `Sync` found",
-                        tcx.hir().span(impl_hir_id),
                         impl_hir_id,
                     ));
             }

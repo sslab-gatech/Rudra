@@ -1,4 +1,5 @@
 mod call_graph;
+mod panic_safety;
 mod send_sync_checker;
 mod simple_anderson;
 pub mod solver;
@@ -9,6 +10,7 @@ use rustc_middle::ty::Ty;
 use snafu::{Error, ErrorCompat};
 
 pub use call_graph::CallGraph;
+pub use panic_safety::PanicSafetyChecker;
 pub use send_sync_checker::SendSyncChecker;
 pub use simple_anderson::SimpleAnderson;
 pub use unsafe_destructor::UnsafeDestructor;

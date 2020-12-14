@@ -22,19 +22,23 @@ extern crate log as log_crate;
 #[macro_use]
 mod macros;
 
-pub mod algorithm;
 mod analysis;
 pub mod context;
+pub mod graph;
 pub mod ir;
+pub mod iter;
 pub mod log;
 pub mod prelude;
 pub mod report;
 pub mod utils;
+pub mod visitor;
 
 use rustc_middle::ty::TyCtxt;
 
 use crate::analysis::solver::SolverW1;
-use crate::analysis::{CallGraph, SendSyncChecker, SimpleAnderson, UnsafeDestructor};
+use crate::analysis::{
+    CallGraph, PanicSafetyChecker, SendSyncChecker, SimpleAnderson, UnsafeDestructor,
+};
 use crate::context::RudraCtxtOwner;
 use crate::log::Verbosity;
 
@@ -50,6 +54,7 @@ pub struct RudraConfig {
     pub unsafe_destructor_enabled: bool,
     pub simple_anderson_enabled: bool,
     pub send_sync_enabled: bool,
+    pub panic_safety_enabled: bool,
 }
 
 impl Default for RudraConfig {
@@ -57,9 +62,10 @@ impl Default for RudraConfig {
         RudraConfig {
             verbosity: Verbosity::Normal,
             call_graph_enabled: false,
-            unsafe_destructor_enabled: true,
+            unsafe_destructor_enabled: false,
             simple_anderson_enabled: false,
             send_sync_enabled: true,
+            panic_safety_enabled: true,
         }
     }
 }
@@ -120,6 +126,14 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: RudraConfig) {
         run_analysis("SendSyncChecker", || {
             let send_sync_checker = SendSyncChecker::new(rcx);
             send_sync_checker.analyze();
+        })
+    }
+
+    // Panic Safety analysis
+    if config.panic_safety_enabled {
+        run_analysis("PanicSafety", || {
+            let panic_safety_checker = PanicSafetyChecker::new(rcx);
+            panic_safety_checker.analyze();
         })
     }
 

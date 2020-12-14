@@ -1,6 +1,5 @@
 use rustc_hir::hir_id::HirId;
 use rustc_middle::ty::TyCtxt;
-use rustc_span::Span;
 
 use std::borrow::Cow;
 use std::env;
@@ -72,24 +71,25 @@ pub struct Report {
 }
 
 impl Report {
-    pub fn with_span<T, U>(
+    pub fn with_hir_id<T, U>(
         tcx: TyCtxt<'_>,
         level: ReportLevel,
         analyzer: T,
         description: U,
-        span: Span,
         item_hir_id: HirId,
     ) -> Report
     where
         T: Into<Cow<'static, str>>,
         U: Into<Cow<'static, str>>,
     {
+        let hir_map = tcx.hir();
+        let span = hir_map.span(item_hir_id);
+
         let source_map = tcx.sess.source_map();
         let source = if span.from_expansion() {
-            let map = tcx.hir();
             // User-Friendly report for macro-generated code
-            rustc_hir_pretty::to_string(map.krate(), |state| {
-                state.print_item(map.item(item_hir_id));
+            rustc_hir_pretty::to_string(hir_map.krate(), |state| {
+                state.print_item(hir_map.item(item_hir_id));
             })
         } else {
             source_map

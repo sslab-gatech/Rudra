@@ -6,7 +6,7 @@ use rustc_middle::ty::TyCtxt;
 
 use snafu::{Backtrace, OptionExt, Snafu};
 
-use crate::algorithm::LocalTraitIter;
+use crate::iter::LocalTraitIter;
 use crate::prelude::*;
 use crate::report::{Report, ReportLevel};
 
@@ -49,34 +49,29 @@ impl<'tcx> UnsafeDestructor<'tcx> {
         let drop_trait_def_id = unwrap_or!(drop_trait_def_id(self.rcx.tcx()) => return);
 
         for impl_item in LocalTraitIter::new(self.rcx, drop_trait_def_id) {
-            match visitor::UnsafeDestructorVisitor::check_drop_unsafety(
+            if inner::UnsafeDestructorVisitor::check_drop_unsafety(
                 self.rcx,
                 impl_item,
                 drop_trait_def_id,
             ) {
-                true => {
-                    let tcx = self.rcx.tcx();
-                    rudra_report(Report::with_span(
-                        tcx,
-                        ReportLevel::Warning,
-                        "UnsafeDestructor",
-                        "unsafe block detected in drop",
-                        tcx.hir().span(impl_item),
-                        impl_item,
-                    ));
-                }
-                false => (),
+                let tcx = self.rcx.tcx();
+                rudra_report(Report::with_hir_id(
+                    tcx,
+                    ReportLevel::Warning,
+                    "UnsafeDestructor",
+                    "unsafe block detected in drop",
+                    impl_item,
+                ));
             }
         }
     }
 }
 
-mod visitor {
+mod inner {
     use super::*;
 
     /// This struct finds the implementation for `Drop` trait implementation and
-    /// checks if it contains any unsafe block. This approach will provide false
-    /// positives, which are pruned by heuristics.
+    /// checks if it contains any unsafe block.
     pub struct UnsafeDestructorVisitor<'tcx> {
         rcx: RudraCtxt<'tcx>,
         unsafe_nest_level: usize,
@@ -93,8 +88,7 @@ mod visitor {
         }
 
         /// Given an HIR ID of impl, checks whether `drop()` function contains
-        /// unsafe or not. Returns `None` if the given HIR ID is not an impl for
-        /// `Drop`.
+        /// unsafe or not. Returns false if the given HIR ID is invalid.
         pub fn check_drop_unsafety(
             rcx: RudraCtxt<'tcx>,
             hir_id: HirId,

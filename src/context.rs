@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use rustc_hir::{BodyId, HirId};
 use rustc_middle::mir;
 use rustc_middle::ty::{self, Instance, InstanceDef, TyCtxt, TyKind};
 
@@ -8,6 +9,7 @@ use snafu::Snafu;
 
 use crate::ir;
 use crate::prelude::*;
+use crate::visitor::{RelatedFnCollector, RelatedItemMap};
 
 #[derive(Debug, Snafu, Clone)]
 pub enum MirInstantiationError<'tcx> {
@@ -32,7 +34,8 @@ pub type TranslationResult<'tcx, T> = Result<T, MirInstantiationError<'tcx>>;
 /// Maps Instance to MIR and cache the result.
 pub struct RudraCtxtOwner<'tcx> {
     tcx: TyCtxt<'tcx>,
-    cache: DashMap<Instance<'tcx>, Rc<TranslationResult<'tcx, ir::Body<'tcx>>>>,
+    translation_cache: DashMap<Instance<'tcx>, Rc<TranslationResult<'tcx, ir::Body<'tcx>>>>,
+    related_item_cache: RelatedItemMap,
 }
 
 /// Visit MIR body and returns a Rudra IR function
@@ -42,7 +45,8 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>) -> Self {
         RudraCtxtOwner {
             tcx,
-            cache: DashMap::new(),
+            translation_cache: DashMap::new(),
+            related_item_cache: RelatedFnCollector::collect(tcx),
         }
     }
 
@@ -50,12 +54,22 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
         self.tcx
     }
 
+    pub fn related_items(&self, type_hir_id: HirId) -> Option<&Vec<BodyId>> {
+        self.related_item_cache.get(&type_hir_id)
+    }
+
+    pub fn types_with_related_items(&self) -> impl Iterator<Item = (HirId, BodyId)> + '_ {
+        (&self.related_item_cache)
+            .into_iter()
+            .flat_map(|(&k, v)| v.iter().map(move |&body_id| (k, body_id)))
+    }
+
     pub fn instance_body(
         &self,
         instance: Instance<'tcx>,
     ) -> Rc<TranslationResult<'tcx, ir::Body<'tcx>>> {
         let tcx = self.tcx();
-        let result = self.cache.entry(instance).or_insert_with(|| {
+        let result = self.translation_cache.entry(instance).or_insert_with(|| {
             Rc::new(
                 try {
                     let mir_body = Self::find_fn(tcx, instance)?;
