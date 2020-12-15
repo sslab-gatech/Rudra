@@ -1,0 +1,7 @@
+[[crates]]
+name = 'lock_api'
+version = '0.4.1'
+expected_reports = [
+    ['SendSyncChecker', 'src/mutex.rs:604:1: 607:2'],
+    ['SendSyncChecker', 'src/rwlock.rs:1517:1: 1520:2']
+]

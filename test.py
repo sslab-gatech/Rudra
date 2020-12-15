@@ -5,6 +5,7 @@ import tomlkit
 import traceback
 import os
 import os.path
+import sys
 
 from multiprocessing.pool import ThreadPool
 
@@ -139,3 +140,8 @@ if __name__ == "__main__":
 
     print("False-positives: {}/{}".format(success_cnt["fp"], total_cnt["fp"]))
     print("Normal: {}/{}".format(success_cnt["normal"], total_cnt["normal"]))
+
+    if success_cnt["fp"] == total_cnt["fp"] and success_cnt["normal"] == total_cnt["normal"]:
+        sys.exit(0)
+    else:
+        sys.exit(-1)
