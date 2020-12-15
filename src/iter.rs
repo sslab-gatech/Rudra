@@ -1,9 +1,17 @@
-use rustc_hir::def_id::{DefId, LOCAL_CRATE};
-use rustc_hir::HirId;
+//! A various utility iterators that iterate over Rustc internal items.
+//! Many of these internally use `Vec`. Directly returning that `Vec` might be
+//! more performant, but we are intentionally trying to hide the implementation
+//! detail here.
+
+use rustc_hir::{
+    def_id::{DefId, LOCAL_CRATE},
+    HirId,
+};
 
 use crate::prelude::*;
 
-/// Given a trait `DefId`, this iterator returns all local implementation of that trait.
+/// Given a trait `DefId`, this iterator returns `HirId` of all local impl blocks
+/// that implements that trait.
 pub struct LocalTraitIter {
     inner: std::vec::IntoIter<HirId>,
 }

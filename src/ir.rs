@@ -1,23 +1,19 @@
 //! Reduced MIR intended to cover many common use cases while keeping the analysis pipeline manageable.
-//! Use the original MIR definition and support all the features would be ideal, but on the other hand it also would be unrealistic for a research project.
-//! We pay the tradeoff up front here, instead of spreading `unimplemented!` all over the place.
+//! Note that this is a translation of non-monomorphized, generic MIR.
+
 use std::borrow::Cow;
 
+use rustc_hir::def_id::DefId;
 use rustc_index::vec::IndexVec;
-use rustc_middle::mir;
-use rustc_middle::ty::{Instance, Ty};
+use rustc_middle::{
+    mir,
+    ty::{self, subst::SubstsRef, Ty},
+};
 
 #[derive(Debug)]
 pub struct Terminator<'tcx> {
     pub kind: TerminatorKind<'tcx>,
-}
-
-impl<'tcx> Terminator<'tcx> {
-    pub fn unimplemented(msg: impl Into<Cow<'static, str>>) -> Self {
-        Terminator {
-            kind: TerminatorKind::Unimplemented(msg.into()),
-        }
-    }
+    pub original: mir::Terminator<'tcx>,
 }
 
 #[derive(Debug)]
@@ -25,13 +21,16 @@ pub enum TerminatorKind<'tcx> {
     Goto(usize),
     Return,
     StaticCall {
-        target: Instance<'tcx>,
+        callee_did: DefId,
+        callee_substs: SubstsRef<'tcx>,
         args: Vec<mir::Operand<'tcx>>,
         cleanup: Option<usize>,
-        destination: (mir::Place<'tcx>, usize),
+        destination: Option<(mir::Place<'tcx>, usize)>,
+    },
+    FnPtr {
+        value: ty::ConstKind<'tcx>,
     },
     Unimplemented(Cow<'static, str>),
-    Dummy(&'tcx i32),
 }
 
 #[derive(Debug)]
@@ -56,5 +55,11 @@ pub struct Body<'tcx> {
 impl<'tcx> mir::HasLocalDecls<'tcx> for Body<'tcx> {
     fn local_decls(&self) -> &IndexVec<mir::Local, mir::LocalDecl<'tcx>> {
         &self.original_decls
+    }
+}
+
+impl<'tcx> Body<'tcx> {
+    pub fn terminators(&self) -> impl Iterator<Item = &Terminator<'tcx>> {
+        self.basic_blocks.iter().map(|block| &block.terminator)
     }
 }

@@ -13,21 +13,12 @@ impl<'tcx> Graph for ir::Body<'tcx> {
     }
 
     fn next(&self, id: usize) -> Vec<usize> {
-        use ir::TerminatorKind::*;
-        match self.basic_blocks[id].terminator.kind {
-            Goto(n) => vec![n],
-            Return => Vec::new(),
-            StaticCall {
-                cleanup,
-                destination: (_, destination_block),
-                ..
-            } => match cleanup {
-                Some(cleanup_block) => vec![destination_block, cleanup_block],
-                None => vec![destination_block],
-            },
-            Unimplemented(_) => Vec::new(),
-            Dummy(_) => Vec::new(),
-        }
+        self.basic_blocks[id]
+            .terminator
+            .original
+            .successors()
+            .map(|block| block.index())
+            .collect()
     }
 }
 

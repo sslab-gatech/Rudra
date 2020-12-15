@@ -1,3 +1,10 @@
+/*!
+```rudra-test
+test_type = "normal"
+expected_analyzers = []
+```
+!*/
+
 trait Foo: Sync {}
 
 // `Foo` is `Sync`, so this is okay.
