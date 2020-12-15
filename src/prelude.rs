@@ -3,11 +3,7 @@ use rustc_hir::{
     def_id::{CrateNum, DefId},
     Expr, ExprKind, Unsafety,
 };
-use rustc_middle::ty::{
-    self,
-    subst::{GenericArg, SubstsRef},
-    Instance, ParamEnv, Ty, TyCtxt,
-};
+use rustc_middle::ty::{self, subst::GenericArg, Ty, TyCtxt};
 
 use rustc_span::Symbol;
 use snafu::{Backtrace, Snafu};
@@ -53,33 +49,6 @@ pub struct TyCtxtExtension<'tcx> {
 }
 
 impl<'tcx> TyCtxtExtension<'tcx> {
-    pub fn monomorphic_resolve(
-        self,
-        callee_def_id: DefId,
-        callee_substs: SubstsRef<'tcx>,
-        caller_substs: SubstsRef<'tcx>,
-    ) -> Option<Instance<'tcx>> {
-        let replaced_substs = self.tcx.subst_and_normalize_erasing_regions(
-            caller_substs,
-            ParamEnv::reveal_all(),
-            &callee_substs,
-        );
-        Instance::resolve(
-            self.tcx,
-            ParamEnv::reveal_all(),
-            callee_def_id,
-            replaced_substs,
-        )
-        .unwrap()
-    }
-
-    pub fn fn_type_unsafety_instance(
-        self,
-        instance: Instance<'tcx>,
-    ) -> AnalysisResult<'tcx, Unsafety> {
-        self.fn_type_unsafety(instance.ty(self.tcx, ParamEnv::reveal_all()))
-    }
-
     pub fn fn_type_unsafety(self, ty: Ty<'tcx>) -> AnalysisResult<'tcx, Unsafety> {
         match ty.kind {
             ty::FnDef(..) | ty::FnPtr(_) => {
