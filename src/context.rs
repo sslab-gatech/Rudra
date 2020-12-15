@@ -18,8 +18,9 @@ pub enum MirInstantiationError {
 
 impl AnalysisError for MirInstantiationError {
     fn kind(&self) -> AnalysisErrorKind {
+        use MirInstantiationError::*;
         match self {
-            MirInstantiationError::NotAvailable { .. } => AnalysisErrorKind::OutOfScope,
+            NotAvailable { .. } => AnalysisErrorKind::OutOfScope,
         }
     }
 }
@@ -144,9 +145,10 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
                     if let mir::Operand::Constant(box func) = func_operand {
                         let func_ty = func.literal.ty;
                         match func_ty.kind {
-                            TyKind::FnDef(def_id, _callee_substs) => {
+                            TyKind::FnDef(def_id, callee_substs) => {
                                 ir::TerminatorKind::StaticCall {
                                     callee_did: def_id,
+                                    callee_substs,
                                     args: args.clone(),
                                     cleanup,
                                     destination,

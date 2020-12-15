@@ -27,13 +27,12 @@ pub enum ExtError {
 
 impl AnalysisError for ExtError {
     fn kind(&self) -> AnalysisErrorKind {
-        use AnalysisErrorKind::*;
         use ExtError::*;
         match self {
-            NonFunctionType { .. } => Unreachable,
-            InvalidOwner { .. } => Unreachable,
-            UnsupportedCall { .. } => OutOfScope,
-            UnhandledCall { .. } => Unimplemented,
+            NonFunctionType { .. } => AnalysisErrorKind::Unreachable,
+            InvalidOwner { .. } => AnalysisErrorKind::Unreachable,
+            UnsupportedCall { .. } => AnalysisErrorKind::OutOfScope,
+            UnhandledCall { .. } => AnalysisErrorKind::Unimplemented,
         }
     }
 }
@@ -107,6 +106,7 @@ impl<'tcx> TyCtxtExtension<'tcx> {
     }
 
     // rustc's `LateContext::get_def_path`
+    // This code is compiler version dependent, so it needs to be updated when we upgrade a compiler.
     pub fn get_def_path(&self, def_id: DefId) -> Vec<Symbol> {
         use rustc_hir::definitions::{DefPathData, DisambiguatedDefPathData};
         use ty::print::Printer;
@@ -178,7 +178,8 @@ impl<'tcx> TyCtxtExtension<'tcx> {
             ) -> Result<Self::Path, Self::Error> {
                 let mut path = print_prefix(self)?;
 
-                // This shouldn't ever be needed, but just in case:
+                // LateContext's code says "This shouldn't ever be needed, but just in case"
+                // but it seems that we actually need this?
                 path.push(match trait_ref {
                     Some(trait_ref) => Symbol::intern(&format!(
                         "<impl {} for {}>",

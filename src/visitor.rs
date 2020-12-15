@@ -2,6 +2,9 @@ use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::{intravisit, itemlikevisit::ItemLikeVisitor, Block, BodyId, HirId, ItemKind};
 use rustc_middle::ty::TyCtxt;
 
+/// Maps `HirId` of a type to `BodyId` of related impls.
+pub type RelatedItemMap = FxHashMap<HirId, Vec<BodyId>>;
+
 /// Creates `AdtItemMap` with the given HIR map.
 /// You might want to use `RudraCtxt`'s `related_item_cache` field instead of
 /// directly using this collector.
@@ -9,9 +12,6 @@ pub struct RelatedFnCollector<'tcx> {
     tcx: TyCtxt<'tcx>,
     hash_map: RelatedItemMap,
 }
-
-/// Maps `HirId` of a type to `BodyId` of related impls.
-pub type RelatedItemMap = FxHashMap<HirId, Vec<BodyId>>;
 
 impl<'tcx> RelatedFnCollector<'tcx> {
     pub fn collect(tcx: TyCtxt<'tcx>) -> RelatedItemMap {

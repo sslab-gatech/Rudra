@@ -187,13 +187,12 @@ pub enum SendSyncError {
 
 impl AnalysisError for SendSyncError {
     fn kind(&self) -> AnalysisErrorKind {
-        use AnalysisErrorKind::*;
         use SendSyncError::*;
         match self {
-            CopyTraitNotFound => Unreachable,
-            SendTraitNotFound => Unreachable,
-            SyncTraitNotFound => Unreachable,
-            CatchAll => Unreachable,
+            CopyTraitNotFound => AnalysisErrorKind::Unreachable,
+            SendTraitNotFound => AnalysisErrorKind::Unreachable,
+            SyncTraitNotFound => AnalysisErrorKind::Unreachable,
+            CatchAll => AnalysisErrorKind::Unreachable,
         }
     }
 }

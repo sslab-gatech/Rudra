@@ -7,7 +7,7 @@ use rustc_hir::def_id::DefId;
 use rustc_index::vec::IndexVec;
 use rustc_middle::{
     mir,
-    ty::{self, Ty},
+    ty::{self, subst::SubstsRef, Ty},
 };
 
 #[derive(Debug)]
@@ -22,6 +22,7 @@ pub enum TerminatorKind<'tcx> {
     Return,
     StaticCall {
         callee_did: DefId,
+        callee_substs: SubstsRef<'tcx>,
         args: Vec<mir::Operand<'tcx>>,
         cleanup: Option<usize>,
         destination: Option<(mir::Place<'tcx>, usize)>,

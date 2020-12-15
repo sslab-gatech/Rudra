@@ -20,13 +20,12 @@ pub enum UnsafeDestructorError {
 
 impl AnalysisError for UnsafeDestructorError {
     fn kind(&self) -> AnalysisErrorKind {
-        use AnalysisErrorKind::*;
         use UnsafeDestructorError::*;
         match self {
-            DropTraitNotFound => Unreachable,
-            UnexpectedDropItem => Unreachable,
-            InvalidHirId { .. } => Unreachable,
-            PushPopBlock { .. } => Unreachable,
+            DropTraitNotFound => AnalysisErrorKind::Unreachable,
+            UnexpectedDropItem => AnalysisErrorKind::Unreachable,
+            InvalidHirId { .. } => AnalysisErrorKind::Unreachable,
+            PushPopBlock { .. } => AnalysisErrorKind::Unreachable,
         }
     }
 }
