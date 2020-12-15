@@ -136,17 +136,14 @@ mod inner {
                         let ext = self.rcx.tcx().ext();
 
                         // Check for lifetime bypass
-                        static LIFETIME_BYPASS_LIST: [&[&str]; 10] = [
+                        static LIFETIME_BYPASS_LIST: [&[&str]; 7] = [
                             &paths::PTR_READ,
                             &paths::PTR_WRITE,
                             &paths::PTR_DIRECT_WRITE,
-                            &paths::PTR_SLICE_FROM_RAW_PARTS,
-                            &paths::PTR_SLICE_FROM_RAW_PARTS_MUT,
-                            &paths::SLICE_FROM_RAW_PARTS,
-                            &paths::SLICE_FROM_RAW_PARTS_MUT,
                             &paths::INTRINSICS_COPY,
                             &paths::INTRINSICS_COPY_NONOVERLAPPING,
                             &paths::VEC_SET_LEN,
+                            &paths::VEC_FROM_RAW_PARTS,
                         ];
 
                         for path in &LIFETIME_BYPASS_LIST {
