@@ -3,7 +3,8 @@ use rustc_hir::{intravisit, itemlikevisit::ItemLikeVisitor, Block, BodyId, HirId
 use rustc_middle::ty::TyCtxt;
 
 /// Maps `HirId` of a type to `BodyId` of related impls.
-pub type RelatedItemMap = FxHashMap<HirId, Vec<BodyId>>;
+/// Free-standing (top level) functions and default trait impls have `None` as a key.
+pub type RelatedItemMap = FxHashMap<Option<HirId>, Vec<BodyId>>;
 
 /// Creates `AdtItemMap` with the given HIR map.
 /// You might want to use `RudraCtxt`'s `related_item_cache` field instead of
@@ -28,6 +29,7 @@ impl<'tcx> RelatedFnCollector<'tcx> {
 
 impl<'tcx> ItemLikeVisitor<'tcx> for RelatedFnCollector<'tcx> {
     fn visit_item(&mut self, item: &'tcx rustc_hir::Item<'tcx>) {
+        let hir_map = self.tcx.hir();
         match &item.kind {
             ItemKind::Impl {
                 unsafety: _unsafety,
@@ -36,30 +38,37 @@ impl<'tcx> ItemLikeVisitor<'tcx> for RelatedFnCollector<'tcx> {
                 items: impl_items,
                 ..
             } => {
-                let hir_map = self.tcx.hir();
-                let key = self_ty.hir_id;
+                let key = Some(self_ty.hir_id);
                 let entry = self.hash_map.entry(key).or_insert(Vec::new());
                 entry.extend(impl_items.iter().filter_map(|impl_item_ref| {
                     let hir_id = impl_item_ref.id.hir_id;
                     hir_map.maybe_body_owned_by(hir_id)
                 }));
             }
-            // We currently don't collect freestanding functions and default implementations
-            // in trait definitions as related items to the type. In long term
-            // we should consider them, but it's probably okay for now since
-            // they tend to use unsafe less often than other code.
-            ItemKind::Trait(_is_auto, _unsafety, _generics, _generic_bounds, _trait_item_ref) => (),
-            ItemKind::Fn(_fn_sig, _generics, _body_id) => (),
+            // Free-standing (top level) functions and default trait impls have `None` as a key.
+            ItemKind::Trait(_is_auto, _unsafety, _generics, _generic_bounds, trait_items) => {
+                let key = None;
+                let entry = self.hash_map.entry(key).or_insert(Vec::new());
+                entry.extend(trait_items.iter().filter_map(|trait_item_ref| {
+                    let hir_id = trait_item_ref.id.hir_id;
+                    hir_map.maybe_body_owned_by(hir_id)
+                }));
+            }
+            ItemKind::Fn(_fn_sig, _generics, body_id) => {
+                let key = None;
+                let entry = self.hash_map.entry(key).or_insert(Vec::new());
+                entry.push(*body_id);
+            }
             _ => (),
         }
     }
 
     fn visit_trait_item(&mut self, _trait_item: &'tcx rustc_hir::TraitItem<'tcx>) {
-        // We don't process items inside trait blocks here
+        // We don't process items inside trait blocks
     }
 
     fn visit_impl_item(&mut self, _impl_item: &'tcx rustc_hir::ImplItem<'tcx>) {
-        // We don't process items inside impl blocks here
+        // We don't process items inside impl blocks
     }
 }
 
