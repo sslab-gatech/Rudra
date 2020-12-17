@@ -22,14 +22,14 @@ jobs:
       env:
         cache-name: cache-rust-toolchain
       with:
-        path: ~/.rustup/toolchains/nightly-2020-08-26-x86_64-unknown-linux-gnu
-        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('bin/**', 'lib/**') }}
+        path: ~/.rustup/toolchains
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('ci/setup_toolchains.sh') }}
         restore-keys: |
           ${{ runner.os }}-build-${{ env.cache-name }}-
           ${{ runner.os }}-build-
           ${{ runner.os }}-
-    - name: Toolchain setup
-      run: ci/toolchain_setup.sh
+    - name: Setup toolchains
+      run: ci/setup_toolchains.sh
 
     - name: Build
       run: ci/build.sh
