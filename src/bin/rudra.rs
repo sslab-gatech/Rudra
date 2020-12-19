@@ -47,7 +47,12 @@ impl rustc_driver::Callbacks for RudraCompilerCalls {
         progress_info!("Rudra finished");
 
         compiler.session().abort_if_errors();
-        Compilation::Stop
+
+        if self.config.act_as_compiler {
+            Compilation::Continue
+        } else {
+            Compilation::Stop
+        }
     }
 }
 
@@ -93,6 +98,7 @@ fn parse_config() -> (RudraConfig, Vec<String>) {
     let mut rustc_args = vec![];
     for arg in std::env::args() {
         match arg.as_str() {
+            "-Zrudra-act-as-compiler" => config.act_as_compiler = true,
             "-Zrudra-enable-unsafe-destructor" => {
                 config.unsafe_destructor_enabled = true;
             }

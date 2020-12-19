@@ -1,0 +1,7 @@
+[package]
+name = "rudra-xargo"
+description = "A dummy project for building libstd with rudra."
+version = "0.0.0"
+
+[lib]
+path = "lib.rs"

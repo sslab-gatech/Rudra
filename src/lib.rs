@@ -49,6 +49,7 @@ pub static RUDRA_DEFAULT_ARGS: &[&str] =
 #[derive(Debug, Clone, Copy)]
 pub struct RudraConfig {
     pub verbosity: Verbosity,
+    pub act_as_compiler: bool,
     pub unsafe_destructor_enabled: bool,
     pub send_sync_enabled: bool,
     pub panic_safety_enabled: bool,
@@ -58,6 +59,7 @@ impl Default for RudraConfig {
     fn default() -> Self {
         RudraConfig {
             verbosity: Verbosity::Normal,
+            act_as_compiler: false,
             unsafe_destructor_enabled: false,
             send_sync_enabled: true,
             panic_safety_enabled: true,

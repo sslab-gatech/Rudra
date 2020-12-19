@@ -293,6 +293,11 @@ impl Display for TargetKind {
     }
 }
 
+/// Get the command name for "cargo check".
+fn cargo_check() -> String {
+    std::env::var("CARGO_CHECK").unwrap_or_else(|_| "cargo-check".to_owned())
+}
+
 fn in_cargo_rudra() {
     let verbose = has_arg_flag("-v");
 
@@ -314,8 +319,7 @@ fn in_cargo_rudra() {
         // Now we run `cargo check $FLAGS $ARGS`, giving the user the
         // change to add additional arguments. `FLAGS` is set to identify
         // this target. The user gets to control what gets actually passed to Rudra.
-        let mut cmd = Command::new("cargo");
-        cmd.arg("check");
+        let mut cmd = Command::new(cargo_check());
         match kind {
             TargetKind::Bin => {
                 // Analyze all the binaries.
@@ -464,7 +468,21 @@ fn inside_cargo_rustc() {
 
     // TODO: Miri sets custom sysroot here, check if it is needed for us (RUDRA-30)
 
-    let needs_rudra_analysis = contains_target_flag() && is_target_crate();
+    let mut needs_rudra_analysis = contains_target_flag() && is_target_crate();
+
+    // Perform analysis if the crate being compiled is in the RUDRA_ALSO_ANALYZE
+    // environment variable.
+    if let (Ok(cargo_pkg_name), Ok(rudra_also_analyze_crates)) =
+        (env::var("CARGO_PKG_NAME"), env::var("RUDRA_ALSO_ANALYZE"))
+    {
+        if rudra_also_analyze_crates
+            .split(',')
+            .any(|x| x.to_lowercase() == cargo_pkg_name.to_lowercase())
+        {
+            needs_rudra_analysis = true;
+        }
+    }
+
     if needs_rudra_analysis {
         let mut cmd = Command::new(find_rudra());
         cmd.args(std::env::args().skip(2)); // skip `cargo-rudra rustc`
