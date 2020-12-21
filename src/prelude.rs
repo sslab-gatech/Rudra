@@ -64,6 +64,8 @@ impl<'tcx> TyCtxtExtension<'tcx> {
     }
 
     // `clippy_lints::utils::match_def_path` + rustc's `LateContext::match_def_path`
+    /// Checks if the given def_id matches the path string.
+    /// Prefer [`crate::paths::PathSet`] when comparing a single definition against multiple paths.
     pub fn match_def_path(self, def_id: DefId, syms: &[&str]) -> bool {
         let syms = syms
             .iter()
@@ -76,6 +78,7 @@ impl<'tcx> TyCtxtExtension<'tcx> {
 
     // rustc's `LateContext::get_def_path`
     // This code is compiler version dependent, so it needs to be updated when we upgrade a compiler.
+    // The current version is based on nightly-2020-08-26
     pub fn get_def_path(&self, def_id: DefId) -> Vec<Symbol> {
         use rustc_hir::definitions::{DefPathData, DisambiguatedDefPathData};
         use ty::print::Printer;

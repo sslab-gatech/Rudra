@@ -3,8 +3,11 @@ struct PathsDiscovery;
 impl PathsDiscovery {
     fn discover() {
         unsafe {
+            std::mem::transmute::<_, *mut i32>(12 as *const i32);
+
             std::ptr::read(12 as *const i32);
             std::ptr::write(12 as *mut i32, 34);
+            (12 as *const i32).read();
             (12 as *mut i32).write(34);
 
             std::intrinsics::copy(12 as *const i32, 34 as *mut i32, 56);

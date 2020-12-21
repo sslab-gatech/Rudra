@@ -136,21 +136,10 @@ mod inner {
                         let ext = self.rcx.tcx().ext();
 
                         // Check for lifetime bypass
-                        static LIFETIME_BYPASS_LIST: [&[&str]; 7] = [
-                            &paths::PTR_READ,
-                            &paths::PTR_WRITE,
-                            &paths::PTR_DIRECT_WRITE,
-                            &paths::INTRINSICS_COPY,
-                            &paths::INTRINSICS_COPY_NONOVERLAPPING,
-                            &paths::VEC_SET_LEN,
-                            &paths::VEC_FROM_RAW_PARTS,
-                        ];
-
-                        for path in &LIFETIME_BYPASS_LIST {
-                            if ext.match_def_path(callee_did, path) {
-                                self.status.lifetime_bypass =
-                                    Some(terminator.original.source_info.span);
-                            }
+                        let symbol_vec = ext.get_def_path(callee_did);
+                        if paths::LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
+                            self.status.lifetime_bypass =
+                                Some(terminator.original.source_info.span);
                         }
 
                         // Check for generic function calls
