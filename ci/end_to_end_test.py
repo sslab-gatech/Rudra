@@ -16,13 +16,17 @@ def run_rudra(crate_name, crate_path):
     with tempfile.NamedTemporaryFile(prefix="rudra") as report_file:
         env_dict = dict(os.environ)
         env_dict["RUDRA_REPORT_PATH"] = report_file.name
-        output = subprocess.run(
-            ["sh", "-c", "cd %s ; cargo rudra" % crate_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            env=env_dict,
-            check=True,
-        )
+        try:
+            output = subprocess.run(
+                ["sh", "-c", "cd %s ; cargo rudra" % crate_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                env=env_dict,
+                check=True,
+            )
+        except subprocess.CalledProcessError as err:
+            print(err.stdout, file=sys.stderr)
+            raise err
         with open(report_file.name + '-lib-' + crate_name) as report_file_handle:
             return tomlkit.loads(report_file_handle.read())['reports']
 
