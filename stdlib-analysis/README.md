@@ -29,14 +29,14 @@ and uses `xargo` to build the standard library.
 
 ## I want to analyze a different Rust version
 
-Sure thing, just use the `XARGO_SRC` variable. For example you can compile the
-latest nightly Rust standard library with:
+Sure thing, just use the `XARGO_RUST_SRC` variable. For example you can compile
+the latest nightly Rust standard library with:
 
 ```bash
 rustup toolchain install nightly
 rustup +nightly component add rust-src
 
-export XARGO_SRC=/home/ammar/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/
+export XARGO_RUST_SRC=/home/ammar/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library
 ./rudra_analyze_std.sh
 ```
 
