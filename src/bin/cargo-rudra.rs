@@ -471,7 +471,8 @@ fn inside_cargo_rustc() {
 
     // TODO: Miri sets custom sysroot here, check if it is needed for us (RUDRA-30)
 
-    let mut needs_rudra_analysis = contains_target_flag() && is_target_crate();
+    let is_direct_target = contains_target_flag() && is_target_crate();
+    let mut is_additional_target = false;
 
     // Perform analysis if the crate being compiled is in the RUDRA_ALSO_ANALYZE
     // environment variable.
@@ -482,11 +483,11 @@ fn inside_cargo_rustc() {
             .split(',')
             .any(|x| x.to_lowercase() == cargo_pkg_name.to_lowercase())
         {
-            needs_rudra_analysis = true;
+            is_additional_target = true;
         }
     }
 
-    if needs_rudra_analysis {
+    if is_direct_target || is_additional_target {
         let mut cmd = Command::new(find_rudra());
         cmd.args(std::env::args().skip(2)); // skip `cargo-rudra rustc`
 
@@ -505,7 +506,7 @@ fn inside_cargo_rustc() {
     }
 
     // Libraries might be used for dependency, so we need to analyze and build it.
-    if !needs_rudra_analysis || is_crate_type_lib() {
+    if !is_direct_target || is_crate_type_lib() {
         let mut cmd = Command::new(find_rudra());
         cmd.args(std::env::args().skip(2)); // skip `cargo-rudra rustc`
 

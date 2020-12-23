@@ -7,4 +7,4 @@ export RUDRA_USE_XARGO_INSTEAD_OF_CARGO="true"
 rm -rf "$XARGO_HOME"
 
 # Pass any other arguments as-is to rudra.
-cargo rudra -- -Zrudra-act-as-compiler "$@"
+cargo rudra -- "$@"
