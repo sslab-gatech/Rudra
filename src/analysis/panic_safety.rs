@@ -6,7 +6,7 @@ use snafu::{Backtrace, Snafu};
 
 use crate::prelude::*;
 use crate::{
-    ir, paths,
+    graph, ir, paths,
     report::{Report, ReportLevel},
     visitor::ContainsUnsafe,
 };
@@ -27,13 +27,13 @@ impl AnalysisError for PanicSafetyError {
     }
 }
 
-pub struct PanicSafetyChecker<'tcx> {
+pub struct PanicSafetyAnalyzer<'tcx> {
     rcx: RudraCtxt<'tcx>,
 }
 
-impl<'tcx> PanicSafetyChecker<'tcx> {
+impl<'tcx> PanicSafetyAnalyzer<'tcx> {
     pub fn new(rcx: RudraCtxt<'tcx>) -> Self {
-        PanicSafetyChecker { rcx }
+        PanicSafetyAnalyzer { rcx }
     }
 
     pub fn analyze(self) {
@@ -43,7 +43,7 @@ impl<'tcx> PanicSafetyChecker<'tcx> {
         // Iterates all (type, related function) pairs
         for (_ty_hir_id, body_id) in self.rcx.types_with_related_items() {
             if let Some(panic_safety_status) =
-                inner::PanicSafetyVisitor::analyze_body(self.rcx, body_id)
+                inner::PanicSafetyBodyAnalyzer::analyze_body(self.rcx, body_id)
             {
                 if panic_safety_status.is_unsafe() {
                     rudra_report(Report::with_hir_id(
@@ -67,25 +67,30 @@ mod inner {
 
     #[derive(Debug, Default)]
     pub struct PanicSafetyStatus {
-        lifetime_bypass: Option<Span>,
-        panicking_function: Option<Span>,
+        lifetime_bypass: Vec<Span>,
+        panicking_function: Vec<Span>,
+        is_unsafe: bool,
     }
 
     impl PanicSafetyStatus {
         pub fn is_unsafe(&self) -> bool {
-            self.lifetime_bypass.is_some() && self.panicking_function.is_some()
+            self.is_unsafe
         }
     }
 
-    pub struct PanicSafetyVisitor<'tcx> {
+    pub struct PanicSafetyBodyAnalyzer<'a, 'tcx> {
         rcx: RudraCtxt<'tcx>,
+        body: &'a ir::Body<'tcx>,
+        param_env: ParamEnv<'tcx>,
         status: PanicSafetyStatus,
     }
 
-    impl<'tcx> PanicSafetyVisitor<'tcx> {
-        fn new(rcx: RudraCtxt<'tcx>) -> Self {
-            PanicSafetyVisitor {
+    impl<'a, 'tcx> PanicSafetyBodyAnalyzer<'a, 'tcx> {
+        fn new(rcx: RudraCtxt<'tcx>, param_env: ParamEnv<'tcx>, body: &'a ir::Body<'tcx>) -> Self {
+            PanicSafetyBodyAnalyzer {
                 rcx,
+                body,
+                param_env,
                 status: Default::default(),
             }
         }
@@ -99,7 +104,7 @@ mod inner {
                 &["rudra_paths_discovery", "PathsDiscovery", "discover"],
             ) {
                 // Special case for paths discovery
-                trace_body(rcx, body_did);
+                trace_calls_in_body(rcx, body_did);
                 None
             } else if ContainsUnsafe::contains_unsafe(rcx.tcx(), body_id) {
                 match rcx.translate_body(body_did).as_ref() {
@@ -109,10 +114,9 @@ mod inner {
                         None
                     }
                     Ok(body) => {
-                        let mut visitor = PanicSafetyVisitor::new(rcx);
                         let param_env = rcx.tcx().param_env(body_did);
-                        visitor.analyze_body_impl(param_env, body);
-                        Some(visitor.status)
+                        let body_analyzer = PanicSafetyBodyAnalyzer::new(rcx, param_env, body);
+                        Some(body_analyzer.analyze())
                     }
                 }
             } else {
@@ -122,11 +126,10 @@ mod inner {
             }
         }
 
-        fn analyze_body_impl(&mut self, param_env: ParamEnv<'tcx>, body: &ir::Body<'tcx>) {
-            // The panic safety detector alpha version.
-            // It implements the name-based strategy with no reachability analysis.
-            // See 2020-12-08 meeting note for the detail.
-            for terminator in body.terminators() {
+        fn analyze(mut self) -> PanicSafetyStatus {
+            let mut reachability = graph::Reachability::new(self.body);
+
+            for (id, terminator) in self.body.terminators().enumerate() {
                 match terminator.kind {
                     ir::TerminatorKind::StaticCall {
                         callee_did,
@@ -138,38 +141,46 @@ mod inner {
                         // Check for lifetime bypass
                         let symbol_vec = ext.get_def_path(callee_did);
                         if paths::LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
-                            self.status.lifetime_bypass =
-                                Some(terminator.original.source_info.span);
-                        }
-
-                        // Check for generic function calls
-                        match Instance::resolve(
-                            self.rcx.tcx(),
-                            param_env,
-                            callee_did,
-                            callee_substs,
-                        ) {
-                            Err(_e) => log_err!(ResolveError),
-                            Ok(Some(_)) => {
-                                // Calls were successfully resolved
-                            }
-                            Ok(None) => {
-                                // Call contains unresolvable generic parts
-                                // Here, we are making a two step approximation:
-                                // 1. Unresolvable generic code is potentially user-provided
-                                // 2. User-provided code potentially panics
-                                self.status.panicking_function =
-                                    Some(terminator.original.source_info.span);
+                            reachability.mark_source(id);
+                            self.status
+                                .lifetime_bypass
+                                .push(terminator.original.source_info.span);
+                        } else {
+                            // Check for generic function calls
+                            match Instance::resolve(
+                                self.rcx.tcx(),
+                                self.param_env,
+                                callee_did,
+                                callee_substs,
+                            ) {
+                                Err(_e) => log_err!(ResolveError),
+                                Ok(Some(_)) => {
+                                    // Calls were successfully resolved
+                                }
+                                Ok(None) => {
+                                    // Call contains unresolvable generic parts
+                                    // Here, we are making a two step approximation:
+                                    // 1. Unresolvable generic code is potentially user-provided
+                                    // 2. User-provided code potentially panics
+                                    reachability.mark_sink(id);
+                                    self.status
+                                        .panicking_function
+                                        .push(terminator.original.source_info.span);
+                                }
                             }
                         }
                     }
                     _ => (),
                 }
             }
+
+            self.status.is_unsafe = reachability.is_reachable();
+
+            self.status
         }
     }
 
-    fn trace_body<'tcx>(rcx: RudraCtxt<'tcx>, body_def_id: DefId) {
+    fn trace_calls_in_body<'tcx>(rcx: RudraCtxt<'tcx>, body_def_id: DefId) {
         warn!("Paths discovery function has been detected");
         if let Ok(body) = rcx.translate_body(body_def_id).as_ref() {
             for terminator in body.terminators() {

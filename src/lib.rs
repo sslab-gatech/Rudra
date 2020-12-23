@@ -37,7 +37,7 @@ pub mod visitor;
 
 use rustc_middle::ty::TyCtxt;
 
-use crate::analysis::{PanicSafetyChecker, SendSyncChecker, UnsafeDestructor};
+use crate::analysis::{PanicSafetyAnalyzer, SendSyncChecker, UnsafeDestructor};
 use crate::context::RudraCtxtOwner;
 use crate::log::Verbosity;
 
@@ -127,7 +127,7 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: RudraConfig) {
     // Panic Safety analysis
     if config.panic_safety_enabled {
         run_analysis("PanicSafety", || {
-            let panic_safety_checker = PanicSafetyChecker::new(rcx);
+            let panic_safety_checker = PanicSafetyAnalyzer::new(rcx);
             panic_safety_checker.analyze();
         })
     }

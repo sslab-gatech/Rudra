@@ -43,7 +43,7 @@ class TestCase:
 
 
 class TestResult:
-    TEST_TYPES = ("normal", "fp")
+    TEST_TYPES = ("normal", "fp", "fn")
 
     def __init__(self, test_case, test_type, failure=None):
         assert test_type in TestResult.TEST_TYPES
@@ -109,10 +109,12 @@ def run_test(test_case):
 total_cnt = {
     "normal": 0,
     "fp": 0,
+    "fn": 0,
 }
 success_cnt = {
     "normal": 0,
     "fp": 0,
+    "fn": 0,
 }
 def handle_result(test_result):
     global total_cnt, success_cnt
@@ -138,6 +140,7 @@ if __name__ == "__main__":
         for result in results:
             result.get()
 
+    print("False-negatives: {}/{}".format(success_cnt["fn"], total_cnt["fn"]))
     print("False-positives: {}/{}".format(success_cnt["fp"], total_cnt["fp"]))
     print("Normal: {}/{}".format(success_cnt["normal"], total_cnt["normal"]))
 

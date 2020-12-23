@@ -21,11 +21,19 @@ pub const PTR_WRITE: [&str; 3] = ["core", "ptr", "write"];
 pub const PTR_DIRECT_READ: [&str; 5] = ["core", "ptr", "const_ptr", "<impl *const T>", "read"];
 pub const PTR_DIRECT_WRITE: [&str; 5] = ["core", "ptr", "mut_ptr", "<impl *mut T>", "write"];
 
+pub const PTR_AS_REF: [&str; 5] = ["core", "ptr", "const_ptr", "<impl *const T>", "as_ref"];
+pub const PTR_AS_MUT: [&str; 5] = ["core", "ptr", "mut_ptr", "<impl *mut T>", "as_mut"];
+pub const NON_NULL_AS_REF: [&str; 5] = ["core", "ptr", "non_nul", "NonNull", "as_ref"];
+pub const NON_NULL_AS_MUT: [&str; 5] = ["core", "ptr", "non_nul", "NonNull", "as_mut"];
+
 pub const INTRINSICS_COPY: [&str; 3] = ["core", "intrinsics", "copy"];
 pub const INTRINSICS_COPY_NONOVERLAPPING: [&str; 3] = ["core", "intrinsics", "copy_nonoverlapping"];
 
 pub const VEC_SET_LEN: [&str; 4] = ["alloc", "vec", "Vec", "set_len"];
 pub const VEC_FROM_RAW_PARTS: [&str; 4] = ["alloc", "vec", "Vec", "from_raw_parts"];
+
+pub const SLICE_GET_UNCHECKED: [&str; 4] = ["core", "slice", "<impl [T]>", "get_unchecked"];
+pub const SLICE_GET_UNCHECKED_MUT: [&str; 4] = ["core", "slice", "<impl [T]>", "get_unchecked_mut"];
 
 pub const PTR_SLICE_FROM_RAW_PARTS: [&str; 3] = ["core", "ptr", "slice_from_raw_parts"];
 pub const PTR_SLICE_FROM_RAW_PARTS_MUT: [&str; 3] = ["core", "ptr", "slice_from_raw_parts_mut"];
@@ -52,18 +60,36 @@ impl PathSet {
     }
 }
 
+/// Special path used only for path discovery
+pub static SPECIAL_PATH_DISCOVERY: Lazy<PathSet> =
+    Lazy::new(move || PathSet::new(&[&["rudra_paths_discovery", "PathsDiscovery", "discover"]]));
+
 pub static LIFETIME_BYPASS_LIST: Lazy<PathSet> = Lazy::new(move || {
     PathSet::new(&[
         &TRANSMUTE,
+        //
         &PTR_READ,
         &PTR_WRITE,
         &PTR_DIRECT_READ,
         &PTR_DIRECT_WRITE,
+        //
+        &PTR_AS_REF,
+        &PTR_AS_MUT,
+        &NON_NULL_AS_REF,
+        &NON_NULL_AS_MUT,
+        //
         &INTRINSICS_COPY,
         &INTRINSICS_COPY_NONOVERLAPPING,
+        //
         &VEC_SET_LEN,
         &VEC_FROM_RAW_PARTS,
+        //
+        &SLICE_GET_UNCHECKED,
+        &SLICE_GET_UNCHECKED_MUT,
+        //
+        &PTR_SLICE_FROM_RAW_PARTS,
         &PTR_SLICE_FROM_RAW_PARTS_MUT,
+        &SLICE_FROM_RAW_PARTS,
         &SLICE_FROM_RAW_PARTS_MUT,
     ])
 });

@@ -89,8 +89,9 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
 
         Ok(ir::Body {
             local_decls,
-            original_decls: body.local_decls.clone(),
+            original_decls: body.local_decls.to_owned(),
             basic_blocks,
+            original: body.to_owned(),
         })
     }
 
