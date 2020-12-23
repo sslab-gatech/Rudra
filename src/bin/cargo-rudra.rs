@@ -293,11 +293,6 @@ impl Display for TargetKind {
     }
 }
 
-/// Get the command name for "cargo check".
-fn cargo_check() -> String {
-    std::env::var("CARGO_CHECK").unwrap_or_else(|_| "cargo-check".to_owned())
-}
-
 fn in_cargo_rudra() {
     let verbose = has_arg_flag("-v");
 
@@ -319,7 +314,15 @@ fn in_cargo_rudra() {
         // Now we run `cargo check $FLAGS $ARGS`, giving the user the
         // change to add additional arguments. `FLAGS` is set to identify
         // this target. The user gets to control what gets actually passed to Rudra.
-        let mut cmd = Command::new(cargo_check());
+        let mut cmd = Command::new("cargo");
+        cmd.arg("check");
+
+        // Allow an option to use `xargo check` instead of `cargo`, this is used
+        // for analyzing the rust standard library.
+        if std::env::var_os("RUDRA_USE_XARGO_INSTEAD_OF_CARGO").is_some() {
+            cmd = Command::new("xargo-check");
+        }
+
         match kind {
             TargetKind::Bin => {
                 // Analyze all the binaries.
