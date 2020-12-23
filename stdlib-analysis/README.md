@@ -23,7 +23,7 @@ and uses `xargo` to build the standard library.
 1. Install the modified release or debug version of rudra as per usual with
    `install-debug.sh` or `install-release.sh`
 
-2. Run the `rudra_analyze_std.sh` script from this folder. You can pass any
+2. Run the `rudra_analyze_std.sh` script **from this folder**. You can pass any
    rudra arguments to this script such as
    `./rudra_analyze_std.sh -Zrudra-disable-panic-safety`.
 
