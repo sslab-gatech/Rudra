@@ -367,6 +367,10 @@ fn in_cargo_rudra() {
 
         // Add suffix to RUDRA_REPORT_PATH
         if let Ok(report) = env::var("RUDRA_REPORT_PATH") {
+            // TODO: RUDRA_REPORT_PATH does not play well with `RUDRA_ALSO_ANALYZE`
+            //       from below, currently only the last crate analyzed will make
+            //       it into the report. Maybe use `CARGO_PKG_NAME` for the prefix
+            //       to avoid this?
             cmd.env(
                 "RUDRA_REPORT_PATH",
                 format!("{}-{}-{}", report, kind, &target.name),
