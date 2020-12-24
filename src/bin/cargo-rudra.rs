@@ -316,6 +316,13 @@ fn in_cargo_rudra() {
         // this target. The user gets to control what gets actually passed to Rudra.
         let mut cmd = Command::new("cargo");
         cmd.arg("check");
+
+        // Allow an option to use `xargo check` instead of `cargo`, this is used
+        // for analyzing the rust standard library.
+        if std::env::var_os("RUDRA_USE_XARGO_INSTEAD_OF_CARGO").is_some() {
+            cmd = Command::new("xargo-check");
+        }
+
         match kind {
             TargetKind::Bin => {
                 // Analyze all the binaries.
@@ -360,6 +367,10 @@ fn in_cargo_rudra() {
 
         // Add suffix to RUDRA_REPORT_PATH
         if let Ok(report) = env::var("RUDRA_REPORT_PATH") {
+            // TODO: RUDRA_REPORT_PATH does not play well with `RUDRA_ALSO_ANALYZE`
+            //       from below, currently only the last crate analyzed will make
+            //       it into the report. Maybe use `CARGO_PKG_NAME` for the prefix
+            //       to avoid this?
             cmd.env(
                 "RUDRA_REPORT_PATH",
                 format!("{}-{}-{}", report, kind, &target.name),
@@ -464,8 +475,23 @@ fn inside_cargo_rustc() {
 
     // TODO: Miri sets custom sysroot here, check if it is needed for us (RUDRA-30)
 
-    let needs_rudra_analysis = contains_target_flag() && is_target_crate();
-    if needs_rudra_analysis {
+    let is_direct_target = contains_target_flag() && is_target_crate();
+    let mut is_additional_target = false;
+
+    // Perform analysis if the crate being compiled is in the RUDRA_ALSO_ANALYZE
+    // environment variable.
+    if let (Ok(cargo_pkg_name), Ok(rudra_also_analyze_crates)) =
+        (env::var("CARGO_PKG_NAME"), env::var("RUDRA_ALSO_ANALYZE"))
+    {
+        if rudra_also_analyze_crates
+            .split(',')
+            .any(|x| x.to_lowercase() == cargo_pkg_name.to_lowercase())
+        {
+            is_additional_target = true;
+        }
+    }
+
+    if is_direct_target || is_additional_target {
         let mut cmd = Command::new(find_rudra());
         cmd.args(std::env::args().skip(2)); // skip `cargo-rudra rustc`
 
@@ -484,7 +510,7 @@ fn inside_cargo_rustc() {
     }
 
     // Libraries might be used for dependency, so we need to analyze and build it.
-    if !needs_rudra_analysis || is_crate_type_lib() {
+    if !is_direct_target || is_crate_type_lib() {
         let mut cmd = Command::new(find_rudra());
         cmd.args(std::env::args().skip(2)); // skip `cargo-rudra rustc`
 
