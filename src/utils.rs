@@ -133,7 +133,22 @@ impl<'tcx> NestedColorSpan<'tcx> {
                 };
 
                 for ch in line_content.chars() {
-                    // Handle before-char color event
+                    // Handle reset
+                    if let Some(event) = events_iter.peek() {
+                        if event.line == line_idx
+                            && event.col == current_col
+                            && event.color.is_none()
+                        {
+                            buffer
+                                .set_color(ColorSpec::new().set_reset(true))
+                                .map_err(|e| warn!("{}", e))
+                                .ok();
+
+                            events_iter.next();
+                        }
+                    }
+
+                    // Handle colorization
                     if let Some(event) = events_iter.peek() {
                         if event.line == line_idx
                             && event.col == current_col
@@ -150,27 +165,10 @@ impl<'tcx> NestedColorSpan<'tcx> {
 
                     write!(buffer, "{}", ch).ok();
 
-                    // Handle after-char color event
-                    if let Some(event) = events_iter.peek() {
-                        if event.line == line_idx
-                            && event.col == current_col
-                            && event.color.is_none()
-                        {
-                            buffer
-                                .set_color(ColorSpec::new().set_reset(true))
-                                .map_err(|e| warn!("{}", e))
-                                .ok();
-
-                            events_iter.next();
-                        }
-                    }
-
                     current_col.0 += 1;
                 }
 
-                write!(buffer, "\n").ok();
-
-                // Final character might be off-by-one
+                // Handle reset
                 if let Some(event) = events_iter.peek() {
                     if event.line == line_idx && event.col == current_col && event.color.is_none() {
                         buffer
@@ -181,6 +179,8 @@ impl<'tcx> NestedColorSpan<'tcx> {
                         events_iter.next();
                     }
                 }
+
+                write!(buffer, "\n").ok();
             }
 
             // Just in case, reset the color

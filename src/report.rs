@@ -211,7 +211,9 @@ impl ReportLogger for FileLogger {
                 toml::to_string_pretty(&Reports {
                     reports: reports_ref,
                 })
-                .expect("failed to serialize Rudra report"),
+                .expect("failed to serialize Rudra report")
+                // Restore ANSI sequence
+                .replace("\\u001B", "\u{001B}"),
             )
             .expect("cannot write Rudra report to file");
         }
