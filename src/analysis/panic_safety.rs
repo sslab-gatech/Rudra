@@ -49,7 +49,7 @@ impl<'tcx> PanicSafetyAnalyzer<'tcx> {
             if let Some(status) = inner::PanicSafetyBodyAnalyzer::analyze_body(self.rcx, body_id) {
                 if status.is_unsafe() {
                     let mut color_span = unwrap_or!(
-                        utils::NestedColorSpan::new(tcx, related_item_span).context(InvalidSpan) => continue
+                        utils::ColorSpan::new(tcx, related_item_span).context(InvalidSpan) => continue
                     );
 
                     for &span in status.strong_bypass_spans() {

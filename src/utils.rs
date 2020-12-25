@@ -17,7 +17,7 @@ struct ColorEvent {
     col: CharPos,
 }
 
-pub struct NestedColorSpan<'tcx> {
+pub struct ColorSpan<'tcx> {
     tcx: TyCtxt<'tcx>,
     main_span: Span,
     main_span_start: rustc_span::Loc,
@@ -59,7 +59,7 @@ impl Ord for ColorEvent {
     }
 }
 
-impl<'tcx> NestedColorSpan<'tcx> {
+impl<'tcx> ColorSpan<'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>, main_span: Span) -> Option<Self> {
         let source_map = tcx.sess.source_map();
         if let Ok((main_span_start, main_span_end)) = source_map.is_valid_span(main_span) {
@@ -68,7 +68,7 @@ impl<'tcx> NestedColorSpan<'tcx> {
                 return None;
             }
 
-            Some(NestedColorSpan {
+            Some(ColorSpan {
                 tcx,
                 main_span,
                 main_span_start,
@@ -110,6 +110,7 @@ impl<'tcx> NestedColorSpan<'tcx> {
         }
     }
 
+    // FIXME: It currently doesn't handle nested sub spans correctly
     pub fn to_colored_string(&self) -> String {
         let mut events = self.sub_span_events.clone();
         events.sort();
@@ -132,54 +133,31 @@ impl<'tcx> NestedColorSpan<'tcx> {
                     CharPos(0)
                 };
 
+                let mut handle_color_event = |buffer: &mut Buffer, col: CharPos| {
+                    while let Some(event) = events_iter.peek() {
+                        if event.line == line_idx && event.col == col {
+                            let mut spec = ColorSpec::new();
+                            match event.color {
+                                Some(color) => spec.set_fg(Some(color)),
+                                None => spec.set_reset(true),
+                            };
+                            buffer.set_color(&spec).map_err(|e| warn!("{}", e)).ok();
+
+                            events_iter.next();
+                        } else {
+                            break;
+                        }
+                    }
+                };
+
                 for ch in line_content.chars() {
-                    // Handle reset
-                    if let Some(event) = events_iter.peek() {
-                        if event.line == line_idx
-                            && event.col == current_col
-                            && event.color.is_none()
-                        {
-                            buffer
-                                .set_color(ColorSpec::new().set_reset(true))
-                                .map_err(|e| warn!("{}", e))
-                                .ok();
-
-                            events_iter.next();
-                        }
-                    }
-
-                    // Handle colorization
-                    if let Some(event) = events_iter.peek() {
-                        if event.line == line_idx
-                            && event.col == current_col
-                            && event.color.is_some()
-                        {
-                            buffer
-                                .set_color(ColorSpec::new().set_fg(event.color))
-                                .map_err(|e| warn!("{}", e))
-                                .ok();
-
-                            events_iter.next();
-                        }
-                    }
-
+                    handle_color_event(&mut buffer, current_col);
                     write!(buffer, "{}", ch).ok();
-
                     current_col.0 += 1;
                 }
 
                 // Handle reset
-                if let Some(event) = events_iter.peek() {
-                    if event.line == line_idx && event.col == current_col && event.color.is_none() {
-                        buffer
-                            .set_color(ColorSpec::new().set_reset(true))
-                            .map_err(|e| warn!("{}", e))
-                            .ok();
-
-                        events_iter.next();
-                    }
-                }
-
+                handle_color_event(&mut buffer, current_col);
                 write!(buffer, "\n").ok();
             }
 

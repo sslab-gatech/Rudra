@@ -114,7 +114,7 @@ impl Report {
         level: ReportLevel,
         analyzer: T,
         description: U,
-        color_span: &utils::NestedColorSpan,
+        color_span: &utils::ColorSpan,
     ) -> Report
     where
         T: Into<Cow<'static, str>>,
