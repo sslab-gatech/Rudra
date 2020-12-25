@@ -3,6 +3,7 @@ use std::rc::Rc;
 use rustc_hir::{def_id::DefId, BodyId, HirId};
 use rustc_middle::mir::{self, TerminatorKind};
 use rustc_middle::ty::{TyCtxt, TyKind};
+use rustc_span::Span;
 
 use dashmap::DashMap;
 use snafu::Snafu;
@@ -51,7 +52,9 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
         self.tcx
     }
 
-    pub fn types_with_related_items(&self) -> impl Iterator<Item = (Option<HirId>, BodyId)> + '_ {
+    pub fn types_with_related_items(
+        &self,
+    ) -> impl Iterator<Item = (Option<HirId>, (BodyId, Span))> + '_ {
         (&self.related_item_cache)
             .into_iter()
             .flat_map(|(&k, v)| v.iter().map(move |&body_id| (k, body_id)))

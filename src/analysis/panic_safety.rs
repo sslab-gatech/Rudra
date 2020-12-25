@@ -3,11 +3,13 @@ use rustc_middle::ty::{Instance, ParamEnv};
 use rustc_span::Span;
 
 use snafu::{Backtrace, Snafu};
+use termcolor::Color;
 
 use crate::prelude::*;
 use crate::{
     graph, ir, paths,
     report::{Report, ReportLevel},
+    utils,
     visitor::ContainsUnsafe,
 };
 
@@ -15,6 +17,7 @@ use crate::{
 pub enum PanicSafetyError {
     PushPopBlock { backtrace: Backtrace },
     ResolveError { backtrace: Backtrace },
+    InvalidSpan { backtrace: Backtrace },
 }
 
 impl AnalysisError for PanicSafetyError {
@@ -23,6 +26,7 @@ impl AnalysisError for PanicSafetyError {
         match self {
             PushPopBlock { .. } => AnalysisErrorKind::Unreachable,
             ResolveError { .. } => AnalysisErrorKind::OutOfScope,
+            InvalidSpan { .. } => AnalysisErrorKind::Unreachable,
         }
     }
 }
@@ -41,12 +45,22 @@ impl<'tcx> PanicSafetyAnalyzer<'tcx> {
         let hir_map = tcx.hir();
 
         // Iterates all (type, related function) pairs
-        for (_ty_hir_id, body_id) in self.rcx.types_with_related_items() {
-            if let Some(panic_safety_status) =
-                inner::PanicSafetyBodyAnalyzer::analyze_body(self.rcx, body_id)
-            {
-                if panic_safety_status.is_unsafe() {
-                    rudra_report(Report::with_hir_id(
+        for (_ty_hir_id, (body_id, related_item_span)) in self.rcx.types_with_related_items() {
+            if let Some(status) = inner::PanicSafetyBodyAnalyzer::analyze_body(self.rcx, body_id) {
+                if status.is_unsafe() {
+                    let mut color_span = unwrap_or!(
+                        utils::NestedColorSpan::new(tcx, related_item_span).context(InvalidSpan) => continue
+                    );
+
+                    for &span in status.lifetime_bypass_spans() {
+                        color_span.add_sub_span(Color::Yellow, span);
+                    }
+
+                    for &span in status.panicking_function_spans() {
+                        color_span.add_sub_span(Color::Red, span);
+                    }
+
+                    rudra_report(Report::with_color_span(
                         tcx,
                         ReportLevel::Warning,
                         "PanicSafety",
@@ -54,7 +68,7 @@ impl<'tcx> PanicSafetyAnalyzer<'tcx> {
                             "Potential panic safety issue in `{}`",
                             tcx.def_path_str(hir_map.body_owner_def_id(body_id).to_def_id())
                         ),
-                        body_id.hir_id,
+                        &color_span,
                     ))
                 }
             }
@@ -75,6 +89,14 @@ mod inner {
     impl PanicSafetyStatus {
         pub fn is_unsafe(&self) -> bool {
             self.is_unsafe
+        }
+
+        pub fn lifetime_bypass_spans(&self) -> &Vec<Span> {
+            &self.lifetime_bypass
+        }
+
+        pub fn panicking_function_spans(&self) -> &Vec<Span> {
+            &self.panicking_function
         }
     }
 

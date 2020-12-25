@@ -7,7 +7,7 @@ use rustc_middle::ty::{self, subst::GenericArg, Ty, TyCtxt};
 
 use rustc_span::Symbol;
 use snafu::{Backtrace, Snafu};
-pub use snafu::{Error, ErrorCompat, IntoError, ResultExt};
+pub use snafu::{Error, ErrorCompat, IntoError, OptionExt, ResultExt};
 
 pub use crate::analysis::{AnalysisError, AnalysisErrorKind, AnalysisResult};
 pub use crate::context::RudraCtxt;

@@ -12,6 +12,8 @@ use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use serde::Serialize;
 
+use crate::utils;
+
 static REPORT_LOGGER: OnceCell<Box<dyn ReportLogger>> = OnceCell::new();
 
 /// Flushes the global report logger when dropped.
@@ -104,6 +106,29 @@ impl Report {
             description: description.into(),
             location,
             source,
+        }
+    }
+
+    pub fn with_color_span<T, U>(
+        tcx: TyCtxt<'_>,
+        level: ReportLevel,
+        analyzer: T,
+        description: U,
+        color_span: &utils::NestedColorSpan,
+    ) -> Report
+    where
+        T: Into<Cow<'static, str>>,
+        U: Into<Cow<'static, str>>,
+    {
+        let source_map = tcx.sess.source_map();
+        let location = source_map.span_to_string(color_span.main_span());
+
+        Report {
+            level,
+            analyzer: analyzer.into(),
+            description: description.into(),
+            location,
+            source: color_span.to_colored_string(),
         }
     }
 }
