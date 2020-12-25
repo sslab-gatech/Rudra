@@ -89,7 +89,10 @@ def run_test(test_case):
                 check=True,
             )
             with open(report_file.name) as report_file_handle:
-                reports = tomlkit.loads(report_file_handle.read())
+                # We manually converts some characters inside toml strings
+                # Match this list with src/report.rs
+                reports_str = report_file_handle.read().replace("\t", "\\t").replace("\u001B", "\\u001B")
+                reports = tomlkit.loads(reports_str)
             expected_analyzers = set(metadata["expected_analyzers"])
             if "reports" in reports:
                 reported_analyzers = set(map(lambda report: report["analyzer"], reports["reports"]))

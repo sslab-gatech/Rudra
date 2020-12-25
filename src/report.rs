@@ -212,9 +212,9 @@ impl ReportLogger for FileLogger {
                     reports: reports_ref,
                 })
                 .expect("failed to serialize Rudra report")
-                // Restore ANSI sequence
+                // We manually converts some characters inside toml strings
+                // Match this list with test.py
                 .replace("\\u001B", "\u{001B}")
-                // People are using tab characters in their source code...
                 .replace("\\t", "\t"),
             )
             .expect("cannot write Rudra report to file");
