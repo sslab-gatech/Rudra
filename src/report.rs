@@ -213,7 +213,9 @@ impl ReportLogger for FileLogger {
                 })
                 .expect("failed to serialize Rudra report")
                 // Restore ANSI sequence
-                .replace("\\u001B", "\u{001B}"),
+                .replace("\\u001B", "\u{001B}")
+                // People are using tab characters in their source code...
+                .replace("\\t", "\t"),
             )
             .expect("cannot write Rudra report to file");
         }
