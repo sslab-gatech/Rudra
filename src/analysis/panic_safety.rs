@@ -52,17 +52,27 @@ impl<'tcx> PanicSafetyAnalyzer<'tcx> {
                         utils::NestedColorSpan::new(tcx, related_item_span).context(InvalidSpan) => continue
                     );
 
-                    for &span in status.lifetime_bypass_spans() {
+                    for &span in status.strong_bypass_spans() {
+                        color_span.add_sub_span(Color::Red, span);
+                    }
+
+                    for &span in status.weak_bypass_spans() {
                         color_span.add_sub_span(Color::Yellow, span);
                     }
 
                     for &span in status.panicking_function_spans() {
-                        color_span.add_sub_span(Color::Red, span);
+                        color_span.add_sub_span(Color::Cyan, span);
                     }
+
+                    let level = if status.strong_bypass_spans().is_empty() {
+                        ReportLevel::Info
+                    } else {
+                        ReportLevel::Warning
+                    };
 
                     rudra_report(Report::with_color_span(
                         tcx,
-                        ReportLevel::Warning,
+                        level,
                         "PanicSafety",
                         format!(
                             "Potential panic safety issue in `{}`",
@@ -81,7 +91,8 @@ mod inner {
 
     #[derive(Debug, Default)]
     pub struct PanicSafetyStatus {
-        lifetime_bypass: Vec<Span>,
+        strong_bypass: Vec<Span>,
+        weak_bypass: Vec<Span>,
         panicking_function: Vec<Span>,
         is_unsafe: bool,
     }
@@ -91,8 +102,12 @@ mod inner {
             self.is_unsafe
         }
 
-        pub fn lifetime_bypass_spans(&self) -> &Vec<Span> {
-            &self.lifetime_bypass
+        pub fn strong_bypass_spans(&self) -> &Vec<Span> {
+            &self.strong_bypass
+        }
+
+        pub fn weak_bypass_spans(&self) -> &Vec<Span> {
+            &self.weak_bypass
         }
 
         pub fn panicking_function_spans(&self) -> &Vec<Span> {
@@ -162,10 +177,15 @@ mod inner {
 
                         // Check for lifetime bypass
                         let symbol_vec = ext.get_def_path(callee_did);
-                        if paths::LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
+                        if paths::STRONG_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
                             reachability.mark_source(id);
                             self.status
-                                .lifetime_bypass
+                                .strong_bypass
+                                .push(terminator.original.source_info.span);
+                        } else if paths::WEAK_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
+                            reachability.mark_source(id);
+                            self.status
+                                .weak_bypass
                                 .push(terminator.original.source_info.span);
                         } else {
                             // Check for generic function calls
