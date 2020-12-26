@@ -12,6 +12,8 @@ use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use serde::Serialize;
 
+use crate::utils;
+
 static REPORT_LOGGER: OnceCell<Box<dyn ReportLogger>> = OnceCell::new();
 
 /// Flushes the global report logger when dropped.
@@ -106,6 +108,29 @@ impl Report {
             source,
         }
     }
+
+    pub fn with_color_span<T, U>(
+        tcx: TyCtxt<'_>,
+        level: ReportLevel,
+        analyzer: T,
+        description: U,
+        color_span: &utils::ColorSpan,
+    ) -> Report
+    where
+        T: Into<Cow<'static, str>>,
+        U: Into<Cow<'static, str>>,
+    {
+        let source_map = tcx.sess.source_map();
+        let location = source_map.span_to_string(color_span.main_span());
+
+        Report {
+            level,
+            analyzer: analyzer.into(),
+            description: description.into(),
+            location,
+            source: color_span.to_colored_string(),
+        }
+    }
 }
 
 pub trait ReportLogger: Sync + Send {
@@ -186,7 +211,11 @@ impl ReportLogger for FileLogger {
                 toml::to_string_pretty(&Reports {
                     reports: reports_ref,
                 })
-                .expect("failed to serialize Rudra report"),
+                .expect("failed to serialize Rudra report")
+                // We manually converts some characters inside toml strings
+                // Match this list with test.py
+                .replace("\\u001B", "\u{001B}")
+                .replace("\\t", "\t"),
             )
             .expect("cannot write Rudra report to file");
         }

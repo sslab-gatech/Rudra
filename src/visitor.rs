@@ -1,10 +1,11 @@
 use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::{intravisit, itemlikevisit::ItemLikeVisitor, Block, BodyId, HirId, ItemKind};
 use rustc_middle::ty::TyCtxt;
+use rustc_span::Span;
 
 /// Maps `HirId` of a type to `BodyId` of related impls.
 /// Free-standing (top level) functions and default trait impls have `None` as a key.
-pub type RelatedItemMap = FxHashMap<Option<HirId>, Vec<BodyId>>;
+pub type RelatedItemMap = FxHashMap<Option<HirId>, Vec<(BodyId, Span)>>;
 
 /// Creates `AdtItemMap` with the given HIR map.
 /// You might want to use `RudraCtxt`'s `related_item_cache` field instead of
@@ -42,7 +43,9 @@ impl<'tcx> ItemLikeVisitor<'tcx> for RelatedFnCollector<'tcx> {
                 let entry = self.hash_map.entry(key).or_insert(Vec::new());
                 entry.extend(impl_items.iter().filter_map(|impl_item_ref| {
                     let hir_id = impl_item_ref.id.hir_id;
-                    hir_map.maybe_body_owned_by(hir_id)
+                    hir_map
+                        .maybe_body_owned_by(hir_id)
+                        .map(|body_id| (body_id, impl_item_ref.span))
                 }));
             }
             // Free-standing (top level) functions and default trait impls have `None` as a key.
@@ -51,13 +54,15 @@ impl<'tcx> ItemLikeVisitor<'tcx> for RelatedFnCollector<'tcx> {
                 let entry = self.hash_map.entry(key).or_insert(Vec::new());
                 entry.extend(trait_items.iter().filter_map(|trait_item_ref| {
                     let hir_id = trait_item_ref.id.hir_id;
-                    hir_map.maybe_body_owned_by(hir_id)
+                    hir_map
+                        .maybe_body_owned_by(hir_id)
+                        .map(|body_id| (body_id, trait_item_ref.span))
                 }));
             }
             ItemKind::Fn(_fn_sig, _generics, body_id) => {
                 let key = None;
                 let entry = self.hash_map.entry(key).or_insert(Vec::new());
-                entry.push(*body_id);
+                entry.push((*body_id, item.span));
             }
             _ => (),
         }

@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::{cmp::min, collections::VecDeque};
 
 use crate::ir;
 
@@ -19,6 +19,83 @@ impl<'tcx> Graph for ir::Body<'tcx> {
             .successors()
             .map(|block| block.index())
             .collect()
+    }
+}
+
+pub struct Reachability<'a, G: Graph> {
+    graph: &'a G,
+    len: usize,
+    sources: Vec<bool>,
+    sinks: Vec<bool>,
+}
+
+impl<'a, G: Graph> Reachability<'a, G> {
+    pub fn new(graph: &'a G) -> Self {
+        let graph_len = graph.len();
+        Reachability {
+            graph,
+            len: graph_len,
+            sources: vec![false; graph_len],
+            sinks: vec![false; graph_len],
+        }
+    }
+
+    pub fn graph(&self) -> &G {
+        &self.graph
+    }
+
+    pub fn mark_source(&mut self, id: usize) {
+        self.sources[id] = true;
+    }
+
+    pub fn unmark_source(&mut self, id: usize) {
+        self.sources[id] = false;
+    }
+
+    pub fn mark_sink(&mut self, id: usize) {
+        self.sinks[id] = true;
+    }
+
+    pub fn unmark_sink(&mut self, id: usize) {
+        self.sinks[id] = false;
+    }
+
+    // Unmark all sources and sinks
+    pub fn clear(&mut self) {
+        self.sources = vec![false; self.len];
+        self.sinks = vec![false; self.len];
+    }
+
+    pub fn is_reachable(&self) -> bool {
+        let mut visited = vec![false; self.len];
+        let mut work_list = VecDeque::new();
+
+        // Initialize work list
+        for id in 0..self.len {
+            if self.sources[id] {
+                visited[id] = true;
+                work_list.push_back(id);
+            }
+        }
+
+        // Breadth-first propagation
+        while let Some(current) = work_list.pop_front() {
+            for next in self.graph.next(current) {
+                if !visited[next] {
+                    visited[next] = true;
+                    work_list.push_back(next);
+                }
+            }
+        }
+
+        // Check the result
+        for id in 0..self.len {
+            if self.sinks[id] && visited[id] {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 

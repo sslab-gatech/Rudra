@@ -50,6 +50,7 @@ pub struct Body<'tcx> {
     pub local_decls: Vec<LocalDecl<'tcx>>,
     pub original_decls: IndexVec<mir::Local, mir::LocalDecl<'tcx>>,
     pub basic_blocks: Vec<BasicBlock<'tcx>>,
+    pub original: mir::Body<'tcx>,
 }
 
 impl<'tcx> mir::HasLocalDecls<'tcx> for Body<'tcx> {

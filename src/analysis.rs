@@ -4,7 +4,7 @@ mod unsafe_destructor;
 
 use snafu::{Error, ErrorCompat};
 
-pub use panic_safety::PanicSafetyChecker;
+pub use panic_safety::PanicSafetyAnalyzer;
 pub use send_sync_checker::SendSyncChecker;
 pub use unsafe_destructor::UnsafeDestructor;
 

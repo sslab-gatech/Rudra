@@ -43,7 +43,7 @@ class TestCase:
 
 
 class TestResult:
-    TEST_TYPES = ("normal", "fp")
+    TEST_TYPES = ("normal", "fp", "fn")
 
     def __init__(self, test_case, test_type, failure=None):
         assert test_type in TestResult.TEST_TYPES
@@ -89,7 +89,10 @@ def run_test(test_case):
                 check=True,
             )
             with open(report_file.name) as report_file_handle:
-                reports = tomlkit.loads(report_file_handle.read())
+                # We manually converts some characters inside toml strings
+                # Match this list with src/report.rs
+                reports_str = report_file_handle.read().replace("\t", "\\t").replace("\u001B", "\\u001B")
+                reports = tomlkit.loads(reports_str)
             expected_analyzers = set(metadata["expected_analyzers"])
             if "reports" in reports:
                 reported_analyzers = set(map(lambda report: report["analyzer"], reports["reports"]))
@@ -109,10 +112,12 @@ def run_test(test_case):
 total_cnt = {
     "normal": 0,
     "fp": 0,
+    "fn": 0,
 }
 success_cnt = {
     "normal": 0,
     "fp": 0,
+    "fn": 0,
 }
 def handle_result(test_result):
     global total_cnt, success_cnt
@@ -138,6 +143,7 @@ if __name__ == "__main__":
         for result in results:
             result.get()
 
+    print("False-negatives: {}/{}".format(success_cnt["fn"], total_cnt["fn"]))
     print("False-positives: {}/{}".format(success_cnt["fp"], total_cnt["fp"]))
     print("Normal: {}/{}".format(success_cnt["normal"], total_cnt["normal"]))
 
