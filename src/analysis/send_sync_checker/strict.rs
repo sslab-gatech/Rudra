@@ -8,26 +8,45 @@ impl<'tcx> SendSyncChecker<'tcx> {
     pub fn suspicious_sync(
         &mut self,
         impl_hir_id: HirId,
-        _send_trait_def_id: DefId,
+        send_trait_def_id: DefId,
         sync_trait_def_id: DefId,
         _copy_trait_def_id: DefId,
     ) -> Option<DefId> {
-        if let Some(trait_ref) = self.rcx.tcx().impl_trait_ref(impl_hir_id.owner) {
+        let tcx = self.rcx.tcx();
+        if let Some(trait_ref) = tcx.impl_trait_ref(impl_hir_id.owner) {
             if let ty::TyKind::Adt(adt_def, substs) = trait_ref.self_ty().kind {
-                // At the end, this set should only contain indices of generic params
-                // which may cause safety issues in the `Sync` impl.
-                let mut suspicious_generic_params = FxHashSet::default();
+                let adt_did = adt_def.did;
+
+                // Keep track of generic params that need to be `Send + Sync`.
+                // e.g. `Arc<T>` requires T: Send + Sync for Send
+                let mut need_sync: FxHashSet<u32> = FxHashSet::default();
+
+                // Keep track of generic params that need to be `Send`.
+                let mut need_send: FxHashSet<u32> = FxHashSet::default();
+
+                // Generic params that only occur within `PhantomData<_>`
+                let phantom_params = self
+                    .phantom_map
+                    .entry(adt_did)
+                    .or_insert_with(|| phantom_indices(tcx, adt_def, substs));
+
+                // Get `AdtBehavior` per generic parameter.
+                let adt_behavior = self
+                    .behavior_map
+                    .entry(adt_did)
+                    .or_insert(adt_behavior(tcx, adt_did));
 
                 // Initialize set of generic type params of the given `impl Sync`.
                 for gen_param in &self.rcx.tcx().generics_of(impl_hir_id.owner).params {
                     if let GenericParamDefKind::Type { .. } = gen_param.kind {
-                        suspicious_generic_params.insert(gen_param.index);
+                        // Check if the current ADT acts as a `ConcurrentQ` type for the generic parameter.
+                        if let Some(AdtBehavior::ConcurrentQ) = adt_behavior.get(&gen_param.index) {
+                            need_send.insert(gen_param.index);
+                        } else {
+                            need_sync.insert(gen_param.index);
+                        }
                     }
                 }
-
-                // TODO: Check whether any of the generic params are okay with a (Send | Copy) bound.
-                // e.g.  concurrent queue types that only have APIs that return T don't need T to be Sync.
-                // -------------------------------------------------------------------
 
                 let tcx = self.rcx.tcx();
                 // Iterate over predicates to check trait bounds on generic params.
@@ -41,24 +60,23 @@ impl<'tcx> SendSyncChecker<'tcx> {
                         if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind {
                             // Find generic parameters that are in/out of `PhantomData<T>`.
                             // Check if query is cached before calling `phantom_indices`
-                            if self
-                                .phantom_map
-                                .entry(adt_def.did)
-                                .or_insert_with(|| phantom_indices(tcx, adt_def, substs))
-                                .contains(&param_ty.index)
-                            {
+                            if phantom_params.contains(&param_ty.index) {
                                 continue;
                             }
 
                             let trait_did = trait_predicate.def_id();
                             if trait_did == sync_trait_def_id {
-                                suspicious_generic_params.remove(&param_ty.index);
+                                need_sync.remove(&param_ty.index);
+                                // Naively assume a `Sync` object is also `Send`.
+                                need_send.remove(&param_ty.index);
+                            } else if trait_did == send_trait_def_id {
+                                need_send.remove(&param_ty.index);
                             }
                         }
                     }
                 }
 
-                return if suspicious_generic_params.is_empty() {
+                return if need_sync.is_empty() && need_send.is_empty() {
                     None
                 } else {
                     Some(adt_def.did)
@@ -77,34 +95,44 @@ impl<'tcx> SendSyncChecker<'tcx> {
         sync_trait_def_id: DefId,
         copy_trait_def_id: DefId,
     ) -> Option<DefId> {
-        if let Some(trait_ref) = self.rcx.tcx().impl_trait_ref(impl_hir_id.owner) {
+        let tcx = self.rcx.tcx();
+        if let Some(trait_ref) = tcx.impl_trait_ref(impl_hir_id.owner) {
             if let ty::TyKind::Adt(adt_def, substs) = trait_ref.self_ty().kind {
-                // let adt_ty = trait_ref.self_ty();
-                // info!("{:?}", adt_def.did);
+                let adt_did = adt_def.did;
 
-                // At the end, this set should only contain indices of generic params
-                // which may cause safety issues in the `Send` impl.
-                let mut suspicious_generic_params = FxHashSet::default();
+                // Keep track of generic params that need to be `Send`.
+                let mut need_send: FxHashSet<u32> = FxHashSet::default();
 
-                // Initialize set of generic type params of the given `impl Send`.
-                for gen_param in &self.rcx.tcx().generics_of(impl_hir_id.owner).params {
+                // Keep track of generic params that need to be `Send + Sync`.
+                // e.g. `Arc<T>` requires T: Send + Sync for Send
+                let mut need_sync: FxHashSet<u32> = FxHashSet::default();
+
+                // Generic params that only occur within `PhantomData<_>`
+                let phantom_params = self
+                    .phantom_map
+                    .entry(adt_did)
+                    .or_insert_with(|| phantom_indices(tcx, adt_def, substs));
+
+                // Get `AdtBehavior` per generic parameter.
+                let adt_behavior = self
+                    .behavior_map
+                    .entry(adt_did)
+                    .or_insert(adt_behavior(tcx, adt_did));
+
+                // Initialize sets `need_send` & `need_sync`
+                for gen_param in tcx.generics_of(impl_hir_id.owner).params.iter() {
                     if let GenericParamDefKind::Type { .. } = gen_param.kind {
-                        suspicious_generic_params.insert(gen_param.index);
+                        need_send.insert(gen_param.index);
+
+                        // Check if the current ADT acts as a `PtrLike` type for the generic parameter.
+                        if let Some(AdtBehavior::PtrLike) = adt_behavior.get(&gen_param.index) {
+                            need_sync.insert(gen_param.index);
+                        }
                     }
                 }
 
-                // Find generic parameters that are in/out of `PhantomData<T>`.
-                let phantom_indices = phantom_indices(self.rcx.tcx(), adt_def, substs);
-
-                // TODO: Check whether any of the generic params require a Sync bound.
-                // e.g. `Arc<T>` requires T: Send + Sync for Send
-                // let mut params_need_sync= FxHashSet::default();
-                // -------------------------------------------------------------------
-
                 // Iterate over predicates to check trait bounds on generic params.
-                for atom in self
-                    .rcx
-                    .tcx()
+                for atom in tcx
                     .param_env(impl_hir_id.owner)
                     .caller_bounds()
                     .iter()
@@ -112,25 +140,30 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 {
                     if let PredicateAtom::Trait(trait_predicate, _) = atom {
                         if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind {
-                            if phantom_indices.contains(&param_ty.index) {
+                            // Find generic parameters that are in/out of `PhantomData<T>`.
+                            // Check if query is cached before calling `phantom_indices`.
+                            if phantom_params.contains(&param_ty.index) {
                                 continue;
                             }
-                            let trait_did = trait_predicate.def_id();
 
-                            if trait_did == send_trait_def_id
-                                || trait_did == sync_trait_def_id
-                                || trait_did == copy_trait_def_id
-                            {
-                                suspicious_generic_params.remove(&param_ty.index);
+                            let trait_did = trait_predicate.def_id();
+                            if trait_did == send_trait_def_id || trait_did == copy_trait_def_id {
+                                need_send.remove(&param_ty.index);
+                            } else if trait_did == sync_trait_def_id {
+                                if need_sync.contains(&param_ty.index) {
+                                    need_sync.remove(&param_ty.index);
+                                } else {
+                                    need_send.remove(&param_ty.index);
+                                }
                             }
                         }
                     }
                 }
 
-                return if suspicious_generic_params.is_empty() {
+                return if need_send.is_empty() && need_sync.is_empty() {
                     None
                 } else {
-                    Some(adt_def.did)
+                    Some(adt_did)
                 };
             }
         }

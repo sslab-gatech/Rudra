@@ -3,16 +3,18 @@
 // You need to fix the code to enable `relaxed` mode..
 mod relaxed;
 // Default mode is `strict`.
+mod behavior;
 mod strict;
 
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::DefId;
 use rustc_hir::{GenericBound, GenericParam, GenericParamKind, WherePredicate};
 use rustc_hir::{HirId, ItemKind, Node};
+use rustc_middle::mir::terminator::{Mutability, TerminatorKind};
 use rustc_middle::ty::{
     self,
     subst::{self, GenericArgKind},
-    AdtDef, GenericParamDefKind, List, PredicateAtom, TyCtxt,
+    AdtDef, AssocKind, FnSig, GenericParamDefKind, List, PredicateAtom, Ty, TyCtxt, TyS,
 };
 use rustc_span::symbol::sym;
 
@@ -21,15 +23,18 @@ use snafu::{OptionExt, Snafu};
 use crate::prelude::*;
 use crate::report::{Report, ReportLevel};
 
+use behavior::*;
 pub use relaxed::*;
 pub use strict::*;
 
 pub struct SendSyncChecker<'tcx> {
     rcx: RudraCtxt<'tcx>,
-    /// For each struct, keep track of reports.
+    /// For each ADT, keep track of reports.
     report_map: FxHashMap<DefId, Vec<Report>>,
-    /// For each relevant ADT, keep track of `T`s that are only within `PhantomData<T>`.
+    /// For each ADT, keep track of `T`s that are only within `PhantomData<T>`.
     phantom_map: FxHashMap<DefId, Vec<u32>>,
+    /// For each ADT, keep track of AdtBehavior per generic param.
+    behavior_map: FxHashMap<DefId, FxHashMap<u32, AdtBehavior>>,
 }
 
 impl<'tcx> SendSyncChecker<'tcx> {
@@ -38,6 +43,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
             rcx,
             report_map: FxHashMap::default(),
             phantom_map: FxHashMap::default(),
+            behavior_map: FxHashMap::default(),
         }
     }
 
@@ -46,6 +52,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
         let sync_trait_did = unwrap_or!(sync_trait_def_id(self.rcx.tcx()) => return);
         let copy_trait_did = unwrap_or!(copy_trait_def_id(self.rcx.tcx()) => return);
 
+        // Main analysis
         self.analyze_send(send_trait_did, sync_trait_did, copy_trait_did);
         self.analyze_sync(send_trait_did, sync_trait_did, copy_trait_did);
 
@@ -177,8 +184,14 @@ fn copy_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
     convert!(tcx.lang_items().copy_trait().context(CopyTraitNotFound))
 }
 
+/// Check Clone Trait
+fn clone_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
+    convert!(tcx.lang_items().clone_trait().context(CloneTraitNotFound))
+}
+
 #[derive(Debug, Snafu)]
 pub enum SendSyncError {
+    CloneTraitNotFound,
     CopyTraitNotFound,
     SendTraitNotFound,
     SyncTraitNotFound,
@@ -189,6 +202,7 @@ impl AnalysisError for SendSyncError {
     fn kind(&self) -> AnalysisErrorKind {
         use SendSyncError::*;
         match self {
+            CloneTraitNotFound => AnalysisErrorKind::Unreachable,
             CopyTraitNotFound => AnalysisErrorKind::Unreachable,
             SendTraitNotFound => AnalysisErrorKind::Unreachable,
             SyncTraitNotFound => AnalysisErrorKind::Unreachable,

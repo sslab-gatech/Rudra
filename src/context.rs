@@ -182,7 +182,7 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
     }
 
     /// Try to find MIR function body with def_id.
-    fn find_fn(
+    pub(crate) fn find_fn(
         tcx: TyCtxt<'tcx>,
         def_id: DefId,
     ) -> Result<&'tcx mir::Body<'tcx>, MirInstantiationError> {
