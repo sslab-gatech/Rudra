@@ -14,8 +14,6 @@ For temporary debugging, you can also change this line in `prelude.rs`
 to
 `let names = dbg!(self.get_def_path(def_id));`
 */
-pub const TRANSMUTE: [&str; 4] = ["core", "intrinsics", "", "transmute"];
-
 pub const PTR_READ: [&str; 3] = ["core", "ptr", "read"];
 pub const PTR_DIRECT_READ: [&str; 5] = ["core", "ptr", "const_ptr", "<impl *const T>", "read"];
 
@@ -24,6 +22,8 @@ pub const INTRINSICS_COPY_NONOVERLAPPING: [&str; 3] = ["core", "intrinsics", "co
 
 pub const VEC_SET_LEN: [&str; 4] = ["alloc", "vec", "Vec", "set_len"];
 pub const VEC_FROM_RAW_PARTS: [&str; 4] = ["alloc", "vec", "Vec", "from_raw_parts"];
+
+pub const TRANSMUTE: [&str; 4] = ["core", "intrinsics", "", "transmute"];
 
 pub const PTR_WRITE: [&str; 3] = ["core", "ptr", "write"];
 pub const PTR_DIRECT_WRITE: [&str; 5] = ["core", "ptr", "mut_ptr", "<impl *mut T>", "write"];
@@ -67,8 +67,6 @@ pub static SPECIAL_PATH_DISCOVERY: Lazy<PathSet> =
 
 pub static STRONG_LIFETIME_BYPASS_LIST: Lazy<PathSet> = Lazy::new(move || {
     PathSet::new(&[
-        &TRANSMUTE,
-        //
         &PTR_READ,
         &PTR_DIRECT_READ,
         //
@@ -82,6 +80,8 @@ pub static STRONG_LIFETIME_BYPASS_LIST: Lazy<PathSet> = Lazy::new(move || {
 
 pub static WEAK_LIFETIME_BYPASS_LIST: Lazy<PathSet> = Lazy::new(move || {
     PathSet::new(&[
+        &TRANSMUTE,
+        //
         &PTR_WRITE,
         &PTR_DIRECT_WRITE,
         //
