@@ -75,20 +75,22 @@ fn main() -> Result<()> {
         })
         .collect();
 
-    if let Some(count) = opt.count {
-        match opt.select {
-            Selection::First => (),
-            Selection::Top => {
-                crate_list
-                    .sort_by_key(|krate| std::u64::MAX - krate.0.latest_version_record().downloads);
-                crate_list.truncate(count);
-            }
-            Selection::Random => {
-                use rand::seq::SliceRandom;
-                let mut rng = rand::thread_rng();
-                crate_list.as_mut_slice().shuffle(&mut rng);
-            }
+    match opt.select {
+        Selection::First => {
+            crate_list.sort_by_key(|krate| krate.0.name().to_owned());
         }
+        Selection::Top => {
+            crate_list
+                .sort_by_key(|krate| std::u64::MAX - krate.0.latest_version_record().downloads);
+        }
+        Selection::Random => {
+            use rand::seq::SliceRandom;
+            let mut rng = rand::thread_rng();
+            crate_list.as_mut_slice().shuffle(&mut rng);
+        }
+    }
+
+    if let Some(count) = opt.count {
         crate_list.truncate(count)
     }
 
