@@ -23,6 +23,10 @@ pub const INTRINSICS_COPY_NONOVERLAPPING: [&str; 3] = ["core", "intrinsics", "co
 pub const VEC_SET_LEN: [&str; 4] = ["alloc", "vec", "Vec", "set_len"];
 pub const VEC_FROM_RAW_PARTS: [&str; 4] = ["alloc", "vec", "Vec", "from_raw_parts"];
 
+pub const PTR_DROP_IN_PLACE: [&str; 3] = ["core", "ptr", "drop_in_place"];
+pub const PTR_DIRECT_DROP_IN_PLACE: [&str; 5] =
+    ["core", "ptr", "mut_ptr", "<impl *mut T>", "drop_in_place"];
+
 pub const TRANSMUTE: [&str; 4] = ["core", "intrinsics", "", "transmute"];
 
 pub const PTR_WRITE: [&str; 3] = ["core", "ptr", "write"];
@@ -75,6 +79,9 @@ pub static STRONG_LIFETIME_BYPASS_LIST: Lazy<PathSet> = Lazy::new(move || {
         //
         &VEC_SET_LEN,
         &VEC_FROM_RAW_PARTS,
+        //
+        &PTR_DROP_IN_PLACE,
+        &PTR_DIRECT_DROP_IN_PLACE,
     ])
 });
 

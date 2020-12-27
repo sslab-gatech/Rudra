@@ -18,6 +18,10 @@ impl PathsDiscovery {
             vec![12, 34].set_len(5678);
             std::vec::Vec::from_raw_parts(12 as *mut i32, 34, 56);
 
+            std::intrinsics::drop_in_place(12 as *mut i32);
+            std::ptr::drop_in_place(12 as *mut i32);
+            (12 as *mut i32).drop_in_place();
+
             // Weak bypasses
             std::mem::transmute::<_, *mut i32>(12 as *const i32);
 
