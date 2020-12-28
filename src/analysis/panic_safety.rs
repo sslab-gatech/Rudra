@@ -187,6 +187,11 @@ mod inner {
                             self.status
                                 .weak_bypass
                                 .push(terminator.original.source_info.span);
+                        } else if paths::GENERIC_FN_LIST.contains(&symbol_vec) {
+                            reachability.mark_sink(id);
+                            self.status
+                                .panicking_function
+                                .push(terminator.original.source_info.span);
                         } else {
                             // Check for generic function calls
                             match Instance::resolve(
