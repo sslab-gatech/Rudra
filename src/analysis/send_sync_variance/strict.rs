@@ -75,7 +75,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
         impl_hir_id: HirId,
         send_trait_def_id: DefId,
         sync_trait_def_id: DefId,
-        copy_trait_def_id: DefId,
+        _copy_trait_def_id: DefId,
     ) -> Option<DefId> {
         if let Some(trait_ref) = self.rcx.tcx().impl_trait_ref(impl_hir_id.owner) {
             if let ty::TyKind::Adt(adt_def, substs) = trait_ref.self_ty().kind {
@@ -117,10 +117,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                             }
                             let trait_did = trait_predicate.def_id();
 
-                            if trait_did == send_trait_def_id
-                                || trait_did == sync_trait_def_id
-                                || trait_did == copy_trait_def_id
-                            {
+                            if trait_did == send_trait_def_id || trait_did == sync_trait_def_id {
                                 suspicious_generic_params.remove(&param_ty.index);
                             }
                         }
