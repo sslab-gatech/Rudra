@@ -5,7 +5,7 @@ use super::*;
 
 // We may not use the relaxed versions at all,
 // but keeping them alive just in case..
-impl<'tcx> SendSyncChecker<'tcx> {
+impl<'tcx> SendSyncVarianceChecker<'tcx> {
     /// Detect suspicious `Send` with relaxed rules.
     /// Report only if all generic parameters of `impl Send` aren't `Send`.
     fn suspicious_send_relaxed(

@@ -1,7 +1,7 @@
 /*!
 ```rudra-test
 test_type = "fp"
-expected_analyzers = ["SendSyncChecker"]
+expected_analyzers = ["SendSyncVariance"]
 ```
 !*/
 

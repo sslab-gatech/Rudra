@@ -99,10 +99,10 @@ fn parse_config() -> (RudraConfig, Vec<String>) {
             "-Zrudra-disable-unsafe-destructor" => {
                 config.unsafe_destructor_enabled = false;
             }
-            "-Zrudra-enable-send-sync" => config.send_sync_enabled = true,
-            "-Zrudra-disable-send-sync" => config.send_sync_enabled = false,
-            "-Zrudra-enable-panic-safety" => config.panic_safety_enabled = true,
-            "-Zrudra-disable-panic-safety" => config.panic_safety_enabled = false,
+            "-Zrudra-enable-send-sync-variance" => config.send_sync_variance_enabled = true,
+            "-Zrudra-disable-send-sync-variance" => config.send_sync_variance_enabled = false,
+            "-Zrudra-enable-unsafe-dataflow" => config.unsafe_dataflow_enabled = true,
+            "-Zrudra-disable-unsafe-dataflow" => config.unsafe_dataflow_enabled = false,
             "-v" => config.verbosity = Verbosity::Verbose,
             "-vv" => config.verbosity = Verbosity::Trace,
             _ => {

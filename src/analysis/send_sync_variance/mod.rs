@@ -24,7 +24,7 @@ use crate::report::{Report, ReportLevel};
 pub use relaxed::*;
 pub use strict::*;
 
-pub struct SendSyncChecker<'tcx> {
+pub struct SendSyncVarianceChecker<'tcx> {
     rcx: RudraCtxt<'tcx>,
     /// For each struct, keep track of reports.
     report_map: FxHashMap<DefId, Vec<Report>>,
@@ -32,9 +32,9 @@ pub struct SendSyncChecker<'tcx> {
     phantom_map: FxHashMap<DefId, Vec<u32>>,
 }
 
-impl<'tcx> SendSyncChecker<'tcx> {
+impl<'tcx> SendSyncVarianceChecker<'tcx> {
     pub fn new(rcx: RudraCtxt<'tcx>) -> Self {
-        SendSyncChecker {
+        SendSyncVarianceChecker {
             rcx,
             report_map: FxHashMap::default(),
             phantom_map: FxHashMap::default(),
@@ -76,7 +76,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                     .push(Report::with_hir_id(
                         tcx,
                         ReportLevel::Warning,
-                        "SendSyncChecker",
+                        "SendSyncVariance",
                         "Suspicious impl of `Send` found",
                         impl_hir_id,
                     ));
@@ -104,7 +104,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                     .push(Report::with_hir_id(
                         tcx,
                         ReportLevel::Warning,
-                        "SendSyncChecker",
+                        "SendSyncVariance",
                         "Suspicious impl of `Sync` found",
                         impl_hir_id,
                     ));
@@ -178,16 +178,16 @@ fn copy_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
 }
 
 #[derive(Debug, Snafu)]
-pub enum SendSyncError {
+pub enum SendSyncVarianceError {
     CopyTraitNotFound,
     SendTraitNotFound,
     SyncTraitNotFound,
     CatchAll,
 }
 
-impl AnalysisError for SendSyncError {
+impl AnalysisError for SendSyncVarianceError {
     fn kind(&self) -> AnalysisErrorKind {
-        use SendSyncError::*;
+        use SendSyncVarianceError::*;
         match self {
             CopyTraitNotFound => AnalysisErrorKind::Unreachable,
             SendTraitNotFound => AnalysisErrorKind::Unreachable,
