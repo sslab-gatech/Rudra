@@ -15,8 +15,7 @@ use rustc_middle::mir::terminator::Mutability;
 use rustc_middle::ty::{
     self,
     subst::{self, GenericArgKind},
-    AssocKind, FnSig, GenericParamDef, GenericParamDefKind, List, PredicateAtom, Ty,
-    TyCtxt, TyS,
+    AssocKind, FnSig, GenericParamDef, GenericParamDefKind, List, PredicateAtom, Ty, TyCtxt, TyS,
 };
 use rustc_span::symbol::sym;
 

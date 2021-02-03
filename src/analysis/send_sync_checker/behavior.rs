@@ -116,16 +116,21 @@ pub(crate) fn adt_behavior<'tcx>(
                     .filter(|(_, fn_sig)| fn_takes_selfref(fn_sig, impl_self_ty))
                 {
                     for ty in fn_sig.inputs_and_output {
-                        owned_or_borrowed_generic_params_in_ty(tcx, ty, &mut owned_generic_params, &mut borrowed_generic_params);
+                        owned_or_borrowed_generic_params_in_ty(
+                            tcx,
+                            ty,
+                            &mut owned_generic_params,
+                            &mut borrowed_generic_params,
+                        );
                     }
                 }
 
                 for param_idx in owned_generic_params.difference(&borrowed_generic_params) {
                     if let Some(&mapped_idx) = generic_param_idx_map.get(&param_idx) {
                         cond_map
-                        .entry(mapped_idx)
-                        .or_insert(Cond::empty())
-                        .insert(Cond::PASSOWNED);
+                            .entry(mapped_idx)
+                            .or_insert(Cond::empty())
+                            .insert(Cond::PASSOWNED);
                     }
                 }
             }
