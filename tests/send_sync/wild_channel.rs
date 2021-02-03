@@ -13,9 +13,7 @@ struct Container<P, Q>(P, Q);
 unsafe impl<P: Sync, Q: Send> Sync for Container<P, Q> {}
 
 impl<P, Q> Container<P, Q> {
-    fn append_to_queue(&self, _msg: Q) {
-
-    }
+    fn append_to_queue(&self, _msg: Q) {}
 
     fn peek_queue_end(&self) -> Result<&Q, ()> {
         Ok(&self.1)

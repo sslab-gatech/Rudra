@@ -1,20 +1,21 @@
 //! Unsafe Send/Sync impl detector
 
+mod behavior;
 // You need to fix the code to enable `relaxed` mode..
 mod relaxed;
 // Default mode is `strict`.
-mod behavior;
 mod strict;
 
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::DefId;
 use rustc_hir::{GenericBound, GenericParam, GenericParamKind, WherePredicate};
 use rustc_hir::{HirId, ItemKind, Node};
-use rustc_middle::mir::terminator::{Mutability, TerminatorKind};
+use rustc_middle::mir::terminator::Mutability;
 use rustc_middle::ty::{
     self,
     subst::{self, GenericArgKind},
-    AdtDef, AssocKind, FnSig, GenericParamDefKind, List, PredicateAtom, Ty, TyCtxt, TyS,
+    AssocKind, FnSig, GenericParamDef, GenericParamDefKind, List, PredicateAtom, Ty,
+    TyCtxt, TyS,
 };
 use rustc_span::symbol::sym;
 
@@ -120,38 +121,61 @@ impl<'tcx> SendSyncChecker<'tcx> {
     }
 }
 
+// Note that len(adt_generics_iter) == len(substs_generics_iter)
+fn generic_param_idx_mapper<'tcx>(
+    adt_generics: &Vec<GenericParamDef>,
+    substs_generics: &'tcx List<subst::GenericArg<'tcx>>,
+) -> FxHashMap<u32, u32> {
+    let mut generic_param_idx_mapper = FxHashMap::default();
+    for (original, substituted) in adt_generics.iter().zip(substs_generics.iter()) {
+        if let GenericArgKind::Type(ty) = substituted.unpack() {
+            // Currently, we ignore cases where a generic parameter is replaced with a concrete type.
+            // e.g. `impl Send for My<A, i32> {}`
+            if let ty::TyKind::Param(param_ty) = ty.kind {
+                generic_param_idx_mapper.insert(param_ty.index, original.index);
+            }
+            // We also ignore additional generic parameters introduced in impl/method contexts.
+            /*
+            impl<'a, A: 'a, B: Fn(&'a A)> My<A, B> {
+                // C.index = 3
+                pub fn hello<'b, C>(&self, x: C, y: &'b B) {}
+            }
+            */
+        }
+    }
+    return generic_param_idx_mapper;
+}
+
 /// For a given ADT (struct, enum, union),
 /// return the indices of `T`s that are only inside `PhantomData<T>`.
-fn phantom_indices<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    adt_def: &AdtDef,
-    substs: &'tcx List<subst::GenericArg<'tcx>>,
-) -> Vec<u32> {
+fn phantom_indices<'tcx>(tcx: TyCtxt<'tcx>, adt_ty: Ty<'tcx>) -> Vec<u32> {
     // Store indices of gen_params that are in/out of `PhantomData<_>`
     let (mut in_phantom, mut out_phantom) = (FxHashSet::default(), FxHashSet::default());
 
-    for variant in &adt_def.variants {
-        for field in &variant.fields {
-            let field_ty = field.ty(tcx, substs);
+    if let ty::TyKind::Adt(adt_def, substs) = adt_ty.kind {
+        for variant in &adt_def.variants {
+            for field in &variant.fields {
+                let field_ty = field.ty(tcx, substs);
 
-            let mut walker = field_ty.walk();
-            while let Some(node) = walker.next() {
-                if let GenericArgKind::Type(inner_ty) = node.unpack() {
-                    if inner_ty.is_phantom_data() {
-                        walker.skip_current_subtree();
+                let mut walker = field_ty.walk();
+                while let Some(node) = walker.next() {
+                    if let GenericArgKind::Type(inner_ty) = node.unpack() {
+                        if inner_ty.is_phantom_data() {
+                            walker.skip_current_subtree();
 
-                        for x in inner_ty.walk() {
-                            if let GenericArgKind::Type(ph_ty) = x.unpack() {
-                                if let ty::TyKind::Param(ty) = ph_ty.kind {
-                                    in_phantom.insert(ty.index);
+                            for x in inner_ty.walk() {
+                                if let GenericArgKind::Type(ph_ty) = x.unpack() {
+                                    if let ty::TyKind::Param(ty) = ph_ty.kind {
+                                        in_phantom.insert(ty.index);
+                                    }
                                 }
                             }
+                            continue;
                         }
-                        continue;
-                    }
 
-                    if let ty::TyKind::Param(ty) = inner_ty.kind {
-                        out_phantom.insert(ty.index);
+                        if let ty::TyKind::Param(ty) = inner_ty.kind {
+                            out_phantom.insert(ty.index);
+                        }
                     }
                 }
             }
@@ -185,7 +209,7 @@ fn copy_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
 }
 
 /// Check Clone Trait
-fn clone_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
+fn _clone_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
     convert!(tcx.lang_items().clone_trait().context(CloneTraitNotFound))
 }
 

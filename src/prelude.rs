@@ -10,7 +10,7 @@ use snafu::{Backtrace, Snafu};
 pub use snafu::{Error, ErrorCompat, IntoError, OptionExt, ResultExt};
 
 pub use crate::analysis::{AnalysisError, AnalysisErrorKind, AnalysisResult};
-pub use crate::context::{RudraCtxt, RudraCtxtOwner};
+pub use crate::context::RudraCtxt;
 pub use crate::report::rudra_report;
 
 #[derive(Debug, Snafu)]

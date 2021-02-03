@@ -13,7 +13,5 @@ struct Channel<P, Q>(P, Q);
 unsafe impl<P: Sync, Q: Send> Sync for Channel<P, Q> {}
 
 impl<P, Q> Channel<P, Q> {
-    fn send(&self, _msg: Box<Q>) {
-        
-    }
+    fn send(&self, _msg: Box<Q>) {}
 }

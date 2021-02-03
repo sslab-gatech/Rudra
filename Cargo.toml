@@ -38,6 +38,7 @@ snafu = "0.6"
 termcolor = "1.1.2"
 toml = "0.5.6"
 wait-timeout = "0.2"
+bitflags = "1.2.1"
 
 [features]
 backtraces = ["snafu/backtraces", "snafu/backtraces-impl-backtrace-crate"]

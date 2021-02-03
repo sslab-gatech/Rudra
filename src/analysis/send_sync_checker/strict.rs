@@ -14,11 +14,11 @@ impl<'tcx> SendSyncChecker<'tcx> {
     ) -> Option<DefId> {
         let tcx = self.rcx.tcx();
         if let Some(trait_ref) = tcx.impl_trait_ref(impl_hir_id.owner) {
-            if let ty::TyKind::Adt(adt_def, substs) = trait_ref.self_ty().kind {
+            if let ty::TyKind::Adt(adt_def, impl_trait_substs) = trait_ref.self_ty().kind {
                 let adt_did = adt_def.did;
+                let adt_ty = tcx.type_of(adt_did);
 
-                // Keep track of generic params that need to be `Send + Sync`.
-                // e.g. `Arc<T>` requires T: Send + Sync for Send
+                // Keep track of generic params that need to be `Sync`.
                 let mut need_sync: FxHashSet<u32> = FxHashSet::default();
 
                 // Keep track of generic params that need to be `Send`.
@@ -28,19 +28,21 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 let phantom_params = self
                     .phantom_map
                     .entry(adt_did)
-                    .or_insert_with(|| phantom_indices(tcx, adt_def, substs));
+                    .or_insert(phantom_indices(tcx, adt_ty));
 
                 // Get `AdtBehavior` per generic parameter.
                 let adt_behavior = self
                     .behavior_map
                     .entry(adt_did)
-                    .or_insert(adt_behavior(tcx, adt_did));
+                    .or_insert(adt_behavior(self.rcx, adt_did));
 
                 // Initialize set of generic type params of the given `impl Sync`.
-                for gen_param in &self.rcx.tcx().generics_of(impl_hir_id.owner).params {
+                for gen_param in tcx.generics_of(adt_did).params.iter() {
                     if let GenericParamDefKind::Type { .. } = gen_param.kind {
-                        // Check if the current ADT acts as a `ConcurrentQ` type for the generic parameter.
-                        if let Some(AdtBehavior::ConcurrentQ) = adt_behavior.get(&gen_param.index) {
+                        // Check if the current ADT acts as a `ConcurrentQueue` type for the generic parameter.
+                        if let Some(AdtBehavior::ConcurrentQueue) =
+                            adt_behavior.get(&gen_param.index)
+                        {
                             need_send.insert(gen_param.index);
                         } else {
                             need_sync.insert(gen_param.index);
@@ -48,7 +50,11 @@ impl<'tcx> SendSyncChecker<'tcx> {
                     }
                 }
 
-                let tcx = self.rcx.tcx();
+                // If the below assertion fails, there must be an issue with librustc we're using.
+                // assert_eq!(tcx.generics_of(adt_did).params.len(), substs.len());
+                let generic_param_idx_map =
+                    generic_param_idx_mapper(&tcx.generics_of(adt_did).params, impl_trait_substs);
+
                 // Iterate over predicates to check trait bounds on generic params.
                 for atom in tcx
                     .param_env(impl_hir_id.owner)
@@ -58,19 +64,20 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 {
                     if let PredicateAtom::Trait(trait_predicate, _) = atom {
                         if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind {
-                            // Find generic parameters that are in/out of `PhantomData<T>`.
-                            // Check if query is cached before calling `phantom_indices`
-                            if phantom_params.contains(&param_ty.index) {
-                                continue;
-                            }
+                            if let Some(mapped_idx) = generic_param_idx_map.get(&param_ty.index) {
+                                // Skip generic parameters that are only within `PhantomData<T>`.
+                                if phantom_params.contains(mapped_idx) {
+                                    continue;
+                                }
 
-                            let trait_did = trait_predicate.def_id();
-                            if trait_did == sync_trait_def_id {
-                                need_sync.remove(&param_ty.index);
-                                // Naively assume a `Sync` object is also `Send`.
-                                need_send.remove(&param_ty.index);
-                            } else if trait_did == send_trait_def_id {
-                                need_send.remove(&param_ty.index);
+                                let trait_did = trait_predicate.def_id();
+                                if trait_did == sync_trait_def_id {
+                                    need_sync.remove(mapped_idx);
+                                    // Naively assume a `Sync` object is also `Send`.
+                                    need_send.remove(mapped_idx);
+                                } else if trait_did == send_trait_def_id {
+                                    need_send.remove(mapped_idx);
+                                }
                             }
                         }
                     }
@@ -86,50 +93,41 @@ impl<'tcx> SendSyncChecker<'tcx> {
         return None;
     }
 
-    /// Returns Some(DefId of ADT) if `impl Send` for the ADT looks suspicious
+    /// Returns `Some(DefId of ADT)` if `impl Send` for the ADT looks suspicious
     /// (ADT: struct / enum / union)
     pub fn suspicious_send(
         &mut self,
         impl_hir_id: HirId,
         send_trait_def_id: DefId,
         sync_trait_def_id: DefId,
-        copy_trait_def_id: DefId,
+        _copy_trait_def_id: DefId,
     ) -> Option<DefId> {
         let tcx = self.rcx.tcx();
         if let Some(trait_ref) = tcx.impl_trait_ref(impl_hir_id.owner) {
-            if let ty::TyKind::Adt(adt_def, substs) = trait_ref.self_ty().kind {
+            if let ty::TyKind::Adt(adt_def, impl_trait_substs) = trait_ref.self_ty().kind {
                 let adt_did = adt_def.did;
+                let adt_ty = tcx.type_of(adt_did);
 
                 // Keep track of generic params that need to be `Send`.
                 let mut need_send: FxHashSet<u32> = FxHashSet::default();
-
-                // Keep track of generic params that need to be `Send + Sync`.
-                // e.g. `Arc<T>` requires T: Send + Sync for Send
-                let mut need_sync: FxHashSet<u32> = FxHashSet::default();
 
                 // Generic params that only occur within `PhantomData<_>`
                 let phantom_params = self
                     .phantom_map
                     .entry(adt_did)
-                    .or_insert_with(|| phantom_indices(tcx, adt_def, substs));
-
-                // Get `AdtBehavior` per generic parameter.
-                let adt_behavior = self
-                    .behavior_map
-                    .entry(adt_did)
-                    .or_insert(adt_behavior(tcx, adt_did));
+                    .or_insert(phantom_indices(tcx, adt_ty));
 
                 // Initialize sets `need_send` & `need_sync`
-                for gen_param in tcx.generics_of(impl_hir_id.owner).params.iter() {
+                for gen_param in tcx.generics_of(adt_did).params.iter() {
                     if let GenericParamDefKind::Type { .. } = gen_param.kind {
                         need_send.insert(gen_param.index);
-
-                        // Check if the current ADT acts as a `PtrLike` type for the generic parameter.
-                        if let Some(AdtBehavior::PtrLike) = adt_behavior.get(&gen_param.index) {
-                            need_sync.insert(gen_param.index);
-                        }
                     }
                 }
+
+                // If the below assertion fails, there must be an issue with librustc we're using.
+                // assert_eq!(tcx.generics_of(adt_did).params.len(), substs.len());
+                let generic_param_idx_map =
+                    generic_param_idx_mapper(&tcx.generics_of(adt_did).params, impl_trait_substs);
 
                 // Iterate over predicates to check trait bounds on generic params.
                 for atom in tcx
@@ -140,27 +138,23 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 {
                     if let PredicateAtom::Trait(trait_predicate, _) = atom {
                         if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind {
-                            // Find generic parameters that are in/out of `PhantomData<T>`.
-                            // Check if query is cached before calling `phantom_indices`.
-                            if phantom_params.contains(&param_ty.index) {
-                                continue;
-                            }
+                            if let Some(mapped_idx) = generic_param_idx_map.get(&param_ty.index) {
+                                // Skip generic parameters that are only within `PhantomData<T>`.
+                                if phantom_params.contains(mapped_idx) {
+                                    continue;
+                                }
 
-                            let trait_did = trait_predicate.def_id();
-                            if trait_did == send_trait_def_id || trait_did == copy_trait_def_id {
-                                need_send.remove(&param_ty.index);
-                            } else if trait_did == sync_trait_def_id {
-                                if need_sync.contains(&param_ty.index) {
-                                    need_sync.remove(&param_ty.index);
-                                } else {
-                                    need_send.remove(&param_ty.index);
+                                let trait_did = trait_predicate.def_id();
+                                if trait_did == send_trait_def_id || trait_did == sync_trait_def_id
+                                {
+                                    need_send.remove(mapped_idx);
                                 }
                             }
                         }
                     }
                 }
 
-                return if need_send.is_empty() && need_sync.is_empty() {
+                return if need_send.is_empty() {
                     None
                 } else {
                     Some(adt_did)
