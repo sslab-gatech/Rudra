@@ -56,6 +56,13 @@ impl Cond {
     }
 }
 
+const TO_OWNED: [&'static str; 4] = [
+    "std::convert::Into",
+    "core::convert::Into",
+    "std::iter::IntoIterator",
+    "core::iter::IntoIterator",
+];
+
 /// For each generic parameter (identified by index) of a given ADT,
 /// inspect fn signature & body to identify `AdtBehavior`.
 /// Inspects all methods of the given ADT, including methods from trait impls.
@@ -69,7 +76,8 @@ pub(crate) fn adt_behavior<'tcx>(
 
     // Set of `T`s that appear only as owned `T` in either input or output of APIs.
     let mut owned_generic_params = FxHashSet::default();
-    let mut borrowed_generic_params = FxHashSet::default();
+    // Set of `T`s that appear only as `&T` in return type of APIs.
+    let mut peek_generic_params = FxHashSet::default();
 
     let _adt_ty = tcx.type_of(adt_did);
     // For ADT `Foo<A, B>` => adt_ty_name = `Foo`
@@ -101,40 +109,108 @@ pub(crate) fn adt_behavior<'tcx>(
                     .in_definition_order()
                     .filter_map(|assoc_item| {
                         if assoc_item.kind == AssocKind::Fn && assoc_item.fn_has_self_parameter {
+                            // We are only inspecting methods that take `self` within its input.
                             Some(assoc_item.def_id)
                         } else {
                             None
                         }
                     });
 
+                // Since each `impl` block may assign different indices to equivalent generic parameters,
+                // We need one translation map per `impl` block.
                 let generic_param_idx_map =
                     generic_param_idx_mapper(adt_generic_params, impl_substs);
 
                 // Inspect `&self` methods defined within current impl block.
-                for (_method_did, fn_sig) in method_dids
+                for (method_did, fn_sig) in method_dids
                     .map(|did| (did, tcx.fn_sig(did).skip_binder()))
-                    .filter(|(_, fn_sig)| fn_takes_selfref(fn_sig, impl_self_ty))
+                    .filter(|(_, fn_sig)| {
+                        // Only inspect `safe` methods?
+                        if let rustc_hir::Unsafety::Unsafe = fn_sig.unsafety {
+                            return false;
+                        }
+                        // Check if the given method takes `&self` within its first parameter's type.
+                        // e.g. `&self`, `Box<&self>`, `Pin<&self>`, ..
+                        let mut walker = fn_sig.inputs()[0].walk();
+                        while let Some(node) = walker.next() {
+                            if let GenericArgKind::Type(ty) = node.unpack() {
+                                if let ty::TyKind::Ref(_, _, Mutability::Not) = ty.kind {
+                                    return true;
+                                }
+                            }
+                        }
+                        false
+                    })
                 {
-                    for ty in fn_sig.inputs_and_output {
-                        owned_or_borrowed_generic_params_in_ty(
-                            tcx,
-                            ty,
-                            &mut owned_generic_params,
-                            &mut borrowed_generic_params,
-                        );
-                    }
-                }
+                    /*
+                        Check for trait bounds introduced in function-level context.
+                        We want to catch cases equivalent to sending `P` (refer to example below)
 
-                for param_idx in owned_generic_params.difference(&borrowed_generic_params) {
-                    if let Some(&mapped_idx) = generic_param_idx_map.get(&param_idx) {
-                        cond_map
-                            .entry(mapped_idx)
-                            .or_insert(Cond::empty())
-                            .insert(Cond::PASSOWNED);
+                        // example )
+                        impl<P, Q> Channel<P, Q> {
+                            fn send_p<M>(&self, _msg: M) where M: Into<P>, {}
+                        }
+                    */
+                    let mut param_to_param = FxHashMap::default();
+                    for atom in tcx
+                        .param_env(method_did)
+                        .caller_bounds()
+                        .iter()
+                        .map(|x| x.skip_binders())
+                    {
+                        if let PredicateAtom::Trait(trait_predicate, _) = atom {
+                            if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind {
+                                let substs = trait_predicate.trait_ref.substs;
+
+                                // trait_predicate =>  M: Into<P>
+                                //                     |    |
+                                //             (param_ty)  (trait_predicate.trait_ref)
+
+                                if TO_OWNED
+                                    .contains(&tcx.def_path_str(trait_predicate.def_id()).as_str())
+                                {
+                                    // substs = [M, P]
+                                    if let ty::TyKind::Param(param_1) = substs.type_at(1).kind {
+                                        info!("{:?}", trait_predicate);
+                                        param_to_param.insert(param_ty.index, param_1.index);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    info!("{:?}", method_did);
+
+                    // Check generic parameters that are passed as owned `T`.
+                    for ty in fn_sig.inputs_and_output.iter() {
+                        for mut owned_idx in owned_generic_params_in_ty(tcx, ty) {
+                            if let Some(&idx) = param_to_param.get(&owned_idx) {
+                                owned_idx = idx;
+                            }
+                            if let Some(&mapped_idx) = generic_param_idx_map.get(&owned_idx) {
+                                owned_generic_params.insert(mapped_idx);
+                            }
+                        }
+                    }
+
+                    // Check whether the ADT has peek functionality for any of the generic parameters.
+                    for peek_idx in borrowed_generic_params_in_ty(tcx, fn_sig.output()) {
+                        if let Some(&mapped_idx) = param_to_param.get(&peek_idx) {
+                            peek_generic_params.insert(mapped_idx);
+                        }
                     }
                 }
             }
         }
+    }
+
+    info!("{:?}", owned_generic_params);
+    info!("{:?}", peek_generic_params);
+    for &param_idx in owned_generic_params.difference(&peek_generic_params) {
+        cond_map
+            .entry(param_idx)
+            .or_insert(Cond::empty())
+            .insert(Cond::PASSOWNED);
     }
 
     // Map: (idx of generic parameter) => (AdtBehavior)
@@ -150,65 +226,4 @@ pub(crate) fn adt_behavior<'tcx>(
         );
     }
     return behavior_map;
-}
-
-// Check if given fn takes `&self` within its first parameter's type.
-// e.g. `&self`, `Box<&self>`, `Pin<&self>`, ...
-fn fn_takes_selfref(fn_sig: &FnSig, self_ty: Ty) -> bool {
-    if fn_sig.inputs().is_empty() {
-        return false;
-    }
-
-    let mut walker = fn_sig.inputs()[0].walk();
-    while let Some(node) = walker.next() {
-        if let GenericArgKind::Type(ty) = node.unpack() {
-            if let ty::TyKind::Ref(_, ty, Mutability::Not) = ty.kind {
-                if TyS::same_type(self_ty, ty) {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
-
-// Within the given `ty`,
-// identify generic parameters that exist as owned `T`, and ones that exist as `&T`.
-fn owned_or_borrowed_generic_params_in_ty<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    ty: &'tcx TyS,
-    owned_generic_params: &mut FxHashSet<u32>,
-    borrowed_generic_params: &mut FxHashSet<u32>,
-) {
-    let mut worklist = vec![(ty, true)];
-    while let Some((ty, owned)) = worklist.pop() {
-        match ty.kind {
-            ty::TyKind::Param(param_ty) => {
-                if owned {
-                    owned_generic_params.insert(param_ty.index);
-                } else {
-                    borrowed_generic_params.insert(param_ty.index);
-                }
-            }
-            ty::TyKind::Adt(adt_def, substs) => {
-                for adt_variant in adt_def.variants.iter() {
-                    for adt_field in adt_variant.fields.iter() {
-                        worklist.push((adt_field.ty(tcx, substs), owned));
-                    }
-                }
-            }
-            ty::TyKind::Array(ty, _) => {
-                worklist.push((ty, owned));
-            }
-            ty::TyKind::Tuple(substs) => {
-                for ty in substs.types() {
-                    worklist.push((ty, owned));
-                }
-            }
-            ty::TyKind::Ref(_, borrowed_ty, Mutability::Not) => {
-                worklist.push((borrowed_ty, false));
-            }
-            _ => {}
-        }
-    }
 }

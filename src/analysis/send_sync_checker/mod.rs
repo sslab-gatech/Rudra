@@ -6,6 +6,7 @@ mod phantom;
 mod relaxed;
 // Default mode is `strict`.
 mod strict;
+mod utils;
 
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::DefId;
@@ -28,6 +29,7 @@ use behavior::*;
 pub use phantom::*;
 pub use relaxed::*;
 pub use strict::*;
+pub use utils::*;
 
 pub struct SendSyncChecker<'tcx> {
     rcx: RudraCtxt<'tcx>,
@@ -120,31 +122,6 @@ impl<'tcx> SendSyncChecker<'tcx> {
             }
         }
     }
-}
-
-// Note that len(adt_generics_iter) == len(substs_generics_iter)
-fn generic_param_idx_mapper<'tcx>(
-    adt_generics: &Vec<GenericParamDef>,
-    substs_generics: &'tcx List<subst::GenericArg<'tcx>>,
-) -> FxHashMap<u32, u32> {
-    let mut generic_param_idx_mapper = FxHashMap::default();
-    for (original, substituted) in adt_generics.iter().zip(substs_generics.iter()) {
-        if let GenericArgKind::Type(ty) = substituted.unpack() {
-            // Currently, we ignore cases where a generic parameter is replaced with a concrete type.
-            // e.g. `impl Send for My<A, i32> {}`
-            if let ty::TyKind::Param(param_ty) = ty.kind {
-                generic_param_idx_mapper.insert(param_ty.index, original.index);
-            }
-            // We also ignore additional generic parameters introduced in impl/method contexts.
-            /*
-            impl<'a, A: 'a, B: Fn(&'a A)> My<A, B> {
-                // C.index = 3
-                pub fn hello<'b, C>(&self, x: C, y: &'b B) {}
-            }
-            */
-        }
-    }
-    return generic_param_idx_mapper;
 }
 
 /// Check Send Trait
