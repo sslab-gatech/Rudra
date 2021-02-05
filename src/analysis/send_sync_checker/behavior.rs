@@ -171,15 +171,12 @@ pub(crate) fn adt_behavior<'tcx>(
                                 {
                                     // substs = [M, P]
                                     if let ty::TyKind::Param(param_1) = substs.type_at(1).kind {
-                                        info!("{:?}", trait_predicate);
                                         param_to_param.insert(param_ty.index, param_1.index);
                                     }
                                 }
                             }
                         }
                     }
-
-                    info!("{:?}", method_did);
 
                     // Check generic parameters that are passed as owned `T`.
                     for ty in fn_sig.inputs_and_output.iter() {
@@ -204,8 +201,6 @@ pub(crate) fn adt_behavior<'tcx>(
         }
     }
 
-    info!("{:?}", owned_generic_params);
-    info!("{:?}", peek_generic_params);
     for &param_idx in owned_generic_params.difference(&peek_generic_params) {
         cond_map
             .entry(param_idx)
