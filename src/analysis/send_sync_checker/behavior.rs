@@ -18,9 +18,9 @@ pub(crate) enum AdtBehavior {
     //    Cloning the ADT does not clone `T`
     // PtrLike,
 
-    // Solely moves `T` and doesn't take `&T` as API input.
+    // Solely moves `T` and doesn't return `&T` within API output.
     // For `impl Sync`, `T: Send` is sufficient. (fitering criteria relaxed)
-    // Identify as 'PtrLike' if all `&self` methods of ADT only
+    // Identify as 'ConcurrentQueue' if all `&self` methods of ADT only
     // take owned `T` within inputs and/or return owned `T` within return type.
     ConcurrentQueue,
 
