@@ -9,12 +9,49 @@ use termcolor::{Buffer, Color, ColorSpec, WriteColor};
 
 use crate::compile_time_sysroot;
 
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+struct ColorEventId(usize);
+
+struct ColorStack(Vec<(Color, ColorEventId)>);
+
+impl ColorStack {
+    pub fn new() -> Self {
+        ColorStack(Vec::new())
+    }
+
+    pub fn handle_event(&mut self, event: &ColorEvent) {
+        match event.color {
+            Some(color) => self.0.push((color, event.id)),
+            None => {
+                for i in (0..self.0.len()).rev() {
+                    if self.0[i].1 == event.id {
+                        self.0.remove(i);
+                        return;
+                    }
+                }
+            }
+        };
+    }
+
+    pub fn current_spec(&self) -> ColorSpec {
+        let mut spec = ColorSpec::new();
+
+        match self.0.last() {
+            Some((color, _)) => spec.set_fg(Some(*color)),
+            None => spec.set_reset(true),
+        };
+
+        spec
+    }
+}
+
 #[derive(Clone)]
 struct ColorEvent {
     // Some(color) for start, None for clear
     color: Option<Color>,
     line: usize,
     col: CharPos,
+    id: ColorEventId,
 }
 
 pub struct ColorSpan<'tcx> {
@@ -22,6 +59,7 @@ pub struct ColorSpan<'tcx> {
     main_span: Span,
     main_span_start: rustc_span::Loc,
     main_span_end: rustc_span::Loc,
+    id_counter: usize,
     sub_span_events: Vec<ColorEvent>,
 }
 
@@ -73,6 +111,7 @@ impl<'tcx> ColorSpan<'tcx> {
                 main_span,
                 main_span_start,
                 main_span_end,
+                id_counter: 0,
                 sub_span_events: Vec::new(),
             })
         } else {
@@ -88,21 +127,27 @@ impl<'tcx> ColorSpan<'tcx> {
     pub fn add_sub_span(&mut self, color: Color, span: Span) -> bool {
         let source_map = self.tcx.sess.source_map();
         if let Ok((start_loc, end_loc)) = source_map.is_valid_span(span) {
-            // Sanity check
+            // Reports from macros may be in another file and we don't handle them
             if !Rc::ptr_eq(&start_loc.file, &self.main_span_start.file)
                 || !Rc::ptr_eq(&start_loc.file, &self.main_span_end.file)
             {
                 return false;
             }
+
+            let event_id = ColorEventId(self.id_counter);
+            self.id_counter += 1;
+
             self.sub_span_events.push(ColorEvent {
                 color: Some(color),
                 line: start_loc.line,
                 col: start_loc.col,
+                id: event_id,
             });
             self.sub_span_events.push(ColorEvent {
                 color: None,
                 line: end_loc.line,
                 col: end_loc.col,
+                id: event_id,
             });
             return true;
         } else {
@@ -110,7 +155,6 @@ impl<'tcx> ColorSpan<'tcx> {
         }
     }
 
-    // FIXME: It currently doesn't handle nested sub spans correctly
     pub fn to_colored_string(&self) -> String {
         let mut events = self.sub_span_events.clone();
         events.sort();
@@ -126,6 +170,16 @@ impl<'tcx> ColorSpan<'tcx> {
             let start_line = start_loc.line;
             let end_line = end_loc.line;
 
+            while let Some(event) = events_iter.peek() {
+                if event.line < start_line {
+                    // Discard spans before the start loc
+                    events_iter.next();
+                } else {
+                    break;
+                }
+            }
+
+            let mut color_stack = ColorStack::new();
             for (line_idx, line_content) in (start_line..=end_line).zip(snippet.lines()) {
                 let mut current_col = if line_idx == start_line {
                     start_loc.col
@@ -136,14 +190,11 @@ impl<'tcx> ColorSpan<'tcx> {
                 let mut handle_color_event = |buffer: &mut Buffer, col: CharPos| {
                     while let Some(event) = events_iter.peek() {
                         if event.line == line_idx && event.col == col {
-                            let mut spec = ColorSpec::new();
-                            match event.color {
-                                Some(color) => spec.set_fg(Some(color)),
-                                None => spec.set_reset(true),
-                            };
-                            buffer.set_color(&spec).map_err(|e| warn!("{}", e)).ok();
-
+                            color_stack.handle_event(event);
                             events_iter.next();
+
+                            let spec = color_stack.current_spec();
+                            buffer.set_color(&spec).map_err(|e| warn!("{}", e)).ok();
                         } else {
                             break;
                         }
@@ -161,7 +212,7 @@ impl<'tcx> ColorSpan<'tcx> {
                 write!(buffer, "\n").ok();
             }
 
-            // Just in case, reset the color
+            // Reset the color after printing the span just in case
             buffer
                 .set_color(ColorSpec::new().set_reset(true))
                 .map_err(|e| warn!("{}", e))
