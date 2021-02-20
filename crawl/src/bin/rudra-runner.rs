@@ -110,7 +110,7 @@ fn main() -> Result<()> {
                 .join(format!("log-{}", krate.latest_version_tag()));
 
             let rudra_output = run_command_with_env(
-                "cargo rudra --locked -j 1",
+                "cargo rudra -Zno_index_update --locked -j 1",
                 &path,
                 &[
                     ("CARGO_HOME", rudra_home_dir.cargo_home_dir().as_ref()),
