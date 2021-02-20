@@ -9,6 +9,7 @@ extern crate rustc_interface;
 extern crate log;
 
 use std::env;
+use std::process::Command;
 
 use rustc_driver::Compilation;
 use rustc_interface::{interface::Compiler, Queries};
@@ -117,24 +118,41 @@ fn parse_config() -> (RudraConfig, Vec<String>) {
 fn main() {
     rustc_driver::install_ice_hook(); // ICE: Internal Compilation Error
 
+    let (config, mut rustc_args) = parse_config();
+
+    // init report logger
+    let _logger_handle = init_report_logger(default_report_logger());
+
     let exit_code = if env::var_os("RUDRA_BE_RUSTC").is_some() {
         // If the environment asks us to actually be rustc, then do that.
-        rustc_driver::init_rustc_env_logger();
+        let mut command = match which::which("sccache") {
+            Ok(sccache_path) => {
+                let mut command = Command::new(&sccache_path);
+                command.env("RUSTC_WRAPPER", "sccache").args(&rustc_args);
+                command
+            }
+            Err(_) => {
+                // sccache was not found, use vanilla rustc
+                let mut command = Command::new("rustc");
+                command.args(&rustc_args);
+                command
+            }
+        };
 
-        // We cannot use `rustc_driver::main` as we need to adjust the CLI arguments.
-        let mut callbacks = rustc_driver::TimePassesCallbacks::default();
-        run_compiler(env::args().collect(), &mut callbacks)
+        match command.status() {
+            Ok(status) => status.code().unwrap_or(1),
+            Err(e) => {
+                error!("Unexpected command invocation failure: {:?}", e);
+                101
+            }
+        }
     } else {
         // Otherwise, run Rudra analysis
-        let (config, mut rustc_args) = parse_config();
 
         // init rustc logger
         if env::var_os("RUSTC_LOG").is_some() {
             rustc_driver::init_rustc_env_logger();
         }
-
-        // init report logger
-        let _logger_handle = init_report_logger(default_report_logger());
 
         if let Some(sysroot) = compile_time_sysroot() {
             let sysroot_flag = "--sysroot";

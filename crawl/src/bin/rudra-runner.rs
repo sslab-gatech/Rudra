@@ -10,7 +10,7 @@ use structopt::{clap::arg_enum, StructOpt};
 use crawl::error::Result;
 use crawl::krate::Crate;
 use crawl::utils::*;
-use crawl::{refresh_never, ReportDir, ScratchDir};
+use crawl::{CampaignDir, RudraCacheDir, RudraHomeDir};
 
 arg_enum! {
     #[derive(Debug)]
@@ -55,17 +55,18 @@ fn main() -> Result<()> {
     setup_logging();
     setup_rayon();
 
-    let scratch_dir = ScratchDir::new();
-    let report_dir = ReportDir::new();
+    let rudra_home_dir = RudraHomeDir::from_env();
+    let rudra_cache_dir = RudraCacheDir::new(&rudra_home_dir);
+    let campaign_dir = CampaignDir::new(&rudra_home_dir);
 
-    let crate_list = scratch_dir.fetch_crate_info(refresh_never)?;
+    let crate_list = rudra_cache_dir.fetch_crate_info()?;
 
     // first stage - fetching crate
     // Add `.take(val)` after `.into_par_iter()` for a quick local test
     let mut crate_list: Vec<_> = crate_list
         .into_par_iter()
         .filter_map(|krate| -> Option<(Crate, PathBuf)> {
-            match scratch_dir.fetch_latest_version(&krate) {
+            match rudra_cache_dir.fetch_latest_version(&krate) {
                 Ok(path) => Some((krate, path)),
                 Err(e) => {
                     warn!("{}: {}", krate.latest_version_tag(), &e);
@@ -100,20 +101,23 @@ fn main() -> Result<()> {
         .filter_map(|(krate, path)| -> Option<Crate> {
             info!("Analysis start: {}", krate.latest_version_tag());
 
-            let report_path = report_dir
+            let report_path = campaign_dir
                 .report_path()
                 .join(format!("report-{}", krate.latest_version_tag()));
 
-            let log_path = report_dir
+            let log_path = campaign_dir
                 .log_path()
                 .join(format!("log-{}", krate.latest_version_tag()));
 
             let rudra_output = run_command_with_env(
-                "cargo rudra -j 1",
+                "cargo rudra --locked -j 1",
                 &path,
                 &[
-                    ("RUDRA_REPORT_PATH", &report_path),
-                    ("RUDRA_LOG_PATH", &log_path),
+                    ("CARGO_HOME", rudra_home_dir.cargo_home_dir().as_ref()),
+                    ("SCCACHE_DIR", rudra_home_dir.sccache_home_dir().as_ref()),
+                    ("SCCACHE_CACHE_SIZE", "10T".as_ref()),
+                    ("RUDRA_REPORT_PATH", report_path.as_ref()),
+                    ("RUDRA_LOG_PATH", log_path.as_ref()),
                 ],
             );
             info!("Analysis end: {}", krate.latest_version_tag());

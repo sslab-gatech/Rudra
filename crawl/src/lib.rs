@@ -12,7 +12,7 @@ use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::thread;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 use chrono::prelude::*;
 use flate2::read::GzDecoder;
@@ -26,13 +26,15 @@ use tar::Archive;
 use crate::error::Result;
 use crate::krate::*;
 
+static DB_DUMP_DOWNLOAD_URL: &str = "https://github.com/Qwaz/crates.io-index-2020-07-04/releases/download/2020-07-04/db-dump.tar.gz";
+
 static CLIENT: Lazy<Client> = Lazy::new(|| {
     use reqwest::header;
 
     let mut headers = header::HeaderMap::new();
     headers.insert(
         header::USER_AGENT,
-        header::HeaderValue::from_static("rudra crawler 0.1.0 (yechan@gatech.edu)"),
+        header::HeaderValue::from_static("rudra runner 0.1.0 (yechan@gatech.edu)"),
     );
 
     Client::builder()
@@ -90,45 +92,59 @@ fn parse_csv_records<T: DeserializeOwned>(csv_path: &Path) -> Result<Vec<T>> {
     Ok(vec)
 }
 
-pub fn refresh_never(_path: &Path) -> bool {
-    false
+pub struct RudraHomeDir(PathBuf);
+
+impl RudraHomeDir {
+    pub fn from_env() -> Self {
+        RudraHomeDir(PathBuf::from(
+            env::var("RUDRA_RUNNER_HOME").expect("RUDRA_RUNNER_HOME is not set"),
+        ))
+    }
+
+    pub fn from_path(path: impl Into<PathBuf>) -> Self {
+        RudraHomeDir(path.into())
+    }
+
+    // match these directory names with `setup_rudra_runner_home.py`
+
+    pub fn cargo_home_dir(&self) -> PathBuf {
+        self.0.join("cargo_home")
+    }
+
+    pub fn sccache_home_dir(&self) -> PathBuf {
+        self.0.join("sccache_home")
+    }
+
+    pub fn rudra_cache_dir(&self) -> PathBuf {
+        self.0.join("rudra_cache")
+    }
+
+    pub fn campaign_dir(&self) -> PathBuf {
+        self.0.join("campaign")
+    }
 }
 
-pub fn refresh_everyday(path: &Path) -> bool {
-    const ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
-
-    let metadata = path.metadata().expect("failed to access metadata");
-    let modified_time = metadata.modified().expect("failed to read modified time");
-    let diff = SystemTime::now().duration_since(modified_time).unwrap();
-    diff >= ONE_DAY
-}
-
-pub struct ScratchDir {
+pub struct RudraCacheDir {
     path: PathBuf,
 }
 
-impl ScratchDir {
-    pub fn new() -> Self {
-        let path = PathBuf::from(
-            env::var("RUDRA_SCRATCH_DIR").unwrap_or(String::from("../rudra_scratch")),
-        );
-        info!("Using `{}` as scratch directory", path.to_string_lossy());
-        ScratchDir { path }
+impl RudraCacheDir {
+    pub fn new(home_dir: &RudraHomeDir) -> Self {
+        let path = home_dir.rudra_cache_dir();
+        info!("Using `{}` as Rudra cache directory", path.display());
+        RudraCacheDir { path }
     }
 
     pub fn path(&self) -> &PathBuf {
         &self.path
     }
 
-    pub fn fetch_crate_info<F>(&self, refresh_criteria: F) -> Result<Vec<Crate>>
-    where
-        F: FnOnce(&Path) -> bool,
-    {
+    pub fn fetch_crate_info(&self) -> Result<Vec<Crate>> {
         let db_dump_dir = self.path.join("db-dump");
         let db_dump_tarball = self.path.join("db-dump.tar.gz");
-        if !db_dump_tarball.exists() || refresh_criteria(&db_dump_tarball) {
-            info!("Start downloading new DB");
-            download("https://static.crates.io/db-dump.tar.gz", &db_dump_tarball)?;
+        if !db_dump_tarball.exists() {
+            info!("Start downloading DB dump from {}", DB_DUMP_DOWNLOAD_URL);
+            download(DB_DUMP_DOWNLOAD_URL, &db_dump_tarball)?;
 
             fs::remove_dir_all(&db_dump_dir).ok();
             fs::create_dir(&db_dump_dir).expect("failed to create DB dump directory");
@@ -208,30 +224,29 @@ impl ScratchDir {
     }
 }
 
-pub struct ReportDir {
+pub struct CampaignDir {
     log_path: PathBuf,
     report_path: PathBuf,
 }
 
-impl ReportDir {
-    pub fn new() -> Self {
-        let parent_path =
-            PathBuf::from(env::var("RUDRA_REPORT_DIR").unwrap_or(String::from("../rudra_report")));
+impl CampaignDir {
+    pub fn new(home_dir: &RudraHomeDir) -> Self {
+        let parent_path = home_dir.campaign_dir();
 
         let dt: DateTime<Local> = Local::now();
         let parent_path = parent_path.join(dt.format("%Y%m%d_%H%M%S").to_string());
-        fs::create_dir_all(&parent_path).expect("Failed to create report directory");
+        fs::create_dir_all(&parent_path).expect("Failed to create campaign directory");
 
         let log_path = parent_path.join("log");
         let report_path = parent_path.join("report");
-        fs::create_dir(&log_path).expect("Failed to create report directory");
-        fs::create_dir(&report_path).expect("Failed to create report directory");
+        fs::create_dir(&log_path).expect("Failed to create campaign directory");
+        fs::create_dir(&report_path).expect("Failed to create campaign directory");
 
         info!(
-            "Using `{}` as report directory",
+            "Using `{}` as the campaign directory",
             parent_path.to_string_lossy()
         );
-        ReportDir {
+        CampaignDir {
             log_path,
             report_path,
         }
