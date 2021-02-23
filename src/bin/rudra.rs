@@ -9,7 +9,6 @@ extern crate rustc_interface;
 extern crate log;
 
 use std::env;
-use std::process::Command;
 
 use rustc_driver::Compilation;
 use rustc_interface::{interface::Compiler, Queries};
@@ -124,54 +123,25 @@ fn main() {
         let (config, mut rustc_args) = parse_config();
         let _logger_handle = init_report_logger(default_report_logger());
 
-        if env::var_os("RUDRA_BE_RUSTC").is_some() {
-            // If the environment asks us to actually be rustc, then do that.
-            let mut command = match which::which("sccache") {
-                Ok(sccache_path) => {
-                    let mut command = Command::new(&sccache_path);
-                    command.env("RUSTC_WRAPPER", "sccache").args(&rustc_args);
-                    command
-                }
-                Err(_) => {
-                    // sccache was not found, use vanilla rustc
-                    let mut command = Command::new("rustc");
-                    command.args(&rustc_args);
-                    command
-                }
-            };
-
-            match command.status() {
-                Ok(status) => status.code().unwrap_or(1),
-                Err(e) => {
-                    error!("Unexpected command invocation failure: {:?}", e);
-                    101
-                }
-            }
-        } else {
-            // Otherwise, run Rudra analysis
-
-            // init rustc logger
-            if env::var_os("RUSTC_LOG").is_some() {
-                rustc_driver::init_rustc_env_logger();
-            }
-
-            if let Some(sysroot) = compile_time_sysroot() {
-                let sysroot_flag = "--sysroot";
-                if !rustc_args.iter().any(|e| e == sysroot_flag) {
-                    // We need to overwrite the default that librustc would compute.
-                    rustc_args.push(sysroot_flag.to_owned());
-                    rustc_args.push(sysroot);
-                }
-            }
-
-            // Finally, add the default flags all the way in the beginning, but after the binary name.
-            rustc_args.splice(1..1, RUDRA_DEFAULT_ARGS.iter().map(ToString::to_string));
-
-            debug!("rustc arguments: {:?}", &rustc_args);
-
-            let exit_code = run_compiler(rustc_args, &mut RudraCompilerCalls::new(config));
-            exit_code
+        // init rustc logger
+        if env::var_os("RUSTC_LOG").is_some() {
+            rustc_driver::init_rustc_env_logger();
         }
+
+        if let Some(sysroot) = compile_time_sysroot() {
+            let sysroot_flag = "--sysroot";
+            if !rustc_args.iter().any(|e| e == sysroot_flag) {
+                // We need to overwrite the default that librustc would compute.
+                rustc_args.push(sysroot_flag.to_owned());
+                rustc_args.push(sysroot);
+            }
+        }
+
+        // Finally, add the default flags all the way in the beginning, but after the binary name.
+        rustc_args.splice(1..1, RUDRA_DEFAULT_ARGS.iter().map(ToString::to_string));
+
+        debug!("rustc arguments: {:?}", &rustc_args);
+        run_compiler(rustc_args, &mut RudraCompilerCalls::new(config))
     };
 
     std::process::exit(exit_code)
