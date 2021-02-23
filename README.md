@@ -2,6 +2,35 @@
 
 Rudra is a static analyzer to detect common undefined behaviors in Rust programs.
 
+## Basic usage
+
+```
+# this executes: cargo install --path "$(dirname "$0")" --force
+./install-release
+
+rudra --crate-type lib tests/unsafe_destructor/normal1.rs  # for single file testing (you need to set library include path, or use `cargo run` instead)
+cargo rudra  # for crate compilation
+```
+
+## Using Docker
+
+`rudra:latest` image must exists to use rudra-runner.
+
+```
+# Build a docker image
+docker build . -t rudra:latest
+
+# Optional: cleanup old images
+docker system prune
+
+# Run Rudra on a single target
+docker run -t --rm --user "$(id -u)":"$(id -g)" -v "$PWD":/tmp/rudra -w /tmp/rudra rudra:latest cargo rudra -Zno_index_update
+
+# Run Rudra runner
+docker run -t --rm --user "$(id -u)":"$(id -g)" -v "$RUDRA_RUNNER_HOME":/tmp/rudra-runner-home \
+  --env RUDRA_RUNNER_HOME=/tmp/rudra-runner-home -v "$PWD":/tmp/rudra -w /tmp/rudra rudra:latest rudra-runner
+```
+
 ## Configurations
 
 ### Unsafe Counter
@@ -67,15 +96,15 @@ export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.rustup/toolchains/${RUDRA_RUST
 python test.py
 ```
 
-Don't forget to add `.env` file for your local development. See "Configurations" for an example.
+You can add `.env` file for local customization. See "Configurations" for an example.
 
-## Code Formatting
+### Code Formatting
 
 1. Follow whatever `rustfmt` does
 2. Use an empty comment line if you want to bypass rustfmt's default formatting
 3. Group `use` statements in order of `std` - `rustc` internals - 3rd party - local order
 
-## Setup rust-analyzer
+### Setup rust-analyzer
 
 Run:
 ```
@@ -92,14 +121,4 @@ Then, add this to the workspace setting (`.vscode/settings.json`):
 {
     "rust-analyzer.rustcSource": "<your path to rust-nightly-2020-08-26>/Cargo.toml"
 }
-```
-
-## Install Rudra to Cargo
-
-```
-# this executes: cargo install --debug --path "$(dirname "$0")" --force --locked
-./install-debug
-
-rudra --crate-type lib tests/unsafe_destructor/normal1.rs  # for single file testing (you need to set library include path, or use `cargo run` instead)
-cargo rudra  # for crate compilation
 ```
