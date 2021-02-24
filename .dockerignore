@@ -1,0 +1,17 @@
+# Build files
+**/target
+
+# Local files
+.git
+.github
+.env
+.vscode
+
+# Non-source files
+ci
+stdlib-analysis
+tests
+README.md
+rust-toolchain
+setup_rudra_runner_home.py
+test.py
