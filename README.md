@@ -14,7 +14,7 @@ cargo rudra  # for crate compilation
 
 ## Using Docker
 
-`rudra:latest` image must exists to use rudra-runner.
+`rudra:latest` image must exist to use rudra-runner.
 
 ```
 # Build a docker image
