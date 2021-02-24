@@ -509,13 +509,24 @@ fn inside_cargo_rustc() {
         run_command(cmd);
     }
 
-    // Libraries might be used for dependency, so we need to analyze and build it.
+    // Rudra does not build anything.
+    // We need to run rustc (or sccache) to build dependencies.
     if !is_direct_target || is_crate_type_lib() {
-        let mut cmd = Command::new(find_rudra());
-        cmd.args(std::env::args().skip(2)); // skip `cargo-rudra rustc`
-
-        // We want to compile, not interpret.
-        cmd.env("RUDRA_BE_RUSTC", "1");
+        let cmd = match which::which("sccache") {
+            Ok(sccache_path) => {
+                let mut cmd = Command::new(&sccache_path);
+                // ["cargo-rudra", "rustc", ...]
+                cmd.args(std::env::args().skip(1));
+                cmd
+            }
+            Err(_) => {
+                // sccache was not found, use vanilla rustc
+                let mut cmd = Command::new("rustc");
+                // ["cargo-rudra", "rustc", ...]
+                cmd.args(std::env::args().skip(2));
+                cmd
+            }
+        };
 
         run_command(cmd);
     }

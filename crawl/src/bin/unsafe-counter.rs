@@ -13,7 +13,7 @@ use serde::Serialize;
 use crawl::error::Result;
 use crawl::krate::Crate;
 use crawl::stat::CrateStat;
-use crawl::{refresh_never, ScratchDir};
+use crawl::{RudraCacheDir, RudraHomeDir};
 
 #[derive(Serialize)]
 struct CsvEntry {
@@ -91,9 +91,10 @@ fn main() -> Result<()> {
     setup_logging();
     setup_rayon();
 
-    let scratch_dir = ScratchDir::new();
+    let rudra_home_dir = RudraHomeDir::from_env();
+    let rudra_cache_dir = RudraCacheDir::new(&rudra_home_dir);
 
-    let crate_list = scratch_dir.fetch_crate_info(refresh_never)?;
+    let crate_list = rudra_cache_dir.fetch_crate_info()?;
     let num_total = crate_list.len();
 
     // Add `.take(val)` after `.into_par_iter()` for a quick local test
@@ -101,7 +102,7 @@ fn main() -> Result<()> {
         .into_par_iter()
         .filter_map(|krate| -> Option<(Crate, CrateStat)> {
             let result: Result<CrateStat> = try {
-                let path = scratch_dir.fetch_latest_version(&krate)?;
+                let path = rudra_cache_dir.fetch_latest_version(&krate)?;
                 let crate_stat = crawl::stat::stat(&path)?;
                 crate_stat
             };

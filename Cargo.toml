@@ -38,6 +38,7 @@ snafu = "0.6"
 termcolor = "1.1.2"
 toml = "0.5.6"
 wait-timeout = "0.2"
+which = "4.0"
 
 [features]
 backtraces = ["snafu/backtraces", "snafu/backtraces-impl-backtrace-crate"]
