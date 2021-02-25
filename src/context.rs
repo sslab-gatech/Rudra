@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use rustc_hir::{def_id::DefId, BodyId, HirId};
 use rustc_middle::mir::{self, TerminatorKind};
-use rustc_middle::ty::{TyCtxt, TyKind};
+use rustc_middle::ty::{Ty, TyCtxt, TyKind};
 use rustc_span::Span;
 
 use dashmap::DashMap;
@@ -10,7 +10,7 @@ use snafu::Snafu;
 
 use crate::ir;
 use crate::prelude::*;
-use crate::visitor::{RelatedFnCollector, RelatedItemMap};
+use crate::visitor::{AdtImplMap, RelatedFnCollector, RelatedItemMap, create_adt_impl_map};
 
 #[derive(Debug, Snafu, Clone)]
 pub enum MirInstantiationError {
@@ -34,6 +34,8 @@ pub struct RudraCtxtOwner<'tcx> {
     tcx: TyCtxt<'tcx>,
     translation_cache: DashMap<DefId, Rc<TranslationResult<'tcx, ir::Body<'tcx>>>>,
     related_item_cache: RelatedItemMap,
+    // ADT symbol => list of associated impl blocks
+    adt_impl_cache: AdtImplMap<'tcx>,
 }
 
 /// Visit MIR body and returns a Rudra IR function
@@ -45,6 +47,7 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
             tcx,
             translation_cache: DashMap::new(),
             related_item_cache: RelatedFnCollector::collect(tcx),
+            adt_impl_cache: create_adt_impl_map(tcx),
         }
     }
 
@@ -195,5 +198,9 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
             );
             NotAvailable { def_id }.fail()
         }
+    }
+
+    pub fn index_adt_cache(&self, adt_did: &DefId) -> Option<&Vec<(&HirId, Ty)>> {
+        self.adt_impl_cache.get(adt_did)
     }
 }

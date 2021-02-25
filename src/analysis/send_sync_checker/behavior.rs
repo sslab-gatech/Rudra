@@ -56,7 +56,7 @@ impl Cond {
     }
 }
 
-const TO_OWNED: [&'static str; 4] = [
+const PSEUDO_OWNED: [&'static str; 4] = [
     "std::convert::Into",
     "core::convert::Into",
     "std::iter::IntoIterator",
@@ -85,10 +85,9 @@ pub(crate) fn adt_behavior<'tcx>(
 
     let adt_generic_params = &tcx.generics_of(adt_did).params;
 
-    // Inspect `impl`s relevant to the given ADT.
-    for (impl_hir_id, item) in tcx.hir().krate().items.iter() {
-        if let ItemKind::Impl { self_ty, .. } = &item.kind {
-            let impl_self_ty = tcx.type_of(self_ty.hir_id.owner);
+    if let Some(relevant_impls) = rcx.index_adt_cache(&adt_did) {
+        // Inspect `impl`s relevant to the given ADT.
+        for (impl_hir_id, impl_self_ty) in relevant_impls.iter() {
             if let ty::TyKind::Adt(impl_self_adt_def, impl_substs) = impl_self_ty.kind {
                 let impl_self_ty_name = tcx.item_name(impl_self_adt_def.did);
                 if adt_ty_name != impl_self_ty_name {
@@ -103,9 +102,9 @@ pub(crate) fn adt_behavior<'tcx>(
                 // (3) adt_ty == impl_self_ty . (Foo<A, B> == Foo<A, B>)
                 // TODO: Should we cater to each of the possibilities?
 
-                // DefIds of methods within the given impl block.
-                // Methods in `method_dids` contain `self` within its first paramater type.
-                let method_dids = tcx
+                // DefIds of methods (within the given impl block),
+                // which have `self` within its first parameter type.
+                let self_method_dids = tcx
                     .associated_items(impl_hir_id.owner)
                     .in_definition_order()
                     .filter_map(|assoc_item| {
@@ -116,33 +115,33 @@ pub(crate) fn adt_behavior<'tcx>(
                             None
                         }
                     });
-
+                
                 // Since each `impl` block may assign different indices to equivalent generic parameters,
                 // We need one translation map per `impl` block.
                 let generic_param_idx_map =
                     generic_param_idx_mapper(adt_generic_params, impl_substs);
 
                 // Inspect `&self` methods defined within current impl block.
-                for (method_did, fn_sig) in method_dids
-                    .map(|did| (did, tcx.fn_sig(did).skip_binder()))
-                    .filter(|(_, fn_sig)| {
+                for (method_did, fn_sig) in self_method_dids
+                    .filter_map(|did| {
+                        let fn_sig = tcx.fn_sig(did).skip_binder();
                         // Only inspect `safe` methods
                         if let rustc_hir::Unsafety::Unsafe = fn_sig.unsafety {
-                            return false;
+                            return None;
                         }
                         // Check if the given method takes `&self` within its first parameter's type.
-                        // since `method_dids` is already a filtered iterator of methods that take `self` within
+                        // since `self_method_dids` is already a filtered iterator of methods that take `self` within
                         // its first parameter, here we only check whether the first parameter involve a reference.
                         // e.g. `&self`, `Box<&self>`, `Pin<&self>`, ..
                         let mut walker = fn_sig.inputs()[0].walk();
                         while let Some(node) = walker.next() {
                             if let GenericArgKind::Type(ty) = node.unpack() {
                                 if let ty::TyKind::Ref(_, _, Mutability::Not) = ty.kind {
-                                    return true;
+                                    return Some((did, fn_sig));
                                 }
                             }
                         }
-                        false
+                        None
                     })
                 {
                     /*
@@ -169,7 +168,7 @@ pub(crate) fn adt_behavior<'tcx>(
                                 //                     |    |
                                 //             (param_ty)  (trait_predicate.trait_ref)
 
-                                if TO_OWNED
+                                if PSEUDO_OWNED
                                     .contains(&tcx.def_path_str(trait_predicate.def_id()).as_str())
                                 {
                                     // substs = [M, P]
