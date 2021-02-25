@@ -41,7 +41,7 @@ bitflags! {
         // `T` only appears in ADT API input/output as owned `T`.
         // (Sender/Receiver side of Queue APIs)
         // e.g. `T`, `Box<T>`, `Option<T>`, `Result<T, !>`
-        const PASSOWNED = 0b00000100;
+        const PASS_OWNED = 0b00000100;
     }
 }
 
@@ -52,7 +52,7 @@ impl Cond {
     }
     */
     fn is_concurrent_queue(&self) -> bool {
-        self.intersects(Cond::PASSOWNED)
+        self.intersects(Cond::PASS_OWNED)
     }
 }
 
@@ -77,7 +77,7 @@ pub(crate) fn adt_behavior<'tcx>(
     // Set of `T`s that appear only as owned `T` in either input or output of APIs.
     let mut owned_generic_params = FxHashSet::default();
     // Set of `T`s that appear only as `&T` in return type of APIs.
-    let mut peek_generic_params = FxHashSet::default();
+    let mut deref_generic_params = FxHashSet::default();
 
     let _adt_ty = tcx.type_of(adt_did);
     // For ADT `Foo<A, B>` => adt_ty_name = `Foo`
@@ -104,6 +104,7 @@ pub(crate) fn adt_behavior<'tcx>(
                 // TODO: Should we cater to each of the possibilities?
 
                 // DefIds of methods within the given impl block.
+                // Methods in `method_dids` contain `self` within its first paramater type.
                 let method_dids = tcx
                     .associated_items(impl_hir_id.owner)
                     .in_definition_order()
@@ -125,11 +126,13 @@ pub(crate) fn adt_behavior<'tcx>(
                 for (method_did, fn_sig) in method_dids
                     .map(|did| (did, tcx.fn_sig(did).skip_binder()))
                     .filter(|(_, fn_sig)| {
-                        // Only inspect `safe` methods?
+                        // Only inspect `safe` methods
                         if let rustc_hir::Unsafety::Unsafe = fn_sig.unsafety {
                             return false;
                         }
                         // Check if the given method takes `&self` within its first parameter's type.
+                        // since `method_dids` is already a filtered iterator of methods that take `self` within
+                        // its first parameter, here we only check whether the first parameter involve a reference.
                         // e.g. `&self`, `Box<&self>`, `Pin<&self>`, ..
                         let mut walker = fn_sig.inputs()[0].walk();
                         while let Some(node) = walker.next() {
@@ -190,10 +193,10 @@ pub(crate) fn adt_behavior<'tcx>(
                         }
                     }
 
-                    // Check whether the ADT has peek functionality for any of the generic parameters.
+                    // Check whether the ADT has deref functionality for any of the generic parameters.
                     for peek_idx in borrowed_generic_params_in_ty(tcx, fn_sig.output()) {
                         if let Some(&mapped_idx) = param_to_param.get(&peek_idx) {
-                            peek_generic_params.insert(mapped_idx);
+                            deref_generic_params.insert(mapped_idx);
                         }
                     }
                 }
@@ -201,11 +204,11 @@ pub(crate) fn adt_behavior<'tcx>(
         }
     }
 
-    for &param_idx in owned_generic_params.difference(&peek_generic_params) {
+    for &param_idx in owned_generic_params.difference(&deref_generic_params) {
         cond_map
             .entry(param_idx)
-            .or_insert(Cond::empty())
-            .insert(Cond::PASSOWNED);
+            .or_insert_with(|| Cond::empty())
+            .insert(Cond::PASS_OWNED);
     }
 
     // Map: (idx of generic parameter) => (AdtBehavior)

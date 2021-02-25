@@ -12,7 +12,8 @@ impl<'tcx> SendSyncChecker<'tcx> {
         sync_trait_def_id: DefId,
         _copy_trait_def_id: DefId,
     ) -> Option<DefId> {
-        let tcx = self.rcx.tcx();
+        let rcx = self.rcx;
+        let tcx = rcx.tcx();
         if let Some(trait_ref) = tcx.impl_trait_ref(impl_hir_id.owner) {
             if let ty::TyKind::Adt(adt_def, impl_trait_substs) = trait_ref.self_ty().kind {
                 let adt_did = adt_def.did;
@@ -28,13 +29,13 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 let phantom_params = self
                     .phantom_map
                     .entry(adt_did)
-                    .or_insert(phantom_indices(tcx, adt_ty));
+                    .or_insert_with(|| phantom_indices(tcx, adt_ty));
 
                 // Get `AdtBehavior` per generic parameter.
                 let adt_behavior = self
                     .behavior_map
                     .entry(adt_did)
-                    .or_insert(adt_behavior(self.rcx, adt_did));
+                    .or_insert_with(|| adt_behavior(rcx, adt_did));
 
                 // Initialize set of generic type params of the given `impl Sync`.
                 for gen_param in tcx.generics_of(adt_did).params.iter() {
@@ -115,7 +116,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 let phantom_params = self
                     .phantom_map
                     .entry(adt_did)
-                    .or_insert(phantom_indices(tcx, adt_ty));
+                    .or_insert_with(|| phantom_indices(tcx, adt_ty));
 
                 // Initialize sets `need_send` & `need_sync`
                 for gen_param in tcx.generics_of(adt_did).params.iter() {

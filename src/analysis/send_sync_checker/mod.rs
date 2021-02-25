@@ -83,7 +83,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 let tcx = self.rcx.tcx();
                 self.report_map
                     .entry(adt_def_id)
-                    .or_insert(Vec::with_capacity(2))
+                    .or_insert_with(|| Vec::with_capacity(2))
                     .push(Report::with_hir_id(
                         tcx,
                         ReportLevel::Warning,
@@ -111,7 +111,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 let tcx = self.rcx.tcx();
                 self.report_map
                     .entry(struct_def_id)
-                    .or_insert(Vec::with_capacity(2))
+                    .or_insert_with(|| Vec::with_capacity(2))
                     .push(Report::with_hir_id(
                         tcx,
                         ReportLevel::Warning,
