@@ -4,7 +4,6 @@ FROM buildpack-deps:buster
 
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
-    SCCACHE_HOME=/usr/local/sccache \
     PATH=/usr/local/cargo/bin:$PATH \
     RUST_VERSION=nightly-2020-08-26 \
     SCCACHE_VERSION=v0.2.15
@@ -47,6 +46,7 @@ RUN set -eux; \
     echo "${sccacheSha256} *${filename}" | sha256sum -c -; \
     tar -xvzf ${filename}; \
     mv ${dirname}/sccache /usr/local/bin/sccache; \
+    chmod +x /usr/local/bin/sccache; \
     rm -rf ${filename} ${dirname};
 
 # Install Rudra
