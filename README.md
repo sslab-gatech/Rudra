@@ -52,6 +52,15 @@ docker run -t --rm --user "$(id -u)":"$(id -g)" -v "$RUDRA_RUNNER_HOME":/tmp/rud
     - cargo_home
     - sccache_home
     - rudra_cache
+      - db-dump.tar.gz
+      - db-dump
+        - 2020-07-04-140112
+          - data
+            - crates.csv
+            - versions.csv
+            - (other files)
+          - (other files)
+      - For each crate, `crate-x.y.z` directory and `crate-x.y.z.crate` tarball
     - campaign
       - YYYYMMDD_HHmmss
         - report
