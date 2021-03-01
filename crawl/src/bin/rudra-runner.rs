@@ -113,6 +113,10 @@ fn main() -> Result<()> {
                 "cargo rudra -Zno-index-update --locked -j 1",
                 &path,
                 &[
+                    (
+                        "RUSTUP_TOOLCHAIN",
+                        include_str!("../../../rust-toolchain").as_ref(),
+                    ),
                     ("CARGO_HOME", rudra_home_dir.cargo_home_dir().as_ref()),
                     ("SCCACHE_DIR", rudra_home_dir.sccache_home_dir().as_ref()),
                     ("SCCACHE_CACHE_SIZE", "10T".as_ref()),

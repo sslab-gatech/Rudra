@@ -50,10 +50,11 @@ RUN set -eux; \
     rm -rf ${filename} ${dirname};
 
 # Install Rudra
+COPY rust-toolchain /tmp/rust-toolchain
 COPY crawl /tmp/crawl
 RUN set -eux; \
     cargo install --path /tmp/crawl --bin rudra-runner; \
-    rm -rf /tmp/crawl;
+    rm -rf /tmp/rust-toolchain /tmp/crawl;
 
 COPY . /tmp/rudra/
 RUN set -eux; \

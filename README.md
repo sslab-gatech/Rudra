@@ -27,6 +27,7 @@ docker system prune
 docker run -t --rm --user "$(id -u)":"$(id -g)" -v "$RUDRA_RUNNER_HOME":/tmp/rudra-runner-home \
   --env CARGO_HOME=/tmp/rudra-runner-home/cargo_home \
   --env SCCACHE_DIR=/tmp/rudra-runner-home/sccache_home --env SCCACHE_CACHE_SIZE=10T \
+  --env RUSTUP_TOOLCHAIN=nightly-2020-08-26 \
   -v "$PWD":/tmp/rudra -w /tmp/rudra rudra:latest cargo rudra -Zno-index-update
 
 # Run Rudra runner
