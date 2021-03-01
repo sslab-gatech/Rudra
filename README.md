@@ -24,7 +24,7 @@ docker build . -t rudra:latest
 docker system prune
 
 # Run Rudra on a single target
-docker run -t --rm --user "$(id -u)":"$(id -g)" -v "$PWD":/tmp/rudra -w /tmp/rudra rudra:latest cargo rudra -Zno_index_update
+docker run -t --rm --user "$(id -u)":"$(id -g)" -v "$PWD":/tmp/rudra -w /tmp/rudra rudra:latest cargo rudra -Zno-index-update
 
 # Run Rudra runner
 docker run -t --rm --user "$(id -u)":"$(id -g)" -v "$RUDRA_RUNNER_HOME":/tmp/rudra-runner-home \
