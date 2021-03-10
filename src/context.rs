@@ -10,7 +10,7 @@ use snafu::Snafu;
 
 use crate::ir;
 use crate::prelude::*;
-use crate::visitor::{AdtImplMap, RelatedFnCollector, RelatedItemMap, create_adt_impl_map};
+use crate::visitor::{create_adt_impl_map, AdtImplMap, RelatedFnCollector, RelatedItemMap};
 
 #[derive(Debug, Snafu, Clone)]
 pub enum MirInstantiationError {

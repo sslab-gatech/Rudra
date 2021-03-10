@@ -1,5 +1,7 @@
 use rustc_data_structures::fx::FxHashMap;
-use rustc_hir::{def_id::DefId, intravisit, itemlikevisit::ItemLikeVisitor, Block, BodyId, HirId, ItemKind};
+use rustc_hir::{
+    def_id::DefId, intravisit, itemlikevisit::ItemLikeVisitor, Block, BodyId, HirId, ItemKind,
+};
 use rustc_middle::ty::{Ty, TyCtxt, TyKind};
 use rustc_span::Span;
 
@@ -129,7 +131,7 @@ pub type AdtImplMap<'tcx> = FxHashMap<DefId, Vec<(&'tcx HirId, Ty<'tcx>)>>;
 /// avoiding quadratic complexity of scanning all impl blocks for each ADT.
 pub fn create_adt_impl_map<'tcx>(tcx: TyCtxt<'tcx>) -> AdtImplMap<'tcx> {
     let mut map = FxHashMap::default();
-    
+
     for (impl_hir_id, item) in tcx.hir().krate().items.iter() {
         if let ItemKind::Impl { self_ty, .. } = &item.kind {
             // `Self` type of the given impl block.
@@ -141,10 +143,9 @@ pub fn create_adt_impl_map<'tcx>(tcx: TyCtxt<'tcx>) -> AdtImplMap<'tcx> {
                 // `AdtDef.did` refers to the original ADT definition.
                 // Thus it can be used to map & collect impls for all instantitations of the same ADT.
 
-                map
-                .entry(impl_self_adt_def.did)
-                .or_insert_with(|| Vec::new())
-                .push((impl_hir_id, impl_self_ty));
+                map.entry(impl_self_adt_def.did)
+                    .or_insert_with(|| Vec::new())
+                    .push((impl_hir_id, impl_self_ty));
             }
         }
     }

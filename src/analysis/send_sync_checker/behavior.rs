@@ -115,35 +115,33 @@ pub(crate) fn adt_behavior<'tcx>(
                             None
                         }
                     });
-                
+
                 // Since each `impl` block may assign different indices to equivalent generic parameters,
                 // We need one translation map per `impl` block.
                 let generic_param_idx_map =
                     generic_param_idx_mapper(adt_generic_params, impl_substs);
 
                 // Inspect `&self` methods defined within current impl block.
-                for (method_did, fn_sig) in self_method_dids
-                    .filter_map(|did| {
-                        let fn_sig = tcx.fn_sig(did).skip_binder();
-                        // Only inspect `safe` methods
-                        if let rustc_hir::Unsafety::Unsafe = fn_sig.unsafety {
-                            return None;
-                        }
-                        // Check if the given method takes `&self` within its first parameter's type.
-                        // since `self_method_dids` is already a filtered iterator of methods that take `self` within
-                        // its first parameter, here we only check whether the first parameter involve a reference.
-                        // e.g. `&self`, `Box<&self>`, `Pin<&self>`, ..
-                        let mut walker = fn_sig.inputs()[0].walk();
-                        while let Some(node) = walker.next() {
-                            if let GenericArgKind::Type(ty) = node.unpack() {
-                                if let ty::TyKind::Ref(_, _, Mutability::Not) = ty.kind {
-                                    return Some((did, fn_sig));
-                                }
+                for (method_did, fn_sig) in self_method_dids.filter_map(|did| {
+                    let fn_sig = tcx.fn_sig(did).skip_binder();
+                    // Only inspect `safe` methods
+                    if let rustc_hir::Unsafety::Unsafe = fn_sig.unsafety {
+                        return None;
+                    }
+                    // Check if the given method takes `&self` within its first parameter's type.
+                    // since `self_method_dids` is already a filtered iterator of methods that take `self` within
+                    // its first parameter, here we only check whether the first parameter involve a reference.
+                    // e.g. `&self`, `Box<&self>`, `Pin<&self>`, ..
+                    let mut walker = fn_sig.inputs()[0].walk();
+                    while let Some(node) = walker.next() {
+                        if let GenericArgKind::Type(ty) = node.unpack() {
+                            if let ty::TyKind::Ref(_, _, Mutability::Not) = ty.kind {
+                                return Some((did, fn_sig));
                             }
                         }
-                        None
-                    })
-                {
+                    }
+                    None
+                }) {
                     /*
                         Check for trait bounds introduced in function-level context.
                         We want to catch cases equivalent to sending `P` (refer to example below)
