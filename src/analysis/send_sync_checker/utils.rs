@@ -122,3 +122,45 @@ pub fn borrowed_generic_params_in_ty<'tcx>(
 
     borrowed_generic_params
 }
+
+const PSEUDO_OWNED: [&'static str; 4] = [
+    "std::convert::Into",
+    "core::convert::Into",
+    "std::iter::IntoIterator",
+    "core::iter::IntoIterator",
+];
+
+// Check for trait bounds introduced in function-level context.
+// We want to catch cases equivalent to sending `P` (refer to example below)
+//
+// example)
+//    impl<P, Q> Channel<P, Q> {
+//        fn send_p<M>(&self, _msg: M) where M: Into<P>, {}
+//    }
+pub fn find_pseudo_owned_in_fn_ctxt<'tcx>(tcx: TyCtxt<'tcx>, fn_did: DefId) -> FxHashMap<u32, u32> {
+    let mut fn_ctxt_pseudo_owned_param_idx_map = FxHashMap::default();
+    for atom in tcx
+        .param_env(fn_did)
+        .caller_bounds()
+        .iter()
+        .map(|x| x.skip_binders())
+    {
+        if let PredicateAtom::Trait(trait_predicate, _) = atom {
+            if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind {
+                let substs = trait_predicate.trait_ref.substs;
+                let substs_types = substs.types().collect::<Vec<_>>();
+
+                // trait_predicate =>  M: Into<P>
+                //                     |    |
+                //             (param_ty)  (trait_predicate.trait_ref)
+                if PSEUDO_OWNED.contains(&tcx.def_path_str(trait_predicate.def_id()).as_str()) {
+                    if let ty::TyKind::Param(param_1) = substs_types[1].kind {
+                        fn_ctxt_pseudo_owned_param_idx_map.insert(param_ty.index, param_1.index);
+                    }
+                }
+            }
+        }
+    }
+
+    fn_ctxt_pseudo_owned_param_idx_map
+}
