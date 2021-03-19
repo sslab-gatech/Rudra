@@ -302,6 +302,5 @@ pub(crate) fn adt_behavior<'tcx>(
             },
         );
     }
-    info!("{:?} : {:?}", adt_ty, behavior_map);
     return behavior_map;
 }
