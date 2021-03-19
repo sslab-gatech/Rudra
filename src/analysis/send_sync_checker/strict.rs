@@ -38,19 +38,39 @@ impl<'tcx> SendSyncChecker<'tcx> {
                     .or_insert_with(|| adt_behavior(rcx, adt_did));
 
                 // Initialize sets `need_send` & `need_sync`.
-                for gen_param in tcx.generics_of(adt_did).params.iter() {
-                    if let GenericParamDefKind::Type { .. } = gen_param.kind {
-                        // Skip generic parameters that are only within `PhantomData<T>`.
-                        if phantom_params.contains(&gen_param.index) {
-                            continue;
-                        }
+                if adt_def.is_struct() {
+                    for gen_param in tcx.generics_of(adt_did).params.iter() {
+                        if let GenericParamDefKind::Type { .. } = gen_param.kind {
+                            // Skip generic parameters that are only within `PhantomData<T>`.
+                            if phantom_params.contains(&gen_param.index) {
+                                continue;
+                            }
 
-                        // Check if the current ADT acts as a `ConcurrentQueue` type for the generic parameter.
-                        if let Some(AdtBehavior::ConcurrentQueue) =
-                            adt_behavior.get(&gen_param.index)
-                        {
-                            need_send.insert(gen_param.index);
-                        } else {
+                            // Check if the current ADT acts as a `ConcurrentQueue` type for the generic parameter.
+                            if let Some(behavior) = adt_behavior.get(&gen_param.index) {
+                                match behavior {
+                                    AdtBehavior::ConcurrentQueue => {
+                                        need_send.insert(gen_param.index);
+                                    }
+                                    AdtBehavior::Standard => {
+                                        need_sync.insert(gen_param.index);
+                                    }
+                                    AdtBehavior::Undefined => {}
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Fields of enums/unions can be accessed by pattern matching.
+                    // In this case, we don't make distinction of treatment according to `AdtBehavior`.
+                    // We require all generic parameters to be `Sync`.
+                    for gen_param in tcx.generics_of(adt_did).params.iter() {
+                        if let GenericParamDefKind::Type { .. } = gen_param.kind {
+                            // Skip generic parameters that are only within `PhantomData<T>`.
+                            if phantom_params.contains(&gen_param.index) {
+                                continue;
+                            }
+
                             need_sync.insert(gen_param.index);
                         }
                     }
@@ -74,9 +94,6 @@ impl<'tcx> SendSyncChecker<'tcx> {
                                 let trait_did = trait_predicate.def_id();
                                 if trait_did == sync_trait_def_id {
                                     need_sync.remove(mapped_idx);
-
-                                    // Naively assume a `Sync` object is also `Send`.
-                                    need_send.remove(mapped_idx);
                                 } else if trait_did == send_trait_def_id {
                                     need_send.remove(mapped_idx);
                                 }

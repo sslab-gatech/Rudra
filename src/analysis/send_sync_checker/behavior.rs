@@ -28,6 +28,12 @@ pub(crate) enum AdtBehavior {
     // * `impl Send for ADT<T, ..>` => require `T: Send`
     // * `impl Sync for ADT<T, ..>` => require `T: Sync`
     Standard,
+
+    // This category may or may not contain true positives.
+    // We don't do further analysis for this category.
+    // Future work could try to implement more precision
+    // in analyzing this category.
+    Undefined,
 }
 
 bitflags! {
@@ -38,10 +44,33 @@ bitflags! {
         // `Clone` impl clones on generic param `T.
         const CLONED = 0b00000010;
         */
+
         // `T` only appears in ADT API input/output as owned `T`.
         // (Sender/Receiver side of Queue APIs)
         // e.g. `T`, `Box<T>`, `Option<T>`, `Result<T, !>`
         const PASS_OWNED = 0b00000100;
+
+        // Satisfies both of the following conditions:
+        // * `&T` is not exposed in any method ret type.
+        // * TODO: There exists a method that takes closure `Fn(&T)` as input.
+        //
+        // Current limitation:
+        // This category may include cases where `&T` isn't directly exposed as ret type,
+        // but the ret type (ADT) has an API to expose `&T`.
+        // Greater precision can be achieved by implementing the following:
+        // * For more precision: check APIs of the ret types.
+        // * For even more precision: check (APIs of the ret types of (APIs of the ret types)).
+        // * Need more precision?: recurse until reaching your predefined maximum search depth.
+        // Inspection cost expected to be exponential to # of layers (of ADT).
+        const NO_DEREF = 0b00001000;
+
+        // Satisfies either one of the following conditions:
+        // * `&T` is exposed in method return type.
+        // * TODO: `&T` can be accessed by method input closure `Fn(&T)`
+        // Current limitation:
+        // May miss out on cases where `&T` isn't directly exposed as ret type,
+        // but the ret type (ADT) has an API to expose `&T`.
+        const DEREF = 0b00010000;
     }
 }
 
@@ -52,7 +81,10 @@ impl Cond {
     }
     */
     fn is_concurrent_queue(&self) -> bool {
-        self.intersects(Cond::PASS_OWNED)
+        self.intersects(Cond::NO_DEREF) && self.intersects(Cond::PASS_OWNED)
+    }
+    fn is_undefined(&self) -> bool {
+        self.intersects(Cond::NO_DEREF) && !self.intersects(Cond::PASS_OWNED)
     }
 }
 
@@ -65,14 +97,12 @@ const PSEUDO_OWNED: [&'static str; 4] = [
 
 /// For each generic parameter (identified by index) of a given ADT,
 /// inspect fn signature & body to identify `AdtBehavior`.
-/// Inspects all methods of the given ADT, including methods from trait impls.
+/// Inspects all `safe` methods of the given ADT, including methods from trait impls.
 pub(crate) fn adt_behavior<'tcx>(
     rcx: RudraCtxt<'tcx>,
     adt_did: DefId,
 ) -> FxHashMap<u32, AdtBehavior> {
     let tcx = rcx.tcx();
-    // Map: (idx of generic parameter `T`) => (`Cond`)
-    let mut cond_map = FxHashMap::default();
 
     // Set of `T`s that appear only as owned `T` in either input or output of APIs.
     let mut owned_generic_params = FxHashSet::default();
@@ -151,7 +181,7 @@ pub(crate) fn adt_behavior<'tcx>(
                             fn send_p<M>(&self, _msg: M) where M: Into<P>, {}
                         }
                     */
-                    let mut param_to_param = FxHashMap::default();
+                    let mut fn_ctxt_pseudo_owned_param_idx_map = FxHashMap::default();
                     for atom in tcx
                         .param_env(method_did)
                         .caller_bounds()
@@ -161,17 +191,17 @@ pub(crate) fn adt_behavior<'tcx>(
                         if let PredicateAtom::Trait(trait_predicate, _) = atom {
                             if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind {
                                 let substs = trait_predicate.trait_ref.substs;
-
+                                let substs_types = substs.types().collect::<Vec<_>>();
+                                
                                 // trait_predicate =>  M: Into<P>
                                 //                     |    |
                                 //             (param_ty)  (trait_predicate.trait_ref)
-
                                 if PSEUDO_OWNED
                                     .contains(&tcx.def_path_str(trait_predicate.def_id()).as_str())
                                 {
-                                    // substs = [M, P]
-                                    if let ty::TyKind::Param(param_1) = substs.type_at(1).kind {
-                                        param_to_param.insert(param_ty.index, param_1.index);
+                                    if let ty::TyKind::Param(param_1) = substs_types[1].kind {
+                                        fn_ctxt_pseudo_owned_param_idx_map
+                                            .insert(param_ty.index, param_1.index);
                                     }
                                 }
                             }
@@ -180,31 +210,77 @@ pub(crate) fn adt_behavior<'tcx>(
 
                     // Check generic parameters that are passed as owned `T`.
                     for ty in fn_sig.inputs_and_output.iter() {
-                        for mut owned_idx in owned_generic_params_in_ty(tcx, ty) {
-                            if let Some(&idx) = param_to_param.get(&owned_idx) {
-                                owned_idx = idx;
-                            }
+                        for owned_idx in
+                            owned_generic_params_in_ty(tcx, ty)
+                                .into_iter()
+                                .map(|mut idx| {
+                                    if let Some(&mapped_idx) =
+                                        fn_ctxt_pseudo_owned_param_idx_map.get(&idx)
+                                    {
+                                        idx = mapped_idx;
+                                    }
+                                    idx
+                                })
+                        {
                             if let Some(&mapped_idx) = generic_param_idx_map.get(&owned_idx) {
                                 owned_generic_params.insert(mapped_idx);
                             }
                         }
                     }
 
-                    // Check whether the ADT has deref functionality for any of the generic parameters.
-                    for peek_idx in borrowed_generic_params_in_ty(tcx, fn_sig.output()) {
-                        if let Some(&mapped_idx) = param_to_param.get(&peek_idx) {
+                    // Check whether any of the methods return either `&T` or `Option<&T>` or `Result<&T>`.
+                    for peek_idx in borrowed_generic_params_in_ty(tcx, fn_sig.output())
+                        .into_iter()
+                        .map(|mut idx| {
+                            if let Some(&mapped_idx) = fn_ctxt_pseudo_owned_param_idx_map.get(&idx)
+                            {
+                                idx = mapped_idx;
+                            }
+                            idx
+                        })
+                    {
+                        if let Some(&mapped_idx) = generic_param_idx_map.get(&peek_idx) {
                             deref_generic_params.insert(mapped_idx);
                         }
                     }
+
+                    // TODO: Check whether any of the method inputs are closures of type `Fn(&T) -> !`.
+                    // for _closure_ty in fn_sig.inputs().iter().filter(|ty| ty.is_closure()) {}
                 }
             }
         }
     }
 
+    let all_generic_params: FxHashSet<u32> = adt_generic_params
+        .iter()
+        .filter_map(|x| {
+            if let GenericParamDefKind::Type { .. } = x.kind {
+                Some(x.index)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // cond_map: (idx of generic parameter `T`) => (`Cond`)
+    let mut cond_map = FxHashMap::default();
+
+    for &param_idx in deref_generic_params.iter() {
+        cond_map
+            .entry(param_idx)
+            .or_insert(Cond::empty())
+            .insert(Cond::DEREF);
+    }
+    for &param_idx in all_generic_params.difference(&deref_generic_params) {
+        cond_map
+            .entry(param_idx)
+            .or_insert(Cond::empty())
+            .insert(Cond::NO_DEREF);
+    }
     for &param_idx in owned_generic_params.difference(&deref_generic_params) {
         cond_map
             .entry(param_idx)
-            .or_insert_with(|| Cond::empty())
+            .or_insert(Cond::empty())
             .insert(Cond::PASS_OWNED);
     }
 
@@ -215,6 +291,8 @@ pub(crate) fn adt_behavior<'tcx>(
             param_idx,
             if cond.is_concurrent_queue() {
                 AdtBehavior::ConcurrentQueue
+            } else if cond.is_undefined() {
+                AdtBehavior::Undefined
             } else {
                 AdtBehavior::Standard
             },
