@@ -20,10 +20,10 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 let adt_ty = tcx.type_of(adt_did);
 
                 // Keep track of generic params that need to be `Sync`.
-                let mut need_sync: FxHashSet<u32> = FxHashSet::default();
+                let mut need_sync: FxHashSet<PostMapIdx> = FxHashSet::default();
 
                 // Keep track of generic params that need to be `Send`.
-                let mut need_send: FxHashSet<u32> = FxHashSet::default();
+                let mut need_send: FxHashSet<PostMapIdx> = FxHashSet::default();
 
                 // Generic params that only occur within `PhantomData<_>`
                 let phantom_params = self
@@ -47,13 +47,14 @@ impl<'tcx> SendSyncChecker<'tcx> {
                             }
 
                             // Check if the current ADT acts as a `ConcurrentQueue` type for the generic parameter.
-                            if let Some(behavior) = adt_behavior.get(&gen_param.index) {
+                            let post_map_idx = PostMapIdx(gen_param.index);
+                            if let Some(behavior) = adt_behavior.get(&post_map_idx) {
                                 match behavior {
                                     AdtBehavior::ConcurrentQueue => {
-                                        need_send.insert(gen_param.index);
+                                        need_send.insert(PostMapIdx(gen_param.index));
                                     }
                                     AdtBehavior::Standard => {
-                                        need_sync.insert(gen_param.index);
+                                        need_sync.insert(PostMapIdx(gen_param.index));
                                     }
                                     AdtBehavior::Undefined => {}
                                 }
@@ -71,7 +72,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                                 continue;
                             }
 
-                            need_sync.insert(gen_param.index);
+                            need_sync.insert(PostMapIdx(gen_param.index));
                         }
                     }
                 }
@@ -90,7 +91,8 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 {
                     if let PredicateAtom::Trait(trait_predicate, _) = atom {
                         if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind {
-                            if let Some(mapped_idx) = generic_param_idx_map.get(&param_ty.index) {
+                            let pre_map_idx = PreMapIdx(param_ty.index);
+                            if let Some(mapped_idx) = generic_param_idx_map.get(&pre_map_idx) {
                                 let trait_did = trait_predicate.def_id();
                                 if trait_did == sync_trait_def_id {
                                     need_sync.remove(mapped_idx);
@@ -128,7 +130,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 let adt_ty = tcx.type_of(adt_did);
 
                 // Keep track of generic params that need to be `Send`.
-                let mut need_send: FxHashSet<u32> = FxHashSet::default();
+                let mut need_send: FxHashSet<PostMapIdx> = FxHashSet::default();
 
                 // Generic params that only occur within `PhantomData<_>`
                 let phantom_params = self
@@ -149,7 +151,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                             continue;
                         }
 
-                        need_send.insert(gen_param.index);
+                        need_send.insert(PostMapIdx(gen_param.index));
                     }
                 }
 
@@ -178,13 +180,14 @@ impl<'tcx> SendSyncChecker<'tcx> {
                 {
                     if let PredicateAtom::Trait(trait_predicate, _) = atom {
                         if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind {
-                            if let Some(mapped_idx) = generic_param_idx_map.get(&param_ty.index) {
+                            let pre_map_idx = PreMapIdx(param_ty.index);
+                            if let Some(mapped_idx) = generic_param_idx_map.get(&pre_map_idx) {
                                 let trait_did = trait_predicate.def_id();
                                 if trait_did == send_trait_def_id
                                     || trait_did == sync_trait_def_id
                                     || trait_did == copy_trait_def_id
                                 {
-                                    need_send.remove(mapped_idx);
+                                    need_send.remove(&mapped_idx);
                                 }
                             }
                         }

@@ -38,7 +38,7 @@ pub struct SendSyncChecker<'tcx> {
     /// For each ADT, keep track of `T`s that are only within `PhantomData<T>`.
     phantom_map: FxHashMap<DefId, Vec<u32>>,
     /// For each ADT, keep track of AdtBehavior per generic param.
-    behavior_map: FxHashMap<DefId, FxHashMap<u32, AdtBehavior>>,
+    behavior_map: FxHashMap<DefId, FxHashMap<PostMapIdx, AdtBehavior>>,
 }
 
 impl<'tcx> SendSyncChecker<'tcx> {
@@ -167,3 +167,13 @@ impl AnalysisError for SendSyncError {
         }
     }
 }
+
+// Index of generic type parameter within an impl block.
+// Since the same generic parameter can have different indices in
+// different impl blocks, we need to map these indices back to its
+// original indices (`PostMapIdx`) to reason about generic parameters globally.
+#[derive(Copy, Clone, Eq, Hash, PartialEq)]
+pub struct PreMapIdx(u32);
+// Index of generic type parameter in the ADT definition.
+#[derive(Copy, Clone, Eq, Hash, PartialEq)]
+pub struct PostMapIdx(u32);

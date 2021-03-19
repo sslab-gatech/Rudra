@@ -4,7 +4,7 @@ use super::*;
 pub fn generic_param_idx_mapper<'tcx>(
     adt_generics: &Vec<GenericParamDef>,
     substs_generics: &'tcx List<subst::GenericArg<'tcx>>,
-) -> FxHashMap<u32, u32> {
+) -> FxHashMap<PreMapIdx, PostMapIdx> {
     let mut generic_param_idx_mapper = FxHashMap::default();
     for (original, substituted) in adt_generics.iter().zip(substs_generics.iter()) {
         if let GenericArgKind::Type(ty) = substituted.unpack() {
@@ -13,7 +13,8 @@ pub fn generic_param_idx_mapper<'tcx>(
             // We ignore cases where a generic parameter is replaced with a concrete type.
             // e.g. `impl Send for My<A, i32> {}`
             if let ty::TyKind::Param(param_ty) = ty.kind {
-                generic_param_idx_mapper.insert(param_ty.index, original.index);
+                generic_param_idx_mapper
+                    .insert(PreMapIdx(param_ty.index), PostMapIdx(original.index));
             }
             // We also may not take into account
             // some additional generic parameters introduced in impl/method contexts.
@@ -33,7 +34,7 @@ pub fn generic_param_idx_mapper<'tcx>(
 pub fn owned_generic_params_in_ty<'tcx>(
     tcx: TyCtxt<'tcx>,
     ty: Ty<'tcx>,
-) -> impl IntoIterator<Item = u32> {
+) -> impl IntoIterator<Item = PreMapIdx> {
     let mut owned_generic_params = FxHashSet::default();
 
     let mut worklist = vec![ty];
@@ -70,7 +71,7 @@ pub fn owned_generic_params_in_ty<'tcx>(
         }
     }
 
-    owned_generic_params
+    owned_generic_params.into_iter().map(|idx| PreMapIdx(idx))
 }
 
 // Within the given `ty`,
@@ -78,7 +79,7 @@ pub fn owned_generic_params_in_ty<'tcx>(
 pub fn borrowed_generic_params_in_ty<'tcx>(
     tcx: TyCtxt<'tcx>,
     ty: Ty<'tcx>,
-) -> impl IntoIterator<Item = u32> {
+) -> impl IntoIterator<Item = PreMapIdx> {
     let mut borrowed_generic_params = FxHashSet::default();
 
     let mut worklist = vec![(ty, false)];
@@ -121,6 +122,8 @@ pub fn borrowed_generic_params_in_ty<'tcx>(
     }
 
     borrowed_generic_params
+        .into_iter()
+        .map(|idx| PreMapIdx(idx))
 }
 
 const PSEUDO_OWNED: [&'static str; 4] = [
@@ -137,7 +140,10 @@ const PSEUDO_OWNED: [&'static str; 4] = [
 //    impl<P, Q> Channel<P, Q> {
 //        fn send_p<M>(&self, _msg: M) where M: Into<P>, {}
 //    }
-pub fn find_pseudo_owned_in_fn_ctxt<'tcx>(tcx: TyCtxt<'tcx>, fn_did: DefId) -> FxHashMap<u32, u32> {
+pub fn find_pseudo_owned_in_fn_ctxt<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    fn_did: DefId,
+) -> FxHashMap<PreMapIdx, PreMapIdx> {
     let mut fn_ctxt_pseudo_owned_param_idx_map = FxHashMap::default();
     for atom in tcx
         .param_env(fn_did)
@@ -155,7 +161,8 @@ pub fn find_pseudo_owned_in_fn_ctxt<'tcx>(tcx: TyCtxt<'tcx>, fn_did: DefId) -> F
                 //             (param_ty)  (trait_predicate.trait_ref)
                 if PSEUDO_OWNED.contains(&tcx.def_path_str(trait_predicate.def_id()).as_str()) {
                     if let ty::TyKind::Param(param_1) = substs_types[1].kind {
-                        fn_ctxt_pseudo_owned_param_idx_map.insert(param_ty.index, param_1.index);
+                        fn_ctxt_pseudo_owned_param_idx_map
+                            .insert(PreMapIdx(param_ty.index), PreMapIdx(param_1.index));
                     }
                 }
             }

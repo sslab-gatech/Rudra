@@ -104,7 +104,7 @@ enum FnType {
 pub(crate) fn adt_behavior<'tcx>(
     rcx: RudraCtxt<'tcx>,
     adt_did: DefId,
-) -> FxHashMap<u32, AdtBehavior> {
+) -> FxHashMap<PostMapIdx, AdtBehavior> {
     let tcx = rcx.tcx();
 
     // Set of `T`s that appear only as owned `T` in either input or output of APIs.
@@ -255,11 +255,11 @@ pub(crate) fn adt_behavior<'tcx>(
         }
     }
 
-    let all_generic_params: FxHashSet<u32> = adt_generic_params
+    let all_generic_params: FxHashSet<PostMapIdx> = adt_generic_params
         .iter()
         .filter_map(|x| {
             if let GenericParamDefKind::Type { .. } = x.kind {
-                Some(x.index)
+                Some(PostMapIdx(x.index))
             } else {
                 None
             }
