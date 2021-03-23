@@ -19,7 +19,7 @@ pub(crate) enum AdtBehavior {
     // PtrLike,
 
     // Solely moves `T` and doesn't return `&T` within API output.
-    // For `impl Sync`, `T: Send` is sufficient. (fitering criteria relaxed)
+    // For `impl Sync`, `T: Send` is needed.
     // Identify as 'ConcurrentQueue' if all `&self` methods of ADT only
     // take owned `T` within inputs and/or return owned `T` within return type.
     // This category also includes `Mutex-like` types,
