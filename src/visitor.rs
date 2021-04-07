@@ -1,6 +1,8 @@
 use rustc_data_structures::fx::FxHashMap;
-use rustc_hir::{intravisit, itemlikevisit::ItemLikeVisitor, Block, BodyId, HirId, ItemKind};
-use rustc_middle::ty::TyCtxt;
+use rustc_hir::{
+    def_id::DefId, intravisit, itemlikevisit::ItemLikeVisitor, Block, BodyId, HirId, ItemKind,
+};
+use rustc_middle::ty::{Ty, TyCtxt, TyKind};
 use rustc_span::Span;
 
 /// Maps `HirId` of a type to `BodyId` of related impls.
@@ -115,4 +117,38 @@ impl<'tcx> intravisit::Visitor<'tcx> for ContainsUnsafe<'tcx> {
         }
         intravisit::walk_block(self, block);
     }
+}
+
+/// (`DefId` of ADT) => Vec<(HirId of relevant impl block, impl_self_ty)>
+/// We use this map to quickly access associated impl blocks per ADT.
+/// `impl_self_ty` in the return value may differ from `tcx.type_of(ADT.DefID)`,
+/// as different instantiations of the same ADT are distinct `Ty`s.
+/// (e.g. Foo<i32, i64>, Foo<String, i32>)
+pub type AdtImplMap<'tcx> = FxHashMap<DefId, Vec<(&'tcx HirId, Ty<'tcx>)>>;
+
+/// Create & initialize `AdtImplMap`.
+/// `AdtImplMap` is initialized before analysis of each crate,
+/// avoiding quadratic complexity of scanning all impl blocks for each ADT.
+pub fn create_adt_impl_map<'tcx>(tcx: TyCtxt<'tcx>) -> AdtImplMap<'tcx> {
+    let mut map = FxHashMap::default();
+
+    for (impl_hir_id, item) in tcx.hir().krate().items.iter() {
+        if let ItemKind::Impl { self_ty, .. } = &item.kind {
+            // `Self` type of the given impl block.
+            let impl_self_ty = tcx.type_of(self_ty.hir_id.owner);
+
+            if let TyKind::Adt(impl_self_adt_def, _impl_substs) = impl_self_ty.kind {
+                // We use `AdtDef.did` as key for `AdtImplMap`.
+                // For any crazy instantiation of the same generic ADT (Foo<i32>, Foo<String>, etc..),
+                // `AdtDef.did` refers to the original ADT definition.
+                // Thus it can be used to map & collect impls for all instantitations of the same ADT.
+
+                map.entry(impl_self_adt_def.did)
+                    .or_insert_with(|| Vec::new())
+                    .push((impl_hir_id, impl_self_ty));
+            }
+        }
+    }
+
+    map
 }

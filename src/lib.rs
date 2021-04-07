@@ -16,6 +16,9 @@ extern crate rustc_mir;
 extern crate rustc_span;
 
 #[macro_use]
+extern crate bitflags;
+
+#[macro_use]
 extern crate if_chain;
 #[macro_use]
 extern crate log as log_crate;

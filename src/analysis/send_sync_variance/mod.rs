@@ -1,18 +1,22 @@
 //! Unsafe Send/Sync impl detector
 
+mod behavior;
+mod phantom;
 // You need to fix the code to enable `relaxed` mode..
 mod relaxed;
 // Default mode is `strict`.
 mod strict;
+mod utils;
 
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::DefId;
 use rustc_hir::{GenericBound, GenericParam, GenericParamKind, WherePredicate};
 use rustc_hir::{HirId, ItemKind, Node};
+use rustc_middle::mir::terminator::Mutability;
 use rustc_middle::ty::{
     self,
     subst::{self, GenericArgKind},
-    AdtDef, GenericParamDefKind, List, PredicateAtom, TyCtxt,
+    AssocKind, GenericParamDef, GenericParamDefKind, List, PredicateAtom, Ty, TyCtxt, TyS,
 };
 use rustc_span::symbol::sym;
 
@@ -21,15 +25,20 @@ use snafu::{OptionExt, Snafu};
 use crate::prelude::*;
 use crate::report::{Report, ReportLevel};
 
+use behavior::*;
+pub use phantom::*;
 pub use relaxed::*;
 pub use strict::*;
+pub use utils::*;
 
 pub struct SendSyncVarianceChecker<'tcx> {
     rcx: RudraCtxt<'tcx>,
-    /// For each struct, keep track of reports.
+    /// For each ADT, keep track of reports.
     report_map: FxHashMap<DefId, Vec<Report>>,
-    /// For each relevant ADT, keep track of `T`s that are only within `PhantomData<T>`.
+    /// For each ADT, keep track of `T`s that are only within `PhantomData<T>`.
     phantom_map: FxHashMap<DefId, Vec<u32>>,
+    /// For each ADT, keep track of AdtBehavior per generic param.
+    behavior_map: FxHashMap<DefId, FxHashMap<PostMapIdx, AdtBehavior>>,
 }
 
 impl<'tcx> SendSyncVarianceChecker<'tcx> {
@@ -38,6 +47,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
             rcx,
             report_map: FxHashMap::default(),
             phantom_map: FxHashMap::default(),
+            behavior_map: FxHashMap::default(),
         }
     }
 
@@ -46,6 +56,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
         let sync_trait_did = unwrap_or!(sync_trait_def_id(self.rcx.tcx()) => return);
         let copy_trait_did = unwrap_or!(copy_trait_def_id(self.rcx.tcx()) => return);
 
+        // Main analysis
         self.analyze_send(send_trait_did, sync_trait_did, copy_trait_did);
         self.analyze_sync(send_trait_did, sync_trait_did, copy_trait_did);
 
@@ -72,7 +83,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 let tcx = self.rcx.tcx();
                 self.report_map
                     .entry(adt_def_id)
-                    .or_insert(Vec::with_capacity(2))
+                    .or_insert_with(|| Vec::with_capacity(2))
                     .push(Report::with_hir_id(
                         tcx,
                         ReportLevel::Warning,
@@ -100,7 +111,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 let tcx = self.rcx.tcx();
                 self.report_map
                     .entry(struct_def_id)
-                    .or_insert(Vec::with_capacity(2))
+                    .or_insert_with(|| Vec::with_capacity(2))
                     .push(Report::with_hir_id(
                         tcx,
                         ReportLevel::Warning,
@@ -111,53 +122,6 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
             }
         }
     }
-}
-
-/// For a given ADT (struct, enum, union),
-/// return the indices of `T`s that are only inside `PhantomData<T>`.
-fn phantom_indices<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    adt_def: &AdtDef,
-    substs: &'tcx List<subst::GenericArg<'tcx>>,
-) -> Vec<u32> {
-    // Store indices of gen_params that are in/out of `PhantomData<_>`
-    let (mut in_phantom, mut out_phantom) = (FxHashSet::default(), FxHashSet::default());
-
-    for variant in &adt_def.variants {
-        for field in &variant.fields {
-            let field_ty = field.ty(tcx, substs);
-
-            let mut walker = field_ty.walk();
-            while let Some(node) = walker.next() {
-                if let GenericArgKind::Type(inner_ty) = node.unpack() {
-                    if inner_ty.is_phantom_data() {
-                        walker.skip_current_subtree();
-
-                        for x in inner_ty.walk() {
-                            if let GenericArgKind::Type(ph_ty) = x.unpack() {
-                                if let ty::TyKind::Param(ty) = ph_ty.kind {
-                                    in_phantom.insert(ty.index);
-                                }
-                            }
-                        }
-                        continue;
-                    }
-
-                    if let ty::TyKind::Param(ty) = inner_ty.kind {
-                        out_phantom.insert(ty.index);
-                    }
-                }
-            }
-        }
-    }
-
-    // Check for params that are both inside & outside of `PhantomData<_>`
-    let in_phantom = in_phantom
-        .into_iter()
-        .filter(|e| !out_phantom.contains(e))
-        .collect();
-
-    return in_phantom;
 }
 
 /// Check Send Trait
@@ -177,8 +141,14 @@ fn copy_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
     convert!(tcx.lang_items().copy_trait().context(CopyTraitNotFound))
 }
 
+/// Check Clone Trait
+fn _clone_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
+    convert!(tcx.lang_items().clone_trait().context(CloneTraitNotFound))
+}
+
 #[derive(Debug, Snafu)]
 pub enum SendSyncVarianceError {
+    CloneTraitNotFound,
     CopyTraitNotFound,
     SendTraitNotFound,
     SyncTraitNotFound,
@@ -189,6 +159,7 @@ impl AnalysisError for SendSyncVarianceError {
     fn kind(&self) -> AnalysisErrorKind {
         use SendSyncVarianceError::*;
         match self {
+            CloneTraitNotFound => AnalysisErrorKind::Unreachable,
             CopyTraitNotFound => AnalysisErrorKind::Unreachable,
             SendTraitNotFound => AnalysisErrorKind::Unreachable,
             SyncTraitNotFound => AnalysisErrorKind::Unreachable,
@@ -196,3 +167,13 @@ impl AnalysisError for SendSyncVarianceError {
         }
     }
 }
+
+// Index of generic type parameter within an impl block.
+// Since the same generic parameter can have different indices in
+// different impl blocks, we need to map these indices back to its
+// original indices (`PostMapIdx`) to reason about generic parameters globally.
+#[derive(Copy, Clone, Eq, Hash, PartialEq)]
+pub struct PreMapIdx(u32);
+// Index of generic type parameter in the ADT definition.
+#[derive(Copy, Clone, Eq, Hash, PartialEq)]
+pub struct PostMapIdx(u32);
