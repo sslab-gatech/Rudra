@@ -105,7 +105,13 @@ pub fn borrowed_generic_params_in_ty<'tcx>(
 
                 for adt_variant in adt_def.variants.iter() {
                     for adt_field in adt_variant.fields.iter() {
-                        worklist.push((adt_field.ty(tcx, substs), borrowed));
+                        let adt_field_ty = adt_field.ty(tcx, substs);
+                        // We peel off just one level of ADT layer when trying to find exposed `&T`.
+                        // This helps to limit complexity & rule out Mutex-like FPs.
+                        if let ty::TyKind::Adt(_, _) = adt_field_ty.kind {
+                        } else {
+                            worklist.push((adt_field_ty, borrowed));
+                        }
                     }
                 }
             }
