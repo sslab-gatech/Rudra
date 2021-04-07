@@ -189,7 +189,7 @@ pub(crate) fn adt_behavior<'tcx>(
                             for input_ty in fn_sig.inputs() {
                                 for owned_idx in owned_generic_params_in_ty(tcx, input_ty)
                                     .into_iter()
-                                    .map(|mut idx| {
+                                    .map(|idx| {
                                         *fn_ctxt_pseudo_owned_param_idx_map
                                             .get(&idx)
                                             .unwrap_or(&idx)
@@ -209,9 +209,8 @@ pub(crate) fn adt_behavior<'tcx>(
 
                             // Check generic parameters that are passed as owned `T`.
                             for ty in fn_sig.inputs_and_output.iter() {
-                                for owned_idx in owned_generic_params_in_ty(tcx, ty)
-                                    .into_iter()
-                                    .map(|mut idx| {
+                                for owned_idx in
+                                    owned_generic_params_in_ty(tcx, ty).into_iter().map(|idx| {
                                         *fn_ctxt_pseudo_owned_param_idx_map
                                             .get(&idx)
                                             .unwrap_or(&idx)
@@ -227,7 +226,7 @@ pub(crate) fn adt_behavior<'tcx>(
                             // Check whether any of the methods return either `&T` or `Option<&T>` or `Result<&T>`.
                             for peek_idx in borrowed_generic_params_in_ty(tcx, fn_sig.output())
                                 .into_iter()
-                                .map(|mut idx| {
+                                .map(|idx| {
                                     *fn_ctxt_pseudo_owned_param_idx_map.get(&idx).unwrap_or(&idx)
                                 })
                             {

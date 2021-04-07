@@ -30,13 +30,13 @@ impl AnalysisError for UnsafeDestructorError {
     }
 }
 
-pub struct UnsafeDestructor<'tcx> {
+pub struct UnsafeDestructorChecker<'tcx> {
     rcx: RudraCtxt<'tcx>,
 }
 
-impl<'tcx> UnsafeDestructor<'tcx> {
+impl<'tcx> UnsafeDestructorChecker<'tcx> {
     pub fn new(rcx: RudraCtxt<'tcx>) -> Self {
-        UnsafeDestructor { rcx }
+        UnsafeDestructorChecker { rcx }
     }
 
     pub fn analyze(&mut self) {

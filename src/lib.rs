@@ -40,7 +40,7 @@ pub mod visitor;
 
 use rustc_middle::ty::TyCtxt;
 
-use crate::analysis::{PanicSafetyAnalyzer, SendSyncChecker, UnsafeDestructor};
+use crate::analysis::{SendSyncVarianceChecker, UnsafeDataflowChecker, UnsafeDestructorChecker};
 use crate::context::RudraCtxtOwner;
 use crate::log::Verbosity;
 
@@ -53,8 +53,8 @@ pub static RUDRA_DEFAULT_ARGS: &[&str] =
 pub struct RudraConfig {
     pub verbosity: Verbosity,
     pub unsafe_destructor_enabled: bool,
-    pub send_sync_enabled: bool,
-    pub panic_safety_enabled: bool,
+    pub send_sync_variance_enabled: bool,
+    pub unsafe_dataflow_enabled: bool,
 }
 
 impl Default for RudraConfig {
@@ -62,8 +62,8 @@ impl Default for RudraConfig {
         RudraConfig {
             verbosity: Verbosity::Normal,
             unsafe_destructor_enabled: false,
-            send_sync_enabled: true,
-            panic_safety_enabled: true,
+            send_sync_variance_enabled: true,
+            unsafe_dataflow_enabled: true,
         }
     }
 }
@@ -114,24 +114,24 @@ pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: RudraConfig) {
     // Unsafe destructor analysis
     if config.unsafe_destructor_enabled {
         run_analysis("UnsafeDestructor", || {
-            let mut unsafe_destructor = UnsafeDestructor::new(rcx);
-            unsafe_destructor.analyze();
+            let mut checker = UnsafeDestructorChecker::new(rcx);
+            checker.analyze();
         })
     }
 
-    // Send/Sync analysis
-    if config.send_sync_enabled {
-        run_analysis("SendSyncChecker", || {
-            let send_sync_checker = SendSyncChecker::new(rcx);
-            send_sync_checker.analyze();
+    // Send/Sync variance analysis
+    if config.send_sync_variance_enabled {
+        run_analysis("SendSyncVariance", || {
+            let checker = SendSyncVarianceChecker::new(rcx);
+            checker.analyze();
         })
     }
 
-    // Panic Safety analysis
-    if config.panic_safety_enabled {
-        run_analysis("PanicSafety", || {
-            let panic_safety_checker = PanicSafetyAnalyzer::new(rcx);
-            panic_safety_checker.analyze();
+    // Unsafe dataflow analysis
+    if config.unsafe_dataflow_enabled {
+        run_analysis("UnsafeDataflow", || {
+            let checker = UnsafeDataflowChecker::new(rcx);
+            checker.analyze();
         })
     }
 }

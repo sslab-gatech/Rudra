@@ -11,20 +11,19 @@ pub fn run_command(cmd: &str, work_dir: impl AsRef<Path>) -> io::Result<Output> 
         .output()
 }
 
-pub fn run_command_with_env<K, V>(
+pub fn run_command_with_env<K>(
     cmd: &str,
     work_dir: impl AsRef<Path>,
-    env: &[(K, V)],
+    env: &[(K, &OsStr)],
 ) -> io::Result<Output>
 where
     K: AsRef<OsStr>,
-    V: AsRef<OsStr>,
 {
     let arg_iter: Vec<_> = cmd.split(' ').collect();
     let mut cmd = Command::new(arg_iter[0]);
     cmd.args(&arg_iter[1..]).current_dir(work_dir);
     for (k, v) in env {
-        cmd.env(k.as_ref(), v.as_ref());
+        cmd.env(k.as_ref(), v);
     }
 
     cmd.output()

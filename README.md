@@ -15,21 +15,32 @@ Rudra is a static analyzer to detect common undefined behaviors in Rust programs
 - RUDRA_RUNNER_LOG
   - Adjust logging level for `rudra-runner`. Use `.env` file at your discretion.
   - Default: `info`
-- RUDRA_SCRATCH_DIR
-  - Directory to store crawled crates (default: ../rudra_scratch)
-- RUDRA_REPORT_DIR
-  - Directory to store reports (default: ../rudra_report)
-  - Rudra-Runner will automatically set `RUDRA_REPORT_PATH`
+- RUDRA_RUNNER_HOME
+  - Home directory for Rudra Runner
+    - There is a setup script: `./setup_rudra_runner_home.py <path>`
+  - This is only used for Rudra runner. The default `cargo rudra` will use the default cargo directory.
+  - Directory structure:
+    - cargo_home
+    - sccache_home
+    - rudra_cache
+    - campaign
+      - YYYYMMDD_HHmmss
+        - report
+        - log
+  - `CARGO_HOME` and `SCCACHE_DIR` will be automatically set when the runner is used.
+    - `SCCACHE_CACHE_SIZE` will be set to "10T"
+  - `RUDRA_REPORT_PATH` and `RUDRA_LOG_PATH` will be automatically set when runner is used.
 
 ### Rudra
 
 - Use `-v` or `-vv` to make logging more verbose.
   More than two v's will be ignored, and only the last option will be considered (it does not accumulate).
-- RUDRA_REPORT_PATH
+- If `sccache` is found in the path, it will be used to build dependencies
+- `RUDRA_REPORT_PATH`
   - Report file location. If set, Rudra analysis result will be serialized and
     saved to that file. Otherwise, the result will be printed to stderr.
   - If there already exists a file at the path, the existing content will be erased.
-- RUDRA_LOG_PATH
+- `RUDRA_LOG_PATH`
   - Log file location. If set, log will be saved to this file as well as printed to stderr.
 
 ## Development Setup
@@ -47,10 +58,7 @@ rustup component add miri
 
 # Environment variable setup, put these in your `.bashrc`
 export RUDRA_RUST_CHANNEL=nightly-2020-08-26
-export RUDRA_PATH="<your project path>"
-
-export RUDRA_SCRATCH_DIR="<your scratch path>"
-export RUDRA_REPORT_DIR="<your report path>"
+export RUDRA_RUNNER_HOME="<your runner home path - use setup_rudra_runner_home.py>"
 
 export RUSTFLAGS="-L $HOME/.rustup/toolchains/${RUDRA_RUST_CHANNEL}-x86_64-unknown-linux-gnu/lib"
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.rustup/toolchains/${RUDRA_RUST_CHANNEL}-x86_64-unknown-linux-gnu/lib"

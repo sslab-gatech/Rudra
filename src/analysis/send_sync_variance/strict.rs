@@ -2,7 +2,7 @@
 
 use super::*;
 
-impl<'tcx> SendSyncChecker<'tcx> {
+impl<'tcx> SendSyncVarianceChecker<'tcx> {
     /// Returns Some(DefId of ADT) if `impl Sync` for the ADT looks suspicious
     /// (ADT: struct / enum / union)
     pub fn suspicious_sync(

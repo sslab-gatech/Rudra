@@ -1,12 +1,12 @@
-mod panic_safety;
-mod send_sync_checker;
+mod send_sync_variance;
+mod unsafe_dataflow;
 mod unsafe_destructor;
 
 use snafu::{Error, ErrorCompat};
 
-pub use panic_safety::PanicSafetyAnalyzer;
-pub use send_sync_checker::SendSyncChecker;
-pub use unsafe_destructor::UnsafeDestructor;
+pub use send_sync_variance::SendSyncVarianceChecker;
+pub use unsafe_dataflow::UnsafeDataflowChecker;
+pub use unsafe_destructor::UnsafeDestructorChecker;
 
 pub type AnalysisResult<'tcx, T> = Result<T, Box<dyn AnalysisError + 'tcx>>;
 

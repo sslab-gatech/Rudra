@@ -99,10 +99,10 @@ fn parse_config() -> (RudraConfig, Vec<String>) {
             "-Zrudra-disable-unsafe-destructor" => {
                 config.unsafe_destructor_enabled = false;
             }
-            "-Zrudra-enable-send-sync" => config.send_sync_enabled = true,
-            "-Zrudra-disable-send-sync" => config.send_sync_enabled = false,
-            "-Zrudra-enable-panic-safety" => config.panic_safety_enabled = true,
-            "-Zrudra-disable-panic-safety" => config.panic_safety_enabled = false,
+            "-Zrudra-enable-send-sync-variance" => config.send_sync_variance_enabled = true,
+            "-Zrudra-disable-send-sync-variance" => config.send_sync_variance_enabled = false,
+            "-Zrudra-enable-unsafe-dataflow" => config.unsafe_dataflow_enabled = true,
+            "-Zrudra-disable-unsafe-dataflow" => config.unsafe_dataflow_enabled = false,
             "-v" => config.verbosity = Verbosity::Verbose,
             "-vv" => config.verbosity = Verbosity::Trace,
             _ => {
@@ -117,24 +117,16 @@ fn parse_config() -> (RudraConfig, Vec<String>) {
 fn main() {
     rustc_driver::install_ice_hook(); // ICE: Internal Compilation Error
 
-    let exit_code = if env::var_os("RUDRA_BE_RUSTC").is_some() {
-        // If the environment asks us to actually be rustc, then do that.
-        rustc_driver::init_rustc_env_logger();
-
-        // We cannot use `rustc_driver::main` as we need to adjust the CLI arguments.
-        let mut callbacks = rustc_driver::TimePassesCallbacks::default();
-        run_compiler(env::args().collect(), &mut callbacks)
-    } else {
-        // Otherwise, run Rudra analysis
+    let exit_code = {
+        // initialize the report logger
+        // `logger_handle` must be nested because it flushes the logs when it goes out of the scope
         let (config, mut rustc_args) = parse_config();
+        let _logger_handle = init_report_logger(default_report_logger());
 
         // init rustc logger
         if env::var_os("RUSTC_LOG").is_some() {
             rustc_driver::init_rustc_env_logger();
         }
-
-        // init report logger
-        let _logger_handle = init_report_logger(default_report_logger());
 
         if let Some(sysroot) = compile_time_sysroot() {
             let sysroot_flag = "--sysroot";
@@ -149,9 +141,7 @@ fn main() {
         rustc_args.splice(1..1, RUDRA_DEFAULT_ARGS.iter().map(ToString::to_string));
 
         debug!("rustc arguments: {:?}", &rustc_args);
-
-        let exit_code = run_compiler(rustc_args, &mut RudraCompilerCalls::new(config));
-        exit_code
+        run_compiler(rustc_args, &mut RudraCompilerCalls::new(config))
     };
 
     std::process::exit(exit_code)

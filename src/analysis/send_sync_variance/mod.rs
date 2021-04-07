@@ -16,7 +16,7 @@ use rustc_middle::mir::terminator::Mutability;
 use rustc_middle::ty::{
     self,
     subst::{self, GenericArgKind},
-    AssocKind, FnSig, GenericParamDef, GenericParamDefKind, List, PredicateAtom, Ty, TyCtxt, TyS,
+    AssocKind, GenericParamDef, GenericParamDefKind, List, PredicateAtom, Ty, TyCtxt, TyS,
 };
 use rustc_span::symbol::sym;
 
@@ -31,7 +31,7 @@ pub use relaxed::*;
 pub use strict::*;
 pub use utils::*;
 
-pub struct SendSyncChecker<'tcx> {
+pub struct SendSyncVarianceChecker<'tcx> {
     rcx: RudraCtxt<'tcx>,
     /// For each ADT, keep track of reports.
     report_map: FxHashMap<DefId, Vec<Report>>,
@@ -41,9 +41,9 @@ pub struct SendSyncChecker<'tcx> {
     behavior_map: FxHashMap<DefId, FxHashMap<PostMapIdx, AdtBehavior>>,
 }
 
-impl<'tcx> SendSyncChecker<'tcx> {
+impl<'tcx> SendSyncVarianceChecker<'tcx> {
     pub fn new(rcx: RudraCtxt<'tcx>) -> Self {
-        SendSyncChecker {
+        SendSyncVarianceChecker {
             rcx,
             report_map: FxHashMap::default(),
             phantom_map: FxHashMap::default(),
@@ -87,7 +87,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                     .push(Report::with_hir_id(
                         tcx,
                         ReportLevel::Warning,
-                        "SendSyncChecker",
+                        "SendSyncVariance",
                         "Suspicious impl of `Send` found",
                         impl_hir_id,
                     ));
@@ -115,7 +115,7 @@ impl<'tcx> SendSyncChecker<'tcx> {
                     .push(Report::with_hir_id(
                         tcx,
                         ReportLevel::Warning,
-                        "SendSyncChecker",
+                        "SendSyncVariance",
                         "Suspicious impl of `Sync` found",
                         impl_hir_id,
                     ));
@@ -147,7 +147,7 @@ fn _clone_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
 }
 
 #[derive(Debug, Snafu)]
-pub enum SendSyncError {
+pub enum SendSyncVarianceError {
     CloneTraitNotFound,
     CopyTraitNotFound,
     SendTraitNotFound,
@@ -155,9 +155,9 @@ pub enum SendSyncError {
     CatchAll,
 }
 
-impl AnalysisError for SendSyncError {
+impl AnalysisError for SendSyncVarianceError {
     fn kind(&self) -> AnalysisErrorKind {
-        use SendSyncError::*;
+        use SendSyncVarianceError::*;
         match self {
             CloneTraitNotFound => AnalysisErrorKind::Unreachable,
             CopyTraitNotFound => AnalysisErrorKind::Unreachable,

@@ -14,15 +14,15 @@ use crate::{
 };
 
 #[derive(Debug, Snafu)]
-pub enum PanicSafetyError {
+pub enum UnsafeDataflowError {
     PushPopBlock { backtrace: Backtrace },
     ResolveError { backtrace: Backtrace },
     InvalidSpan { backtrace: Backtrace },
 }
 
-impl AnalysisError for PanicSafetyError {
+impl AnalysisError for UnsafeDataflowError {
     fn kind(&self) -> AnalysisErrorKind {
-        use PanicSafetyError::*;
+        use UnsafeDataflowError::*;
         match self {
             PushPopBlock { .. } => AnalysisErrorKind::Unreachable,
             ResolveError { .. } => AnalysisErrorKind::OutOfScope,
@@ -31,13 +31,13 @@ impl AnalysisError for PanicSafetyError {
     }
 }
 
-pub struct PanicSafetyAnalyzer<'tcx> {
+pub struct UnsafeDataflowChecker<'tcx> {
     rcx: RudraCtxt<'tcx>,
 }
 
-impl<'tcx> PanicSafetyAnalyzer<'tcx> {
+impl<'tcx> UnsafeDataflowChecker<'tcx> {
     pub fn new(rcx: RudraCtxt<'tcx>) -> Self {
-        PanicSafetyAnalyzer { rcx }
+        UnsafeDataflowChecker { rcx }
     }
 
     pub fn analyze(self) {
@@ -46,7 +46,8 @@ impl<'tcx> PanicSafetyAnalyzer<'tcx> {
 
         // Iterates all (type, related function) pairs
         for (_ty_hir_id, (body_id, related_item_span)) in self.rcx.types_with_related_items() {
-            if let Some(status) = inner::PanicSafetyBodyAnalyzer::analyze_body(self.rcx, body_id) {
+            if let Some(status) = inner::UnsafeDataflowBodyAnalyzer::analyze_body(self.rcx, body_id)
+            {
                 if status.is_unsafe() {
                     let mut color_span = unwrap_or!(
                         utils::ColorSpan::new(tcx, related_item_span).context(InvalidSpan) => continue
@@ -60,7 +61,7 @@ impl<'tcx> PanicSafetyAnalyzer<'tcx> {
                         color_span.add_sub_span(Color::Yellow, span);
                     }
 
-                    for &span in status.panicking_function_spans() {
+                    for &span in status.unresolvable_generic_function_spans() {
                         color_span.add_sub_span(Color::Cyan, span);
                     }
 
@@ -73,9 +74,9 @@ impl<'tcx> PanicSafetyAnalyzer<'tcx> {
                     rudra_report(Report::with_color_span(
                         tcx,
                         level,
-                        "PanicSafety",
+                        "UnsafeDataflow",
                         format!(
-                            "Potential panic safety issue in `{}`",
+                            "Potential unsafe dataflow issue in `{}`",
                             tcx.def_path_str(hir_map.body_owner_def_id(body_id).to_def_id())
                         ),
                         &color_span,
@@ -90,41 +91,41 @@ mod inner {
     use super::*;
 
     #[derive(Debug, Default)]
-    pub struct PanicSafetyStatus {
-        strong_bypass: Vec<Span>,
-        weak_bypass: Vec<Span>,
-        panicking_function: Vec<Span>,
+    pub struct UnsafeDataflowStatus {
+        strong_bypasses: Vec<Span>,
+        weak_bypasses: Vec<Span>,
+        unresolvable_generic_functions: Vec<Span>,
         is_unsafe: bool,
     }
 
-    impl PanicSafetyStatus {
+    impl UnsafeDataflowStatus {
         pub fn is_unsafe(&self) -> bool {
             self.is_unsafe
         }
 
         pub fn strong_bypass_spans(&self) -> &Vec<Span> {
-            &self.strong_bypass
+            &self.strong_bypasses
         }
 
         pub fn weak_bypass_spans(&self) -> &Vec<Span> {
-            &self.weak_bypass
+            &self.weak_bypasses
         }
 
-        pub fn panicking_function_spans(&self) -> &Vec<Span> {
-            &self.panicking_function
+        pub fn unresolvable_generic_function_spans(&self) -> &Vec<Span> {
+            &self.unresolvable_generic_functions
         }
     }
 
-    pub struct PanicSafetyBodyAnalyzer<'a, 'tcx> {
+    pub struct UnsafeDataflowBodyAnalyzer<'a, 'tcx> {
         rcx: RudraCtxt<'tcx>,
         body: &'a ir::Body<'tcx>,
         param_env: ParamEnv<'tcx>,
-        status: PanicSafetyStatus,
+        status: UnsafeDataflowStatus,
     }
 
-    impl<'a, 'tcx> PanicSafetyBodyAnalyzer<'a, 'tcx> {
+    impl<'a, 'tcx> UnsafeDataflowBodyAnalyzer<'a, 'tcx> {
         fn new(rcx: RudraCtxt<'tcx>, param_env: ParamEnv<'tcx>, body: &'a ir::Body<'tcx>) -> Self {
-            PanicSafetyBodyAnalyzer {
+            UnsafeDataflowBodyAnalyzer {
                 rcx,
                 body,
                 param_env,
@@ -132,7 +133,7 @@ mod inner {
             }
         }
 
-        pub fn analyze_body(rcx: RudraCtxt<'tcx>, body_id: BodyId) -> Option<PanicSafetyStatus> {
+        pub fn analyze_body(rcx: RudraCtxt<'tcx>, body_id: BodyId) -> Option<UnsafeDataflowStatus> {
             let hir_map = rcx.tcx().hir();
             let body_did = hir_map.body_owner_def_id(body_id).to_def_id();
 
@@ -152,7 +153,7 @@ mod inner {
                     }
                     Ok(body) => {
                         let param_env = rcx.tcx().param_env(body_did);
-                        let body_analyzer = PanicSafetyBodyAnalyzer::new(rcx, param_env, body);
+                        let body_analyzer = UnsafeDataflowBodyAnalyzer::new(rcx, param_env, body);
                         Some(body_analyzer.analyze())
                     }
                 }
@@ -163,7 +164,7 @@ mod inner {
             }
         }
 
-        fn analyze(mut self) -> PanicSafetyStatus {
+        fn analyze(mut self) -> UnsafeDataflowStatus {
             let mut reachability = graph::Reachability::new(self.body);
 
             for (id, terminator) in self.body.terminators().enumerate() {
@@ -180,20 +181,20 @@ mod inner {
                         if paths::STRONG_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
                             reachability.mark_source(id);
                             self.status
-                                .strong_bypass
+                                .strong_bypasses
                                 .push(terminator.original.source_info.span);
                         } else if paths::WEAK_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
                             reachability.mark_source(id);
                             self.status
-                                .weak_bypass
+                                .weak_bypasses
                                 .push(terminator.original.source_info.span);
                         } else if paths::GENERIC_FN_LIST.contains(&symbol_vec) {
                             reachability.mark_sink(id);
                             self.status
-                                .panicking_function
+                                .unresolvable_generic_functions
                                 .push(terminator.original.source_info.span);
                         } else {
-                            // Check for generic function calls
+                            // Check for unresolvable generic function calls
                             match Instance::resolve(
                                 self.rcx.tcx(),
                                 self.param_env,
@@ -211,7 +212,7 @@ mod inner {
                                     // 2. User-provided code potentially panics
                                     reachability.mark_sink(id);
                                     self.status
-                                        .panicking_function
+                                        .unresolvable_generic_functions
                                         .push(terminator.original.source_info.span);
                                 }
                             }
