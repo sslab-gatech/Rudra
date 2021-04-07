@@ -91,10 +91,11 @@ impl Cond {
     }
 }
 
-// Enum to differentiate  DefIds of
+// Enum to differentiate DefIds of
 // `&self` methods with constructor functions.
 enum FnType {
     ConstructSelf(DefId),
+    // Note that this only refers to `&self` methods and not `&mut self` methods.
     TakeBorrowedSelf(DefId),
 }
 
@@ -189,12 +190,9 @@ pub(crate) fn adt_behavior<'tcx>(
                                 for owned_idx in owned_generic_params_in_ty(tcx, input_ty)
                                     .into_iter()
                                     .map(|mut idx| {
-                                        if let Some(&mapped_idx) =
-                                            fn_ctxt_pseudo_owned_param_idx_map.get(&idx)
-                                        {
-                                            idx = mapped_idx;
-                                        }
-                                        idx
+                                        *fn_ctxt_pseudo_owned_param_idx_map
+                                            .get(&idx)
+                                            .unwrap_or(&idx)
                                     })
                                 {
                                     if let Some(&mapped_idx) = generic_param_idx_map.get(&owned_idx)
@@ -214,12 +212,9 @@ pub(crate) fn adt_behavior<'tcx>(
                                 for owned_idx in owned_generic_params_in_ty(tcx, ty)
                                     .into_iter()
                                     .map(|mut idx| {
-                                        if let Some(&mapped_idx) =
-                                            fn_ctxt_pseudo_owned_param_idx_map.get(&idx)
-                                        {
-                                            idx = mapped_idx;
-                                        }
-                                        idx
+                                        *fn_ctxt_pseudo_owned_param_idx_map
+                                            .get(&idx)
+                                            .unwrap_or(&idx)
                                     })
                                 {
                                     if let Some(&mapped_idx) = generic_param_idx_map.get(&owned_idx)
@@ -233,12 +228,7 @@ pub(crate) fn adt_behavior<'tcx>(
                             for peek_idx in borrowed_generic_params_in_ty(tcx, fn_sig.output())
                                 .into_iter()
                                 .map(|mut idx| {
-                                    if let Some(&mapped_idx) =
-                                        fn_ctxt_pseudo_owned_param_idx_map.get(&idx)
-                                    {
-                                        idx = mapped_idx;
-                                    }
-                                    idx
+                                    *fn_ctxt_pseudo_owned_param_idx_map.get(&idx).unwrap_or(&idx)
                                 })
                             {
                                 if let Some(&mapped_idx) = generic_param_idx_map.get(&peek_idx) {
