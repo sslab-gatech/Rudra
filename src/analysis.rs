@@ -10,6 +10,8 @@ pub use unsafe_destructor::UnsafeDestructorChecker;
 
 pub type AnalysisResult<'tcx, T> = Result<T, Box<dyn AnalysisError + 'tcx>>;
 
+use std::borrow::Cow;
+
 pub trait AnalysisError: Error + ErrorCompat {
     fn kind(&self) -> AnalysisErrorKind;
     fn log(&self) {
@@ -54,4 +56,66 @@ pub enum AnalysisErrorKind {
     /// An expected failure, something like "we don't handle this by design",
     /// that worth recording.
     OutOfScope,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum AnalysisKind {
+    UnsafeDestructor,
+    SendSyncVariance(SendSyncAnalysisKind),
+    UnsafeDataflow(UDBypassKind),
+}
+
+// TODO: Haven't decided on properly dividing up this category
+#[derive(Debug, Copy, Clone)]
+pub enum SendSyncAnalysisKind {
+    // T: Send for Sync
+    ConcurrentQueueSend,
+    // T: Send for Send
+    SendForSend,
+    // T: Sync for Sync
+    SyncForSync,
+    // T: Send + Sync for Sync
+    BothForSync
+}
+
+// Unsafe Dataflow BypassKind.
+// Used to associate each Unsafe-Dataflow bug report with its cause.
+#[derive(Debug, Copy, Clone)]
+pub enum UDBypassKind {
+    // Strong bypass
+    ReadFlow,
+    CopyFlow,
+    VecFromRaw,
+    // Weak bypass
+    Transmute,
+    WriteFlow,
+    PtrAsRef,
+    SliceUnchecked,
+    SliceFromRaw,
+}
+
+impl Into<Cow<'static, str>> for AnalysisKind {
+    fn into(self) -> Cow<'static, str> {
+        match &self {
+            AnalysisKind::UnsafeDestructor => "UnsafeDestructor",
+            AnalysisKind::SendSyncVariance(svkind) => {
+                use SendSyncAnalysisKind::*;
+                "SendSyncVariance"
+            },
+            AnalysisKind::UnsafeDataflow(udkind) => {
+                use UDBypassKind::*;
+                match udkind {
+                    ReadFlow => "UnsafeDataflow/ReadFlow",
+                    CopyFlow => "UnsafeDataflow/CopyFlow",
+                    VecFromRaw => "UnsafeDataflow/VecFromRaw",
+                    Transmute => "UnsafeDataflow/Transmute",
+                    WriteFlow => "UnsafeDataflow/WriteFlow",
+                    PtrAsRef => "UnsafeDataflow/PtrAsRef",
+                    SliceUnchecked => "UnsafeDataflow/SliceUnchecked",
+                    SliceFromRaw => "UnsafeDataflow/SliceFromRaw",
+                }
+            },
+        }
+        .into()
+    }
 }

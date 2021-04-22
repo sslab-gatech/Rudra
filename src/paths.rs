@@ -1,8 +1,11 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use rustc_span::Symbol;
 
+use maplit::hashmap;
 use once_cell::sync::Lazy;
+
+use crate::analysis::UDBypassKind;
 
 /*
 How to find a path for unknown item:
@@ -109,3 +112,44 @@ pub static WEAK_LIFETIME_BYPASS_LIST: Lazy<PathSet> = Lazy::new(move || {
 
 pub static GENERIC_FN_LIST: Lazy<PathSet> =
     Lazy::new(move || PathSet::new(&[&PTR_DROP_IN_PLACE, &PTR_DIRECT_DROP_IN_PLACE]));
+
+type PathMap = HashMap<Vec<Symbol>, UDBypassKind>;
+
+pub static STRONG_BYPASS_MAP: Lazy<PathMap> = Lazy::new(move || {
+    use crate::analysis::UDBypassKind::*;
+
+    hashmap! {
+        PTR_READ.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => ReadFlow,
+        PTR_DIRECT_READ.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => ReadFlow,
+        //
+        INTRINSICS_COPY.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => CopyFlow,
+        INTRINSICS_COPY_NONOVERLAPPING.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => CopyFlow,
+        //
+        VEC_SET_LEN.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => VecFromRaw,
+        VEC_FROM_RAW_PARTS.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => VecFromRaw,
+    }
+});
+
+pub static WEAK_BYPASS_MAP: Lazy<PathMap> = Lazy::new(move || {
+    use crate::analysis::UDBypassKind::*;
+
+    hashmap! {
+        TRANSMUTE.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => Transmute,
+        //
+        PTR_WRITE.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => WriteFlow,
+        PTR_DIRECT_WRITE.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => WriteFlow,
+        //
+        PTR_AS_REF.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => PtrAsRef,
+        PTR_AS_MUT.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => PtrAsRef,
+        NON_NULL_AS_REF.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => PtrAsRef,
+        NON_NULL_AS_MUT.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => PtrAsRef,
+        //
+        SLICE_GET_UNCHECKED.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => SliceUnchecked,
+        SLICE_GET_UNCHECKED_MUT.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => SliceUnchecked,
+        //
+        PTR_SLICE_FROM_RAW_PARTS.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => SliceFromRaw,
+        PTR_SLICE_FROM_RAW_PARTS_MUT.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => SliceFromRaw,
+        SLICE_FROM_RAW_PARTS.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => SliceFromRaw,
+        SLICE_FROM_RAW_PARTS_MUT.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => SliceFromRaw,
+    }
+});

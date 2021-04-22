@@ -34,7 +34,6 @@ pub struct RudraCtxtOwner<'tcx> {
     tcx: TyCtxt<'tcx>,
     translation_cache: DashMap<DefId, Rc<TranslationResult<'tcx, ir::Body<'tcx>>>>,
     related_item_cache: RelatedItemMap,
-    // ADT symbol => list of associated impl blocks
     adt_impl_cache: AdtImplMap<'tcx>,
 }
 

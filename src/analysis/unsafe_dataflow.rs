@@ -1,13 +1,18 @@
 use rustc_hir::{def_id::DefId, BodyId};
 use rustc_middle::ty::{Instance, ParamEnv};
-use rustc_span::Span;
+use rustc_span::{Span, Symbol};
 
+use once_cell::sync::Lazy;
 use snafu::{Backtrace, Snafu};
 use termcolor::Color;
 
+use std::collections::HashMap;
+
 use crate::prelude::*;
 use crate::{
-    graph, ir, paths,
+    analysis::{AnalysisKind, UDBypassKind},
+    graph, ir,
+    paths::{self, *},
     report::{Report, ReportLevel},
     utils,
     visitor::ContainsUnsafe,
@@ -48,7 +53,7 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
         for (_ty_hir_id, (body_id, related_item_span)) in self.rcx.types_with_related_items() {
             if let Some(status) = inner::UnsafeDataflowBodyAnalyzer::analyze_body(self.rcx, body_id)
             {
-                if status.is_unsafe() {
+                if let Some(udkind) = status.is_unsafe() {
                     let mut color_span = unwrap_or!(
                         utils::ColorSpan::new(tcx, related_item_span).context(InvalidSpan) => continue
                     );
@@ -74,7 +79,7 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
                     rudra_report(Report::with_color_span(
                         tcx,
                         level,
-                        "UnsafeDataflow",
+                        AnalysisKind::UnsafeDataflow(udkind),
                         format!(
                             "Potential unsafe dataflow issue in `{}`",
                             tcx.def_path_str(hir_map.body_owner_def_id(body_id).to_def_id())
@@ -95,12 +100,20 @@ mod inner {
         strong_bypasses: Vec<Span>,
         weak_bypasses: Vec<Span>,
         unresolvable_generic_functions: Vec<Span>,
-        is_unsafe: bool,
+        is_unsafe: Vec<UDBypassKind>,
     }
 
     impl UnsafeDataflowStatus {
-        pub fn is_unsafe(&self) -> bool {
-            self.is_unsafe
+        pub fn is_unsafe(&self) -> Option<UDBypassKind> {
+            if self.is_unsafe.is_empty() {
+                None
+            } else {
+                // Possible improvement:
+                //   Handle multiple srcs (multiple `UDBypassKind`s),
+                //   which would be to output multiple reports
+                //   (one per reachable path from different src)
+                Some(self.is_unsafe[0])
+            }
         }
 
         pub fn strong_bypass_spans(&self) -> &Vec<Span> {
@@ -179,12 +192,13 @@ mod inner {
                         // Check for lifetime bypass
                         let symbol_vec = ext.get_def_path(callee_did);
                         if paths::STRONG_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
-                            reachability.mark_source(id);
+                            reachability
+                                .mark_source(id, *STRONG_BYPASS_MAP.get(&symbol_vec).unwrap());
                             self.status
                                 .strong_bypasses
                                 .push(terminator.original.source_info.span);
                         } else if paths::WEAK_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
-                            reachability.mark_source(id);
+                            reachability.mark_source(id, *WEAK_BYPASS_MAP.get(&symbol_vec).unwrap());
                             self.status
                                 .weak_bypasses
                                 .push(terminator.original.source_info.span);

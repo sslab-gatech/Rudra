@@ -6,6 +6,7 @@ use rustc_middle::ty::TyCtxt;
 
 use snafu::{Backtrace, OptionExt, Snafu};
 
+use crate::analysis::AnalysisKind;
 use crate::iter::LocalTraitIter;
 use crate::prelude::*;
 use crate::report::{Report, ReportLevel};
@@ -57,7 +58,7 @@ impl<'tcx> UnsafeDestructorChecker<'tcx> {
                 rudra_report(Report::with_hir_id(
                     tcx,
                     ReportLevel::Warning,
-                    "UnsafeDestructor",
+                    AnalysisKind::UnsafeDestructor,
                     "unsafe block detected in drop",
                     impl_item,
                 ));
