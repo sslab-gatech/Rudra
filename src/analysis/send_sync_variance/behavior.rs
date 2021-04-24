@@ -90,7 +90,7 @@ impl AdtBehavior {
     pub fn is_deref(&self) -> bool {
         self.intersects(AdtBehavior::DEREF)
     }
-    pub fn is_undefined(&self) -> bool {
+    pub fn _is_undefined(&self) -> bool {
         !self.intersects(AdtBehavior::DEREF) && !self.intersects(AdtBehavior::PASS_OWNED)
     }
 }

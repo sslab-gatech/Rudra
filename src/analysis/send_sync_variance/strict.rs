@@ -10,20 +10,14 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
         impl_hir_id: HirId,
         send_trait_def_id: DefId,
         sync_trait_def_id: DefId,
-        _copy_trait_def_id: DefId,
-    ) -> Option<DefId> {
+        copy_trait_def_id: DefId,
+    ) -> Option<(DefId, SendSyncAnalysisKind)> {
         let rcx = self.rcx;
         let tcx = rcx.tcx();
         if let Some(trait_ref) = tcx.impl_trait_ref(impl_hir_id.owner) {
             if let ty::TyKind::Adt(adt_def, impl_trait_substs) = trait_ref.self_ty().kind {
                 let adt_did = adt_def.did;
                 let adt_ty = tcx.type_of(adt_did);
-
-                // Keep track of generic params that need to be `Sync`.
-                let mut need_sync: FxHashSet<PostMapIdx> = FxHashSet::default();
-
-                // Keep track of generic params that need to be `Send`.
-                let mut need_send: FxHashSet<PostMapIdx> = FxHashSet::default();
 
                 let mut need_send_sync: FxHashMap<PostMapIdx, SendSyncAnalysisKind> = FxHashMap::default();
 
@@ -109,19 +103,35 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                             if let Some(mapped_idx) = generic_param_idx_map.get(&pre_map_idx) {
                                 let trait_did = trait_predicate.def_id();
                                 if trait_did == sync_trait_def_id {
-                                    need_sync.remove(mapped_idx);
-                                } else if trait_did == send_trait_def_id {
-                                    need_send.remove(mapped_idx);
+                                    if let Some(analyses) = need_send_sync.get_mut(&mapped_idx) {
+                                        analyses.remove(SendSyncAnalysisKind::API_SYNC_FOR_SYNC);
+                                        analyses.remove(SendSyncAnalysisKind::NAIVE_SYNC_FOR_SYNC);
+                                    }
+                                    for analyses in need_send_sync.values_mut() {
+                                        analyses.remove(SendSyncAnalysisKind::RELAX_SYNC);
+                                    }
+                                } else if (trait_did == send_trait_def_id) || (trait_did == copy_trait_def_id) {
+                                    if let Some(analyses) = need_send_sync.get_mut(&mapped_idx) {
+                                        analyses.remove(SendSyncAnalysisKind::API_SEND_FOR_SYNC);
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                return if need_sync.is_empty() && need_send.is_empty() {
+                return if need_send_sync.is_empty() {
                     None
                 } else {
-                    Some(adt_def.did)
+                    let mut detected = SendSyncAnalysisKind::empty();
+                    for &analyses in need_send_sync.values() {
+                        detected.insert(analyses);
+                    }
+                    if detected.is_empty() {
+                        None
+                    } else {
+                        Some((adt_did, detected))
+                    }
                 };
             }
         }
@@ -136,7 +146,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
         send_trait_def_id: DefId,
         sync_trait_def_id: DefId,
         copy_trait_def_id: DefId,
-    ) -> Option<DefId> {
+    ) -> Option<(DefId, SendSyncAnalysisKind)> {
         let tcx = self.rcx.tcx();
         if let Some(trait_ref) = tcx.impl_trait_ref(impl_hir_id.owner) {
             if let ty::TyKind::Adt(adt_def, impl_trait_substs) = trait_ref.self_ty().kind {
@@ -146,7 +156,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 // Keep track of generic params that need to be `Send`.
                 // let mut need_send: FxHashSet<PostMapIdx> = FxHashSet::default();
 
-                let mut need_send: FxHashMap<PostMapIdx, SendSyncAnalysisKind> = FxHashMap::default();
+                let mut need_send_sync: FxHashMap<PostMapIdx, SendSyncAnalysisKind> = FxHashMap::default();
 
                 // Generic params that only occur within `PhantomData<_>`
                 let phantom_params = self
@@ -162,19 +172,21 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 // Initialize set `need_send`
                 for gen_param in tcx.generics_of(adt_did).params.iter() {
                     if let GenericParamDefKind::Type { .. } = gen_param.kind {
+                        let post_map_idx = PostMapIdx(gen_param.index);
+                        let mut analyses = SendSyncAnalysisKind::NAIVE_SEND_FOR_SEND;
+
                         // Skip generic parameters that are only within `PhantomData<T>`.
                         if phantom_params.contains(&gen_param.index) {
-                            need_send.insert(
-                                PostMapIdx(gen_param.index),
-                                SendSyncAnalysisKind::NAIVE_SEND_FOR_SEND,
+                            need_send_sync.insert(
+                                post_map_idx,
+                                analyses,
                             );
                             continue;
                         }
-
-                        let mut requirements = SendSyncAnalysisKind::NAIVE_SEND_FOR_SEND;
-                        requirements.insert(SendSyncAnalysisKind::PHANTOM_SEND_FOR_SEND);
-                        requirements.insert(SendSyncAnalysisKind::RELAX_SEND);
-                        need_send.insert(PostMapIdx(gen_param.index), requirements);
+             
+                        analyses.insert(SendSyncAnalysisKind::PHANTOM_SEND_FOR_SEND);
+                        analyses.insert(SendSyncAnalysisKind::RELAX_SEND);
+                        need_send_sync.insert(post_map_idx, analyses);
                     }
                 }
 
@@ -210,17 +222,28 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                                     || trait_did == sync_trait_def_id
                                     || trait_did == copy_trait_def_id
                                 {
-                                    need_send.remove(&mapped_idx);
+                                    need_send_sync.remove(&mapped_idx);
+                                    for analyses in need_send_sync.values_mut() {
+                                        analyses.remove(SendSyncAnalysisKind::RELAX_SEND);
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                return if need_send.is_empty() {
+                return if need_send_sync.is_empty() {
                     None
                 } else {
-                    Some(adt_did)
+                    let mut detected = SendSyncAnalysisKind::empty();
+                    for &analyses in need_send_sync.values() {
+                        detected.insert(analyses);
+                    }
+                    if detected.is_empty() {
+                        None
+                    } else {
+                        Some((adt_did, detected))
+                    }
                 };
             }
         }

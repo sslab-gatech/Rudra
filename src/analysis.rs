@@ -76,7 +76,7 @@ bitflags! {
         const PHANTOM_SEND_FOR_SEND = 0b00000010;
         // T: Send for impl Send (no api check, no phantom check)
         const NAIVE_SEND_FOR_SEND = 0b00001000;
-        // T: Send for impl Send (no api check, no phantom check)
+        // T: Sync for impl Sync (no api check, no phantom check)
         const NAIVE_SYNC_FOR_SYNC = 0b00010000;
         // Relaxed Send for impl Send (with phantom check)
         const RELAX_SEND = 0b00100000;
@@ -105,9 +105,29 @@ impl Into<Cow<'static, str>> for AnalysisKind {
     fn into(self) -> Cow<'static, str> {
         match &self {
             AnalysisKind::UnsafeDestructor => "UnsafeDestructor".into(),
-            AnalysisKind::SendSyncVariance(svkind) => {
+            AnalysisKind::SendSyncVariance(sv_analyses) => {
                 let mut v = vec!["SendSyncVariance:"];
-                
+                if sv_analyses.contains(SendSyncAnalysisKind::API_SEND_FOR_SYNC) {
+                    v.push("ApiSendForSync")
+                }
+                if sv_analyses.contains(SendSyncAnalysisKind::API_SYNC_FOR_SYNC) {
+                    v.push("ApiSyncforSync")
+                }
+                if sv_analyses.contains(SendSyncAnalysisKind::PHANTOM_SEND_FOR_SEND) {
+                    v.push("PhantomSendForSend")
+                }
+                if sv_analyses.contains(SendSyncAnalysisKind::NAIVE_SEND_FOR_SEND) {
+                    v.push("NaiveSendForSend")
+                }
+                if sv_analyses.contains(SendSyncAnalysisKind::NAIVE_SYNC_FOR_SYNC) {
+                    v.push("NaiveSyncForSync")
+                }
+                if sv_analyses.contains(SendSyncAnalysisKind::RELAX_SEND) {
+                    v.push("RelaxSend")
+                }
+                if sv_analyses.contains(SendSyncAnalysisKind::RELAX_SYNC) {
+                    v.push("RelaxSync")
+                }
                 v.join("/").into()
             },
             AnalysisKind::UnsafeDataflow(bypass_kinds) => {

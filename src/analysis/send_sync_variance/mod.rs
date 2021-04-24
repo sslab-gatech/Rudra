@@ -22,7 +22,7 @@ use rustc_span::symbol::sym;
 
 use snafu::{OptionExt, Snafu};
 
-use crate::analysis::SendSyncAnalysisKind;
+use crate::analysis::{AnalysisKind, SendSyncAnalysisKind};
 use crate::prelude::*;
 use crate::report::{Report, ReportLevel};
 
@@ -78,7 +78,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
     ) {
         // Iterate over `impl`s that implement `Send`.
         for &impl_hir_id in self.rcx.tcx().hir().trait_impls(send_trait_did) {
-            if let Some(adt_def_id) =
+            if let Some((adt_def_id, send_sync_analyses)) =
                 self.suspicious_send(impl_hir_id, send_trait_did, sync_trait_did, copy_trait_did)
             {
                 let tcx = self.rcx.tcx();
@@ -88,7 +88,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                     .push(Report::with_hir_id(
                         tcx,
                         ReportLevel::Warning,
-                        "SendSyncVariance",
+                        AnalysisKind::SendSyncVariance(send_sync_analyses),
                         "Suspicious impl of `Send` found",
                         impl_hir_id,
                     ));
@@ -106,7 +106,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
     ) {
         // Iterate over `impl`s that implement `Sync`.
         for &impl_hir_id in self.rcx.tcx().hir().trait_impls(sync_trait_did) {
-            if let Some(struct_def_id) =
+            if let Some((struct_def_id, send_sync_analyses)) =
                 self.suspicious_sync(impl_hir_id, send_trait_did, sync_trait_did, copy_trait_did)
             {
                 let tcx = self.rcx.tcx();
@@ -116,7 +116,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                     .push(Report::with_hir_id(
                         tcx,
                         ReportLevel::Warning,
-                        "SendSyncVariance",
+                        AnalysisKind::SendSyncVariance(send_sync_analyses),
                         "Suspicious impl of `Sync` found",
                         impl_hir_id,
                     ));
