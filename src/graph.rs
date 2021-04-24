@@ -1,6 +1,6 @@
 use std::{cmp::min, collections::VecDeque};
 
-use crate::analysis::UDBypassKind;
+use crate::analysis::State;
 use crate::ir;
 
 pub trait Graph {
@@ -26,7 +26,7 @@ impl<'tcx> Graph for ir::Body<'tcx> {
 pub struct Reachability<'a, G: Graph> {
     graph: &'a G,
     len: usize,
-    sources: Vec<Option<UDBypassKind>>,
+    sources: Vec<State>,
     sinks: Vec<bool>,
 }
 
@@ -36,7 +36,7 @@ impl<'a, G: Graph> Reachability<'a, G> {
         Reachability {
             graph,
             len: graph_len,
-            sources: vec![None; graph_len],
+            sources: vec![State::empty(); graph_len],
             sinks: vec![false; graph_len],
         }
     }
@@ -45,12 +45,12 @@ impl<'a, G: Graph> Reachability<'a, G> {
         &self.graph
     }
 
-    pub fn mark_source(&mut self, id: usize, udkind: UDBypassKind) {
-        self.sources[id] = Some(udkind);
+    pub fn mark_source(&mut self, id: usize, bypass_kind: State) {
+        self.sources[id].insert(bypass_kind);
     }
 
     pub fn unmark_source(&mut self, id: usize) {
-        self.sources[id] = None;
+        self.sources[id] = State::empty();
     }
 
     pub fn mark_sink(&mut self, id: usize) {
@@ -63,41 +63,42 @@ impl<'a, G: Graph> Reachability<'a, G> {
 
     // Unmark all sources and sinks
     pub fn clear(&mut self) {
-        self.sources = vec![None; self.len];
+        self.sources = vec![State::empty(); self.len];
         self.sinks = vec![false; self.len];
     }
 
     // Checks reachability between `self.sources` & `self.sinks`.
-    // Returns a Vec of `UDBypassKind`s (of `self.sources`) that can reach `self.sinks`.
-    // Returns an empty Vec if there are no reachable path.
-    pub fn is_reachable(&self) -> Vec<UDBypassKind> {
-        let mut visited = vec![Vec::new(); self.len];
+    pub fn find_reachability(&self) -> State {
+        let mut visited = vec![State::empty(); self.len];
         let mut work_list = VecDeque::new();
 
         // Initialize work list
         for id in 0..self.len {
-            if let Some(udkind) = self.sources[id] {
-                visited[id].push(udkind);
-                work_list.push_back((id, udkind));
+            if !self.sources[id].is_empty() {
+                visited[id].insert(self.sources[id]);
+                work_list.push_back((id, self.sources[id]));
             }
         }
 
         // Breadth-first propagation
-        while let Some((current, udkind)) = work_list.pop_front() {
+        while let Some((current, bypass_kind)) = work_list.pop_front() {
             for next in self.graph.next(current) {
-                visited[next].push(udkind);
-                work_list.push_back((next, udkind));
+                // If-condition below is to prevent getting stuck in loops
+                if !visited[next].contains(bypass_kind) {
+                    visited[next].insert(bypass_kind);
+                    work_list.push_back((next, bypass_kind));
+                }
             }
         }
 
         // Check the result
         for id in 0..self.len {
             if self.sinks[id] && !visited[id].is_empty() {
-                return visited.swap_remove(id);
+                return visited[id];
             }
         }
 
-        return Vec::new();
+        return State::empty();
     }
 }
 

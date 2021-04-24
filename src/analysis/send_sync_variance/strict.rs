@@ -25,6 +25,8 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 // Keep track of generic params that need to be `Send`.
                 let mut need_send: FxHashSet<PostMapIdx> = FxHashSet::default();
 
+                let mut need_send_sync: FxHashMap<PostMapIdx, SendSyncAnalysisKind> = FxHashMap::default();
+
                 // Generic params that only occur within `PhantomData<_>`
                 let phantom_params = self
                     .phantom_map
@@ -41,38 +43,50 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 if adt_def.is_struct() {
                     for gen_param in tcx.generics_of(adt_did).params.iter() {
                         if let GenericParamDefKind::Type { .. } = gen_param.kind {
+                            let post_map_idx = PostMapIdx(gen_param.index);
+                            let mut analyses = SendSyncAnalysisKind::NAIVE_SYNC_FOR_SYNC;
+
                             // Skip generic parameters that are only within `PhantomData<T>`.
                             if phantom_params.contains(&gen_param.index) {
+                                need_send_sync.insert(post_map_idx, analyses);
                                 continue;
                             }
 
-                            // Check if the current ADT acts as a `ConcurrentQueue` type for the generic parameter.
-                            let post_map_idx = PostMapIdx(gen_param.index);
+                            analyses.insert(SendSyncAnalysisKind::RELAX_SYNC);
                             if let Some(behavior) = adt_behavior.get(&post_map_idx) {
-                                match behavior {
-                                    AdtBehavior::ConcurrentQueue => {
-                                        need_send.insert(PostMapIdx(gen_param.index));
-                                    }
-                                    AdtBehavior::Standard => {
-                                        need_sync.insert(PostMapIdx(gen_param.index));
-                                    }
-                                    AdtBehavior::Undefined => {}
+                                if behavior.is_concurrent_queue() {
+                                    analyses.insert(SendSyncAnalysisKind::API_SEND_FOR_SYNC);
+                                }
+                                if behavior.is_deref() {
+                                    analyses.insert(SendSyncAnalysisKind::API_SYNC_FOR_SYNC);
                                 }
                             }
+                            
+                            need_send_sync.insert(post_map_idx, analyses);
                         }
                     }
                 } else {
                     // Fields of enums/unions can be accessed by pattern matching.
-                    // In this case, we don't make distinction of treatment according to `AdtBehavior`.
-                    // We require all generic parameters to be `Sync`.
+                    // In this case, we require all generic parameters to be `Sync`.
                     for gen_param in tcx.generics_of(adt_did).params.iter() {
                         if let GenericParamDefKind::Type { .. } = gen_param.kind {
+                            let post_map_idx = PostMapIdx(gen_param.index);
+                            let mut analyses = SendSyncAnalysisKind::NAIVE_SYNC_FOR_SYNC;
+
                             // Skip generic parameters that are only within `PhantomData<T>`.
                             if phantom_params.contains(&gen_param.index) {
+                                need_send_sync.insert(post_map_idx, analyses);
                                 continue;
                             }
 
-                            need_sync.insert(PostMapIdx(gen_param.index));
+                            analyses.insert(SendSyncAnalysisKind::RELAX_SYNC);
+                            analyses.insert(SendSyncAnalysisKind::API_SYNC_FOR_SYNC);
+                            if let Some(behavior) = adt_behavior.get(&post_map_idx) {
+                                if behavior.is_concurrent_queue() {
+                                    analyses.insert(SendSyncAnalysisKind::API_SEND_FOR_SYNC);
+                                }
+                            }
+                            need_send_sync.insert(post_map_idx, analyses);
                         }
                     }
                 }
@@ -130,7 +144,9 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 let adt_ty = tcx.type_of(adt_did);
 
                 // Keep track of generic params that need to be `Send`.
-                let mut need_send: FxHashSet<PostMapIdx> = FxHashSet::default();
+                // let mut need_send: FxHashSet<PostMapIdx> = FxHashSet::default();
+
+                let mut need_send: FxHashMap<PostMapIdx, SendSyncAnalysisKind> = FxHashMap::default();
 
                 // Generic params that only occur within `PhantomData<_>`
                 let phantom_params = self
@@ -148,10 +164,17 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                     if let GenericParamDefKind::Type { .. } = gen_param.kind {
                         // Skip generic parameters that are only within `PhantomData<T>`.
                         if phantom_params.contains(&gen_param.index) {
+                            need_send.insert(
+                                PostMapIdx(gen_param.index),
+                                SendSyncAnalysisKind::NAIVE_SEND_FOR_SEND,
+                            );
                             continue;
                         }
 
-                        need_send.insert(PostMapIdx(gen_param.index));
+                        let mut requirements = SendSyncAnalysisKind::NAIVE_SEND_FOR_SEND;
+                        requirements.insert(SendSyncAnalysisKind::PHANTOM_SEND_FOR_SEND);
+                        requirements.insert(SendSyncAnalysisKind::RELAX_SEND);
+                        need_send.insert(PostMapIdx(gen_param.index), requirements);
                     }
                 }
 

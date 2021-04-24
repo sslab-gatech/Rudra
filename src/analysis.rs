@@ -62,60 +62,82 @@ pub enum AnalysisErrorKind {
 pub enum AnalysisKind {
     UnsafeDestructor,
     SendSyncVariance(SendSyncAnalysisKind),
-    UnsafeDataflow(UDBypassKind),
+    UnsafeDataflow(State),
 }
 
-// TODO: Haven't decided on properly dividing up this category
-#[derive(Debug, Copy, Clone)]
-pub enum SendSyncAnalysisKind {
-    // T: Send for Sync
-    ConcurrentQueueSend,
-    // T: Send for Send
-    SendForSend,
-    // T: Sync for Sync
-    SyncForSync,
-    // T: Send + Sync for Sync
-    BothForSync
+bitflags! {
+    #[derive(Default)]
+    pub struct SendSyncAnalysisKind: u8 {
+        // T: Send for impl Sync (with api check & phantom check)
+        const API_SEND_FOR_SYNC = 0b00000001;
+        // T: Sync for impl Sync (with api check & phantom check)
+        const API_SYNC_FOR_SYNC = 0b00000100;
+        // T: Send for impl Send (with phantom check)
+        const PHANTOM_SEND_FOR_SEND = 0b00000010;
+        // T: Send for impl Send (no api check, no phantom check)
+        const NAIVE_SEND_FOR_SEND = 0b00001000;
+        // T: Send for impl Send (no api check, no phantom check)
+        const NAIVE_SYNC_FOR_SYNC = 0b00010000;
+        // Relaxed Send for impl Send (with phantom check)
+        const RELAX_SEND = 0b00100000;
+        // Relaxed Sync for impl Sync (with phantom check)
+        const RELAX_SYNC = 0b01000000;
+    }
 }
 
 // Unsafe Dataflow BypassKind.
 // Used to associate each Unsafe-Dataflow bug report with its cause.
-#[derive(Debug, Copy, Clone)]
-pub enum UDBypassKind {
-    // Strong bypass
-    ReadFlow,
-    CopyFlow,
-    VecFromRaw,
-    // Weak bypass
-    Transmute,
-    WriteFlow,
-    PtrAsRef,
-    SliceUnchecked,
-    SliceFromRaw,
+bitflags! {
+    #[derive(Default)]
+    pub struct State: u8 {
+        const READ_FLOW = 0b00000001;
+        const COPY_FLOW = 0b00000010;
+        const VEC_FROM_RAW = 0b00000100;
+        const TRANSMUTE = 0b00001000;
+        const WRITE_FLOW = 0b00010000;
+        const PTR_AS_REF = 0b00100000;
+        const SLICE_UNCHECKED = 0b01000000;
+        const SLICE_FROM_RAW = 0b10000000;
+    }
 }
 
 impl Into<Cow<'static, str>> for AnalysisKind {
     fn into(self) -> Cow<'static, str> {
         match &self {
-            AnalysisKind::UnsafeDestructor => "UnsafeDestructor",
+            AnalysisKind::UnsafeDestructor => "UnsafeDestructor".into(),
             AnalysisKind::SendSyncVariance(svkind) => {
-                use SendSyncAnalysisKind::*;
-                "SendSyncVariance"
+                let mut v = vec!["SendSyncVariance:"];
+                
+                v.join("/").into()
             },
-            AnalysisKind::UnsafeDataflow(udkind) => {
-                use UDBypassKind::*;
-                match udkind {
-                    ReadFlow => "UnsafeDataflow/ReadFlow",
-                    CopyFlow => "UnsafeDataflow/CopyFlow",
-                    VecFromRaw => "UnsafeDataflow/VecFromRaw",
-                    Transmute => "UnsafeDataflow/Transmute",
-                    WriteFlow => "UnsafeDataflow/WriteFlow",
-                    PtrAsRef => "UnsafeDataflow/PtrAsRef",
-                    SliceUnchecked => "UnsafeDataflow/SliceUnchecked",
-                    SliceFromRaw => "UnsafeDataflow/SliceFromRaw",
+            AnalysisKind::UnsafeDataflow(bypass_kinds) => {
+                let mut v = vec!["UnsafeDataflow:"];
+                if bypass_kinds.contains(State::READ_FLOW) {
+                    v.push("ReadFlow")
                 }
+                if bypass_kinds.contains(State::COPY_FLOW) {
+                    v.push("CopyFlow")
+                }
+                if bypass_kinds.contains(State::VEC_FROM_RAW) {
+                    v.push("VecFromRaw")
+                }
+                if bypass_kinds.contains(State::TRANSMUTE) {
+                    v.push("Transmute")
+                }
+                if bypass_kinds.contains(State::WRITE_FLOW) {
+                    v.push("WriteFlow")
+                }
+                if bypass_kinds.contains(State::PTR_AS_REF) {
+                    v.push("PtrAsRef")
+                }
+                if bypass_kinds.contains(State::SLICE_UNCHECKED) {
+                    v.push("SliceUnchecked")
+                }
+                if bypass_kinds.contains(State::SLICE_FROM_RAW) {
+                    v.push("SliceFromRaw")
+                }
+                v.join("/").into()
             },
         }
-        .into()
     }
 }

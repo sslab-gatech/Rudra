@@ -2,8 +2,7 @@
 
 use super::*;
 
-// For each generic parameter of an ADT, ADT shows one of the behaviors below.
-// Use this info to strengthen/relax safety bar of trait bounds on generic params.
+/*
 #[derive(Debug)]
 pub(crate) enum AdtBehavior {
     // Acts like a shared pointer (e.g. Arc, Rc, Beef).
@@ -38,9 +37,11 @@ pub(crate) enum AdtBehavior {
     // in analyzing this category.
     Undefined,
 }
+*/
 
 bitflags! {
-    struct Cond: u8 {
+    // For each generic parameter of an ADT, ADT shows one or more of the behaviors below.
+    pub struct AdtBehavior: u8 {
         /* TODO: Implement fine-grained handling for ptr-like types.
         // At least one API of ADT takes `&self` within input and `&T` within output.
         const REF_REF = 0b00000001;
@@ -77,17 +78,20 @@ bitflags! {
     }
 }
 
-impl Cond {
+impl AdtBehavior {
     /* TODO: Implement fine-grained handling for ptr-like types.
     fn ptr_like(&self) -> bool {
         self.intersects(Cond::REF_REF & !Cond::CLONED)
     }
     */
-    fn is_concurrent_queue(&self) -> bool {
-        self.intersects(Cond::NO_DEREF) && self.intersects(Cond::PASS_OWNED)
+    pub fn is_concurrent_queue(&self) -> bool {
+        !self.intersects(AdtBehavior::DEREF) && self.intersects(AdtBehavior::PASS_OWNED)
     }
-    fn is_undefined(&self) -> bool {
-        self.intersects(Cond::NO_DEREF) && !self.intersects(Cond::PASS_OWNED)
+    pub fn is_deref(&self) -> bool {
+        self.intersects(AdtBehavior::DEREF)
+    }
+    pub fn is_undefined(&self) -> bool {
+        !self.intersects(AdtBehavior::DEREF) && !self.intersects(AdtBehavior::PASS_OWNED)
     }
 }
 
@@ -255,41 +259,25 @@ pub(crate) fn adt_behavior<'tcx>(
         })
         .collect();
 
-    // cond_map: (idx of generic parameter `T`) => (`Cond`)
-    let mut cond_map = FxHashMap::default();
+    // behavior_map: (idx of generic parameter `T`) => (`AdtBehavior`)
+    let mut behavior_map = FxHashMap::default();
+
+    for &param_idx in all_generic_params.iter() {
+        behavior_map.insert(param_idx, AdtBehavior::empty());
+    }
 
     for &param_idx in deref_generic_params.iter() {
-        cond_map
+        behavior_map
             .entry(param_idx)
-            .or_insert(Cond::empty())
-            .insert(Cond::DEREF);
-    }
-    for &param_idx in all_generic_params.difference(&deref_generic_params) {
-        cond_map
-            .entry(param_idx)
-            .or_insert(Cond::empty())
-            .insert(Cond::NO_DEREF);
+            .or_insert(AdtBehavior::empty())
+            .insert(AdtBehavior::DEREF);
     }
     for &param_idx in owned_generic_params.difference(&deref_generic_params) {
-        cond_map
+        behavior_map
             .entry(param_idx)
-            .or_insert(Cond::empty())
-            .insert(Cond::PASS_OWNED);
+            .or_insert(AdtBehavior::empty())
+            .insert(AdtBehavior::PASS_OWNED);
     }
 
-    // Map: (idx of generic parameter) => (AdtBehavior)
-    let mut behavior_map = FxHashMap::default();
-    for (param_idx, cond) in cond_map.into_iter() {
-        behavior_map.insert(
-            param_idx,
-            if cond.is_concurrent_queue() {
-                AdtBehavior::ConcurrentQueue
-            } else if cond.is_undefined() {
-                AdtBehavior::Undefined
-            } else {
-                AdtBehavior::Standard
-            },
-        );
-    }
     return behavior_map;
 }

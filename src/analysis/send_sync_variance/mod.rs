@@ -22,6 +22,7 @@ use rustc_span::symbol::sym;
 
 use snafu::{OptionExt, Snafu};
 
+use crate::analysis::SendSyncAnalysisKind;
 use crate::prelude::*;
 use crate::report::{Report, ReportLevel};
 
