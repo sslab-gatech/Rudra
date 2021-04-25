@@ -94,7 +94,7 @@ pub fn borrowed_generic_params_in_ty<'tcx>(
         if visited.contains(&ty) {
             continue;
         }
-        
+
         visited.insert(ty);
         match ty.kind {
             ty::TyKind::Param(param_ty) => {
@@ -178,9 +178,11 @@ pub fn find_pseudo_owned_in_fn_ctxt<'tcx>(
                 //                     |    |
                 //             (param_ty)  (trait_predicate.trait_ref)
                 if PSEUDO_OWNED.contains(&tcx.def_path_str(trait_predicate.def_id()).as_str()) {
-                    if let ty::TyKind::Param(param_1) = substs_types[1].kind {
-                        fn_ctxt_pseudo_owned_param_idx_map
-                            .insert(PreMapIdx(param_ty.index), PreMapIdx(param_1.index));
+                    if substs_types.len() > 1 {
+                        if let ty::TyKind::Param(param_1) = substs_types[1].kind {
+                            fn_ctxt_pseudo_owned_param_idx_map
+                                .insert(PreMapIdx(param_ty.index), PreMapIdx(param_1.index));
+                        }
                     }
                 }
             }
