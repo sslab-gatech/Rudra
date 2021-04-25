@@ -188,7 +188,8 @@ mod inner {
                                 .strong_bypasses
                                 .push(terminator.original.source_info.span);
                         } else if paths::WEAK_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
-                            reachability.mark_source(id, *WEAK_BYPASS_MAP.get(&symbol_vec).unwrap());
+                            reachability
+                                .mark_source(id, *WEAK_BYPASS_MAP.get(&symbol_vec).unwrap());
                             self.status
                                 .weak_bypasses
                                 .push(terminator.original.source_info.span);

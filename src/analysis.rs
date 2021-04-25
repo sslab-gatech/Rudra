@@ -129,7 +129,7 @@ impl Into<Cow<'static, str>> for AnalysisKind {
                     v.push("RelaxSync")
                 }
                 v.join("/").into()
-            },
+            }
             AnalysisKind::UnsafeDataflow(bypass_kinds) => {
                 let mut v = vec!["UnsafeDataflow:"];
                 if bypass_kinds.contains(State::READ_FLOW) {
@@ -157,7 +157,7 @@ impl Into<Cow<'static, str>> for AnalysisKind {
                     v.push("SliceFromRaw")
                 }
                 v.join("/").into()
-            },
+            }
         }
     }
 }

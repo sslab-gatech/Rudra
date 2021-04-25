@@ -19,7 +19,8 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 let adt_did = adt_def.did;
                 let adt_ty = tcx.type_of(adt_did);
 
-                let mut need_send_sync: FxHashMap<PostMapIdx, SendSyncAnalysisKind> = FxHashMap::default();
+                let mut need_send_sync: FxHashMap<PostMapIdx, SendSyncAnalysisKind> =
+                    FxHashMap::default();
 
                 // Generic params that only occur within `PhantomData<_>`
                 let phantom_params = self
@@ -55,7 +56,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                                     analyses.insert(SendSyncAnalysisKind::API_SYNC_FOR_SYNC);
                                 }
                             }
-                            
+
                             need_send_sync.insert(post_map_idx, analyses);
                         }
                     }
@@ -110,7 +111,9 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                                     for analyses in need_send_sync.values_mut() {
                                         analyses.remove(SendSyncAnalysisKind::RELAX_SYNC);
                                     }
-                                } else if (trait_did == send_trait_def_id) || (trait_did == copy_trait_def_id) {
+                                } else if (trait_did == send_trait_def_id)
+                                    || (trait_did == copy_trait_def_id)
+                                {
                                     if let Some(analyses) = need_send_sync.get_mut(&mapped_idx) {
                                         analyses.remove(SendSyncAnalysisKind::API_SEND_FOR_SYNC);
                                     }
@@ -156,7 +159,8 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 // Keep track of generic params that need to be `Send`.
                 // let mut need_send: FxHashSet<PostMapIdx> = FxHashSet::default();
 
-                let mut need_send_sync: FxHashMap<PostMapIdx, SendSyncAnalysisKind> = FxHashMap::default();
+                let mut need_send_sync: FxHashMap<PostMapIdx, SendSyncAnalysisKind> =
+                    FxHashMap::default();
 
                 // Generic params that only occur within `PhantomData<_>`
                 let phantom_params = self
@@ -177,13 +181,10 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
 
                         // Skip generic parameters that are only within `PhantomData<T>`.
                         if phantom_params.contains(&gen_param.index) {
-                            need_send_sync.insert(
-                                post_map_idx,
-                                analyses,
-                            );
+                            need_send_sync.insert(post_map_idx, analyses);
                             continue;
                         }
-             
+
                         analyses.insert(SendSyncAnalysisKind::PHANTOM_SEND_FOR_SEND);
                         analyses.insert(SendSyncAnalysisKind::RELAX_SEND);
                         need_send_sync.insert(post_map_idx, analyses);
