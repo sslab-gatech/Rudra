@@ -92,13 +92,14 @@ impl<'a, G: Graph> Reachability<'a, G> {
         }
 
         // Check the result
+        let mut ret = State::empty();
         for id in 0..self.len {
             if self.sinks[id] && !visited[id].is_empty() {
-                return visited[id];
+                ret.insert(visited[id]);
             }
         }
 
-        return State::empty();
+        return ret;
     }
 }
 
