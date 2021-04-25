@@ -38,7 +38,13 @@ pub fn owned_generic_params_in_ty<'tcx>(
     let mut owned_generic_params = FxHashSet::default();
 
     let mut worklist = vec![ty];
+    let mut visited = FxHashSet::default();
     while let Some(ty) = worklist.pop() {
+        if visited.contains(&ty) {
+            continue;
+        }
+
+        visited.insert(ty);
         match ty.kind {
             ty::TyKind::Param(param_ty) => {
                 owned_generic_params.insert(param_ty.index);
@@ -83,7 +89,13 @@ pub fn borrowed_generic_params_in_ty<'tcx>(
     let mut borrowed_generic_params = FxHashSet::default();
 
     let mut worklist = vec![(ty, false)];
+    let mut visited = FxHashSet::default();
     while let Some((ty, borrowed)) = worklist.pop() {
+        if visited.contains(&ty) {
+            continue;
+        }
+        
+        visited.insert(ty);
         match ty.kind {
             ty::TyKind::Param(param_ty) => {
                 if borrowed {
