@@ -29,10 +29,7 @@ pub fn generic_param_idx_mapper<'tcx>(
     return generic_param_idx_mapper;
 }
 
-const OWNING_ADTS: &[&[&str]] = &[
-    &["core", "option", "Option"],
-    &["core", "result", "Result"],
-];
+const OWNING_ADTS: &[&[&str]] = &[&["core", "option", "Option"], &["core", "result", "Result"]];
 
 // Within the given `ty`,
 // return generic parameters that exist as owned `T`
@@ -100,6 +97,7 @@ pub fn borrowed_generic_params_in_ty<'tcx>(
     tcx: TyCtxt<'tcx>,
     ty: Ty<'tcx>,
 ) -> impl IntoIterator<Item = PreMapIdx> {
+    let ext = tcx.ext();
     let mut borrowed_generic_params = FxHashSet::default();
 
     let mut worklist = vec![(ty, false)];
@@ -125,14 +123,14 @@ pub fn borrowed_generic_params_in_ty<'tcx>(
                     continue;
                 }
 
-                for adt_variant in adt_def.variants.iter() {
-                    for adt_field in adt_variant.fields.iter() {
-                        let adt_field_ty = adt_field.ty(tcx, substs);
-                        // We peel off just one level of ADT layer when trying to find exposed `&T`.
-                        // This helps to limit complexity & rule out Mutex-like FPs.
-                        if let ty::TyKind::Adt(_, _) = adt_field_ty.kind {
-                        } else {
-                            worklist.push((adt_field_ty, borrowed));
+                // Try limiting to cases like Option<&T> & Result<&T, !> to reduce FP rate.
+                for path in OWNING_ADTS {
+                    if ext.match_def_path(adt_def.did, path) {
+                        for adt_variant in adt_def.variants.iter() {
+                            for adt_field in adt_variant.fields.iter() {
+                                let ty = adt_field.ty(tcx, substs);
+                                worklist.push((ty, borrowed));
+                            }
                         }
                     }
                 }
