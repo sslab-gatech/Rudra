@@ -89,7 +89,7 @@ bitflags! {
 // Used to associate each Unsafe-Dataflow bug report with its cause.
 bitflags! {
     #[derive(Default)]
-    pub struct State: u8 {
+    pub struct State: u16 {
         const READ_FLOW = 0b00000001;
         const COPY_FLOW = 0b00000010;
         const VEC_FROM_RAW = 0b00000100;
@@ -98,6 +98,8 @@ bitflags! {
         const PTR_AS_REF = 0b00100000;
         const SLICE_UNCHECKED = 0b01000000;
         const SLICE_FROM_RAW = 0b10000000;
+        
+        const VEC_SET_LEN = 0b100000000;
     }
 }
 
@@ -155,6 +157,9 @@ impl Into<Cow<'static, str>> for AnalysisKind {
                 }
                 if bypass_kinds.contains(State::SLICE_FROM_RAW) {
                     v.push("SliceFromRaw")
+                }
+                if bypass_kinds.contains(State::VEC_SET_LEN) {
+                    v.push("VecSetLen")
                 }
                 v.join("/").into()
             }

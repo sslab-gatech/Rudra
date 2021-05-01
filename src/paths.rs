@@ -123,7 +123,8 @@ pub static STRONG_BYPASS_MAP: Lazy<PathMap> = Lazy::new(move || {
         INTRINSICS_COPY.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => State::COPY_FLOW,
         INTRINSICS_COPY_NONOVERLAPPING.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => State::COPY_FLOW,
         //
-        VEC_SET_LEN.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => State::VEC_FROM_RAW,
+        VEC_SET_LEN.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => State::VEC_SET_LEN,
+        //
         VEC_FROM_RAW_PARTS.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => State::VEC_FROM_RAW,
     }
 });

@@ -29,12 +29,18 @@ pub fn generic_param_idx_mapper<'tcx>(
     return generic_param_idx_mapper;
 }
 
+const OWNING_ADTS: &[&[&str]] = &[
+    &["core", "option", "Option"],
+    &["core", "result", "Result"],
+];
+
 // Within the given `ty`,
 // return generic parameters that exist as owned `T`
 pub fn owned_generic_params_in_ty<'tcx>(
     tcx: TyCtxt<'tcx>,
     ty: Ty<'tcx>,
 ) -> impl IntoIterator<Item = PreMapIdx> {
+    let ext = tcx.ext();
     let mut owned_generic_params = FxHashSet::default();
 
     let mut worklist = vec![ty];
@@ -59,9 +65,17 @@ pub fn owned_generic_params_in_ty<'tcx>(
                 //   do we need special handling for types that own T but doesn't have a field `T`?
                 //   ex) Arc<T> or Rc<T> ?
 
-                for adt_variant in adt_def.variants.iter() {
-                    for adt_field in adt_variant.fields.iter() {
-                        worklist.push(adt_field.ty(tcx, substs));
+                // Try limiting to cases like Option<T> & Result<T, !> to reduce FP rate.
+                for path in OWNING_ADTS {
+                    if ext.match_def_path(adt_def.did, path) {
+                        for adt_variant in adt_def.variants.iter() {
+                            for adt_field in adt_variant.fields.iter() {
+                                let ty = adt_field.ty(tcx, substs);
+                                if let ty::TyKind::Param(_) = ty.kind {
+                                    worklist.push(ty);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -110,10 +124,6 @@ pub fn borrowed_generic_params_in_ty<'tcx>(
                     worklist.push((ty.boxed_ty(), borrowed));
                     continue;
                 }
-                // TODO:
-                //   Besides `Box<T>`,
-                //   do we need special handling for types that own T but doesn't have a field `T`?
-                //   ex) Arc<T> or Rc<T> ?
 
                 for adt_variant in adt_def.variants.iter() {
                     for adt_field in adt_variant.fields.iter() {
