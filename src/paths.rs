@@ -18,8 +18,8 @@ to
 `let names = dbg!(self.get_def_path(def_id));`
 */
 // Strong bypasses
-pub const PTR_READ: [&str; 3] = ["core", "ptr", "read"];
-pub const PTR_DIRECT_READ: [&str; 5] = ["core", "ptr", "const_ptr", "<impl *const T>", "read"];
+pub const PTR_READ: &[&str] = &["core", "ptr", "read"];
+pub const PTR_DIRECT_READ: &[&str] = &["core", "ptr", "const_ptr", "<impl *const T>", "read"];
 
 pub const INTRINSICS_COPY: [&str; 3] = ["core", "intrinsics", "copy"];
 pub const INTRINSICS_COPY_NONOVERLAPPING: [&str; 3] = ["core", "intrinsics", "copy_nonoverlapping"];

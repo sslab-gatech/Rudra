@@ -1,5 +1,6 @@
 use rustc_hir::{def_id::DefId, BodyId};
-use rustc_middle::ty::{Instance, ParamEnv};
+use rustc_middle::mir::Operand;
+use rustc_middle::ty::{Instance, ParamEnv, TyKind};
 use rustc_span::Span;
 
 use snafu::{Backtrace, Snafu};
@@ -170,18 +171,46 @@ mod inner {
         fn analyze(mut self) -> UnsafeDataflowStatus {
             let mut reachability = graph::Reachability::new(self.body);
 
-            for (id, terminator) in self.body.terminators().enumerate() {
+            'outer: for (id, terminator) in self.body.terminators().enumerate() {
                 match terminator.kind {
                     ir::TerminatorKind::StaticCall {
                         callee_did,
                         callee_substs,
+                        ref args,
                         ..
                     } => {
-                        let ext = self.rcx.tcx().ext();
+                        let tcx = self.rcx.tcx();
+                        let ext = tcx.ext();
 
                         // Check for lifetime bypass
                         let symbol_vec = ext.get_def_path(callee_did);
                         if paths::STRONG_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
+                            // Check whether the `READ` functions read `Copy` types.
+                            for path in [PTR_READ, PTR_DIRECT_READ].iter() {
+                                if ext.match_def_path(callee_did, path) {
+                                    for arg in args.iter() {
+                                        if_chain! {
+                                            if let Operand::Move(place) = arg;
+                                            let place_ty = place.ty(self.body, tcx);
+                                            if let TyKind::RawPtr(ty_and_mut) = place_ty.ty.kind;
+                                            let pointed_ty = ty_and_mut.ty;
+                                            if let Some(copy_trait_did) = tcx.lang_items().copy_trait();
+                                            if tcx.type_implements_trait((
+                                                copy_trait_did,
+                                                pointed_ty,
+                                                callee_substs,
+                                                tcx.param_env(callee_did),
+                                            ));
+                                            then {
+                                                // `read`ing `Copy` doesn't have safety issues.
+                                                // No need to mark this as source.
+                                                continue 'outer;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             reachability
                                 .mark_source(id, *STRONG_BYPASS_MAP.get(&symbol_vec).unwrap());
                             self.status
