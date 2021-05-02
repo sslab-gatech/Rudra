@@ -1,5 +1,6 @@
 use rustc_hir::{def_id::DefId, BodyId};
 use rustc_middle::mir::Operand;
+use rustc_middle::ty::subst::SubstsRef;
 use rustc_middle::ty::{Instance, ParamEnv, TyKind};
 use rustc_span::Span;
 
@@ -171,7 +172,7 @@ mod inner {
         fn analyze(mut self) -> UnsafeDataflowStatus {
             let mut reachability = graph::Reachability::new(self.body);
 
-            'outer: for (id, terminator) in self.body.terminators().enumerate() {
+            for (id, terminator) in self.body.terminators().enumerate() {
                 match terminator.kind {
                     ir::TerminatorKind::StaticCall {
                         callee_did,
@@ -185,30 +186,14 @@ mod inner {
                         // Check for lifetime bypass
                         let symbol_vec = ext.get_def_path(callee_did);
                         if paths::STRONG_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
-                            // Check whether the `READ` functions read `Copy` types.
-                            for path in [PTR_READ, PTR_DIRECT_READ].iter() {
-                                if ext.match_def_path(callee_did, path) {
-                                    for arg in args.iter() {
-                                        if_chain! {
-                                            if let Operand::Move(place) = arg;
-                                            let place_ty = place.ty(self.body, tcx);
-                                            if let TyKind::RawPtr(ty_and_mut) = place_ty.ty.kind;
-                                            let pointed_ty = ty_and_mut.ty;
-                                            if let Some(copy_trait_did) = tcx.lang_items().copy_trait();
-                                            if tcx.type_implements_trait((
-                                                copy_trait_did,
-                                                pointed_ty,
-                                                callee_substs,
-                                                tcx.param_env(callee_did),
-                                            ));
-                                            then {
-                                                // `read`ing `Copy` doesn't have safety issues.
-                                                // No need to mark this as source.
-                                                continue 'outer;
-                                            }
-                                        }
-                                    }
-                                }
+                            if fn_called_on_copy(
+                                self.rcx,
+                                &self.body,
+                                (callee_did, callee_substs, args),
+                                &[PTR_READ, PTR_DIRECT_READ],
+                            ) {
+                                // reading Copy types is not a lifetime bypass.
+                                continue;
                             }
 
                             reachability
@@ -217,6 +202,16 @@ mod inner {
                                 .strong_bypasses
                                 .push(terminator.original.source_info.span);
                         } else if paths::WEAK_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
+                            if fn_called_on_copy(
+                                self.rcx,
+                                &self.body,
+                                (callee_did, callee_substs, args),
+                                &[PTR_WRITE, PTR_DIRECT_WRITE],
+                            ) {
+                                // writing Copy types is not a lifetime bypass.
+                                continue;
+                            }
+
                             reachability
                                 .mark_source(id, *WEAK_BYPASS_MAP.get(&symbol_vec).unwrap());
                             self.status
@@ -280,5 +275,38 @@ mod inner {
                 }
             }
         }
+    }
+
+    fn fn_called_on_copy<'tcx>(
+        rcx: RudraCtxt<'tcx>,
+        caller_body: &ir::Body<'tcx>,
+        (callee_did, callee_substs, callee_args): (DefId, SubstsRef<'tcx>, &Vec<Operand<'tcx>>),
+        paths: &[&[&str]],
+    ) -> bool {
+        let tcx = rcx.tcx();
+        let ext = tcx.ext();
+        for path in paths.iter() {
+            if ext.match_def_path(callee_did, path) {
+                for arg in callee_args.iter() {
+                    if_chain! {
+                        if let Operand::Move(place) = arg;
+                        let place_ty = place.ty(caller_body, tcx);
+                        if let TyKind::RawPtr(ty_and_mut) = place_ty.ty.kind;
+                        let pointed_ty = ty_and_mut.ty;
+                        if let Some(copy_trait_did) = tcx.lang_items().copy_trait();
+                        if tcx.type_implements_trait((
+                            copy_trait_did,
+                            pointed_ty,
+                            callee_substs,
+                            tcx.param_env(callee_did),
+                        ));
+                        then {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
     }
 }
