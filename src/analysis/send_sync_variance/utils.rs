@@ -29,10 +29,7 @@ pub fn generic_param_idx_mapper<'tcx>(
     return generic_param_idx_mapper;
 }
 
-const OWNING_ADTS: &[&[&str]] = &[
-    &["core", "option", "Option"],
-    &["core", "result", "Result"],
-];
+const OWNING_ADTS: &[&[&str]] = &[&["core", "option", "Option"], &["core", "result", "Result"]];
 
 // Within the given `ty`,
 // return generic parameters that exist as owned `T`
