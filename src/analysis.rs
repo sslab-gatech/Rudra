@@ -98,7 +98,7 @@ bitflags! {
         const PTR_AS_REF = 0b00100000;
         const SLICE_UNCHECKED = 0b01000000;
         const SLICE_FROM_RAW = 0b10000000;
-
+        
         const VEC_SET_LEN = 0b100000000;
     }
 }
