@@ -21,8 +21,8 @@ to
 pub const PTR_READ: &[&str] = &["core", "ptr", "read"];
 pub const PTR_DIRECT_READ: &[&str] = &["core", "ptr", "const_ptr", "<impl *const T>", "read"];
 
-pub const INTRINSICS_COPY: [&str; 3] = ["core", "intrinsics", "copy"];
-pub const INTRINSICS_COPY_NONOVERLAPPING: [&str; 3] = ["core", "intrinsics", "copy_nonoverlapping"];
+pub const INTRINSICS_COPY: &[&str] = &["core", "intrinsics", "copy"];
+pub const INTRINSICS_COPY_NONOVERLAPPING: &[&str] = &["core", "intrinsics", "copy_nonoverlapping"];
 
 pub const VEC_SET_LEN: [&str; 4] = ["alloc", "vec", "Vec", "set_len"];
 pub const VEC_FROM_RAW_PARTS: [&str; 4] = ["alloc", "vec", "Vec", "from_raw_parts"];

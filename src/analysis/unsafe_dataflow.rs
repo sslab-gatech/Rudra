@@ -190,9 +190,14 @@ mod inner {
                                 self.rcx,
                                 &self.body,
                                 (callee_did, callee_substs, args),
-                                &[PTR_READ, PTR_DIRECT_READ],
+                                &[
+                                    PTR_READ,
+                                    PTR_DIRECT_READ,
+                                    INTRINSICS_COPY,
+                                    INTRINSICS_COPY_NONOVERLAPPING,
+                                ],
                             ) {
-                                // reading Copy types is not a lifetime bypass.
+                                // read/copy on Copy types is not a lifetime bypass.
                                 continue;
                             }
 
@@ -304,6 +309,9 @@ mod inner {
                             return true;
                         }
                     }
+                    // No need to inspect beyond first arg of the
+                    // target bypass functions.
+                    break;
                 }
             }
         }
