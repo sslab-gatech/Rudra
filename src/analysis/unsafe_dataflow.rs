@@ -182,7 +182,6 @@ mod inner {
                     } => {
                         let tcx = self.rcx.tcx();
                         let ext = tcx.ext();
-
                         // Check for lifetime bypass
                         let symbol_vec = ext.get_def_path(callee_did);
                         if paths::STRONG_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
@@ -198,6 +197,13 @@ mod inner {
                                 ],
                             ) {
                                 // read/copy on Copy types is not a lifetime bypass.
+                                continue;
+                            }
+
+                            if ext.match_def_path(callee_did, &VEC_SET_LEN)
+                                && vec_set_len_to_0(self.rcx, callee_did, args)
+                            {
+                                // Leaking data is safe (`vec.set_len(0);`)
                                 continue;
                             }
 
@@ -312,6 +318,30 @@ mod inner {
                     // No need to inspect beyond first arg of the
                     // target bypass functions.
                     break;
+                }
+            }
+        }
+        false
+    }
+
+    // Check if the argument of `Vec::set_len()` is 0_usize.
+    fn vec_set_len_to_0<'tcx>(
+        rcx: RudraCtxt<'tcx>,
+        callee_did: DefId,
+        args: &Vec<Operand<'tcx>>,
+    ) -> bool {
+        let tcx = rcx.tcx();
+        for arg in args.iter() {
+            if_chain! {
+                if let Operand::Constant(c) = arg;
+                if let Some(c_val) = c.literal.try_eval_usize(
+                    tcx,
+                    tcx.param_env(callee_did),
+                );
+                if c_val == 0;
+                then {
+                    // Leaking(`vec.set_len(0);`) is safe.
+                    return true;
                 }
             }
         }
