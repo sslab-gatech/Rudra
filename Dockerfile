@@ -53,7 +53,7 @@ RUN set -eux; \
 COPY rust-toolchain /tmp/rust-toolchain
 COPY crawl /tmp/crawl
 RUN set -eux; \
-    cargo install --path /tmp/crawl --bin rudra-runner; \
+    cargo install --path /tmp/crawl --bin rudra-runner --bin unsafe-counter; \
     rm -rf /tmp/rust-toolchain /tmp/crawl;
 
 COPY . /tmp/rudra/

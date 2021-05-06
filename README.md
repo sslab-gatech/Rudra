@@ -33,6 +33,10 @@ docker run -t --rm --user "$(id -u)":"$(id -g)" -v "$RUDRA_RUNNER_HOME":/tmp/rud
 # Run Rudra runner
 docker run -t --rm --user "$(id -u)":"$(id -g)" -v "$RUDRA_RUNNER_HOME":/tmp/rudra-runner-home \
   --env RUDRA_RUNNER_HOME=/tmp/rudra-runner-home -v "$PWD":/tmp/rudra -w /tmp/rudra rudra:latest rudra-runner
+
+# Run Unsafe counter
+docker run -t --rm --user "$(id -u)":"$(id -g)" -v "$RUDRA_RUNNER_HOME":/tmp/rudra-runner-home \
+  --env RUDRA_RUNNER_HOME=/tmp/rudra-runner-home -v "$PWD":/tmp/rudra -w /tmp/rudra rudra:latest unsafe-counter
 ```
 
 ## Configurations
