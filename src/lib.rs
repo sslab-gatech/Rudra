@@ -43,6 +43,7 @@ use rustc_middle::ty::TyCtxt;
 use crate::analysis::{SendSyncVarianceChecker, UnsafeDataflowChecker, UnsafeDestructorChecker};
 use crate::context::RudraCtxtOwner;
 use crate::log::Verbosity;
+use crate::report::ReportLevel;
 
 // Insert rustc arguments at the beginning of the argument list that Rudra wants to be
 // set per default, for maximal validation power.
@@ -52,6 +53,7 @@ pub static RUDRA_DEFAULT_ARGS: &[&str] =
 #[derive(Debug, Clone, Copy)]
 pub struct RudraConfig {
     pub verbosity: Verbosity,
+    pub report_level: ReportLevel,
     pub unsafe_destructor_enabled: bool,
     pub send_sync_variance_enabled: bool,
     pub unsafe_dataflow_enabled: bool,
@@ -61,6 +63,7 @@ impl Default for RudraConfig {
     fn default() -> Self {
         RudraConfig {
             verbosity: Verbosity::Normal,
+            report_level: ReportLevel::Info,
             unsafe_destructor_enabled: false,
             send_sync_variance_enabled: true,
             unsafe_dataflow_enabled: true,
@@ -104,7 +107,7 @@ where
 
 pub fn analyze<'tcx>(tcx: TyCtxt<'tcx>, config: RudraConfig) {
     // workaround to mimic arena lifetime
-    let rcx_owner = RudraCtxtOwner::new(tcx);
+    let rcx_owner = RudraCtxtOwner::new(tcx, config.report_level);
     let rcx = &*Box::leak(Box::new(rcx_owner));
 
     // shadow the variable tcx

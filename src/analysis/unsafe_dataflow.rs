@@ -9,10 +9,10 @@ use termcolor::Color;
 
 use crate::prelude::*;
 use crate::{
-    analysis::{AnalysisKind, State},
+    analysis::{AnalysisKind, FilterStateByRank, State},
     graph, ir,
     paths::{self, *},
-    report::{Report, ReportLevel},
+    report::Report,
     utils,
     visitor::ContainsUnsafe,
 };
@@ -52,7 +52,8 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
         for (_ty_hir_id, (body_id, related_item_span)) in self.rcx.types_with_related_items() {
             if let Some(status) = inner::UnsafeDataflowBodyAnalyzer::analyze_body(self.rcx, body_id)
             {
-                let bypass_kinds = status.unsafe_paths();
+                let mut bypass_kinds = status.unsafe_paths();
+                bypass_kinds.filter_by_rank(self.rcx.report_level());
                 if !bypass_kinds.is_empty() {
                     let mut color_span = unwrap_or!(
                         utils::ColorSpan::new(tcx, related_item_span).context(InvalidSpan) => continue
@@ -70,15 +71,9 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
                         color_span.add_sub_span(Color::Cyan, span);
                     }
 
-                    let level = if status.strong_bypass_spans().is_empty() {
-                        ReportLevel::Info
-                    } else {
-                        ReportLevel::Warning
-                    };
-
                     rudra_report(Report::with_color_span(
                         tcx,
-                        level,
+                        self.rcx.report_level(),
                         AnalysisKind::UnsafeDataflow(bypass_kinds),
                         format!(
                             "Potential unsafe dataflow issue in `{}`",

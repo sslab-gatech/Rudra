@@ -4,6 +4,8 @@ mod unsafe_destructor;
 
 use snafu::{Error, ErrorCompat};
 
+use crate::report::ReportLevel;
+
 pub use send_sync_variance::SendSyncVarianceChecker;
 pub use unsafe_dataflow::UnsafeDataflowChecker;
 pub use unsafe_destructor::UnsafeDestructorChecker;
@@ -65,6 +67,10 @@ pub enum AnalysisKind {
     UnsafeDataflow(State),
 }
 
+pub trait FilterStateByRank {
+    fn filter_by_rank(&mut self, report_level: ReportLevel);
+}
+
 bitflags! {
     #[derive(Default)]
     pub struct SendSyncAnalysisKind: u8 {
@@ -85,6 +91,24 @@ bitflags! {
     }
 }
 
+impl FilterStateByRank for SendSyncAnalysisKind {
+    fn filter_by_rank(&mut self, report_level: ReportLevel) {
+        match report_level {
+            ReportLevel::Error => {
+                *self &= SendSyncAnalysisKind::API_SEND_FOR_SYNC | SendSyncAnalysisKind::RELAX_SEND
+            }
+            ReportLevel::Warning => {
+                *self &= SendSyncAnalysisKind::API_SEND_FOR_SYNC
+                    | SendSyncAnalysisKind::RELAX_SEND
+                    | SendSyncAnalysisKind::API_SYNC_FOR_SYNC
+                    | SendSyncAnalysisKind::PHANTOM_SEND_FOR_SEND
+                    | SendSyncAnalysisKind::RELAX_SYNC
+            }
+            ReportLevel::Info => {}
+        }
+    }
+}
+
 // Unsafe Dataflow BypassKind.
 // Used to associate each Unsafe-Dataflow bug report with its cause.
 bitflags! {
@@ -98,8 +122,23 @@ bitflags! {
         const PTR_AS_REF = 0b00100000;
         const SLICE_UNCHECKED = 0b01000000;
         const SLICE_FROM_RAW = 0b10000000;
-
         const VEC_SET_LEN = 0b100000000;
+    }
+}
+
+impl FilterStateByRank for State {
+    fn filter_by_rank(&mut self, report_level: ReportLevel) {
+        match report_level {
+            ReportLevel::Error => *self &= State::VEC_FROM_RAW | State::VEC_SET_LEN,
+            ReportLevel::Warning => {
+                *self &= State::VEC_FROM_RAW
+                    | State::VEC_SET_LEN
+                    | State::READ_FLOW
+                    | State::COPY_FLOW
+                    | State::WRITE_FLOW
+            }
+            ReportLevel::Info => {}
+        }
     }
 }
 

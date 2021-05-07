@@ -14,7 +14,7 @@ use rustc_driver::Compilation;
 use rustc_interface::{interface::Compiler, Queries};
 
 use rudra::log::Verbosity;
-use rudra::report::{default_report_logger, init_report_logger};
+use rudra::report::{default_report_logger, init_report_logger, ReportLevel};
 use rudra::{analyze, compile_time_sysroot, progress_info, RudraConfig, RUDRA_DEFAULT_ARGS};
 
 struct RudraCompilerCalls {
@@ -105,6 +105,9 @@ fn parse_config() -> (RudraConfig, Vec<String>) {
             "-Zrudra-disable-unsafe-dataflow" => config.unsafe_dataflow_enabled = false,
             "-v" => config.verbosity = Verbosity::Verbose,
             "-vv" => config.verbosity = Verbosity::Trace,
+            "-Zhigh" => config.report_level = ReportLevel::Error,
+            "-Zmed" => config.report_level = ReportLevel::Warning,
+            "-Zlow" => config.report_level = ReportLevel::Info,
             _ => {
                 rustc_args.push(arg);
             }

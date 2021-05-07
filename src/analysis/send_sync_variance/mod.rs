@@ -22,9 +22,9 @@ use rustc_span::symbol::sym;
 
 use snafu::{OptionExt, Snafu};
 
-use crate::analysis::{AnalysisKind, SendSyncAnalysisKind};
+use crate::analysis::{AnalysisKind, FilterStateByRank, SendSyncAnalysisKind};
 use crate::prelude::*;
-use crate::report::{Report, ReportLevel};
+use crate::report::Report;
 
 use behavior::*;
 pub use phantom::*;
@@ -78,20 +78,23 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
     ) {
         // Iterate over `impl`s that implement `Send`.
         for &impl_hir_id in self.rcx.tcx().hir().trait_impls(send_trait_did) {
-            if let Some((adt_def_id, send_sync_analyses)) =
+            if let Some((adt_def_id, mut send_sync_analyses)) =
                 self.suspicious_send(impl_hir_id, send_trait_did, sync_trait_did, copy_trait_did)
             {
-                let tcx = self.rcx.tcx();
-                self.report_map
-                    .entry(adt_def_id)
-                    .or_insert_with(|| Vec::with_capacity(2))
-                    .push(Report::with_hir_id(
-                        tcx,
-                        ReportLevel::Warning,
-                        AnalysisKind::SendSyncVariance(send_sync_analyses),
-                        "Suspicious impl of `Send` found",
-                        impl_hir_id,
-                    ));
+                send_sync_analyses.filter_by_rank(self.rcx.report_level());
+                if !send_sync_analyses.is_empty() {
+                    let tcx = self.rcx.tcx();
+                    self.report_map
+                        .entry(adt_def_id)
+                        .or_insert_with(|| Vec::with_capacity(2))
+                        .push(Report::with_hir_id(
+                            tcx,
+                            self.rcx.report_level(),
+                            AnalysisKind::SendSyncVariance(send_sync_analyses),
+                            "Suspicious impl of `Send` found",
+                            impl_hir_id,
+                        ));
+                }
             }
         }
     }
@@ -106,20 +109,23 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
     ) {
         // Iterate over `impl`s that implement `Sync`.
         for &impl_hir_id in self.rcx.tcx().hir().trait_impls(sync_trait_did) {
-            if let Some((struct_def_id, send_sync_analyses)) =
+            if let Some((struct_def_id, mut send_sync_analyses)) =
                 self.suspicious_sync(impl_hir_id, send_trait_did, sync_trait_did, copy_trait_did)
             {
-                let tcx = self.rcx.tcx();
-                self.report_map
-                    .entry(struct_def_id)
-                    .or_insert_with(|| Vec::with_capacity(2))
-                    .push(Report::with_hir_id(
-                        tcx,
-                        ReportLevel::Warning,
-                        AnalysisKind::SendSyncVariance(send_sync_analyses),
-                        "Suspicious impl of `Sync` found",
-                        impl_hir_id,
-                    ));
+                send_sync_analyses.filter_by_rank(self.rcx.report_level());
+                if !send_sync_analyses.is_empty() {
+                    let tcx = self.rcx.tcx();
+                    self.report_map
+                        .entry(struct_def_id)
+                        .or_insert_with(|| Vec::with_capacity(2))
+                        .push(Report::with_hir_id(
+                            tcx,
+                            self.rcx.report_level(),
+                            AnalysisKind::SendSyncVariance(send_sync_analyses),
+                            "Suspicious impl of `Sync` found",
+                            impl_hir_id,
+                        ));
+                }
             }
         }
     }
