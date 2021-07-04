@@ -50,7 +50,7 @@ pub fn rudra_report(report: Report) {
     REPORT_LOGGER.get().unwrap().log(report);
 }
 
-#[derive(Serialize, Clone, Copy, Debug)]
+#[derive(Serialize, Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ReportLevel {
     // Rank: High
     Error = 2,

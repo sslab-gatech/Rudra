@@ -22,9 +22,9 @@ use rustc_span::symbol::sym;
 
 use snafu::{OptionExt, Snafu};
 
-use crate::analysis::{AnalysisKind, FilterStateByRank, SendSyncAnalysisKind};
+use crate::analysis::{AnalysisKind, StateToReportLevel};
 use crate::prelude::*;
-use crate::report::Report;
+use crate::report::{Report, ReportLevel};
 
 use behavior::*;
 pub use phantom::*;
@@ -78,11 +78,10 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
     ) {
         // Iterate over `impl`s that implement `Send`.
         for &impl_hir_id in self.rcx.tcx().hir().trait_impls(send_trait_did) {
-            if let Some((adt_def_id, mut send_sync_analyses)) =
+            if let Some((adt_def_id, send_sync_analyses)) =
                 self.suspicious_send(impl_hir_id, send_trait_did, sync_trait_did, copy_trait_did)
             {
-                send_sync_analyses.filter_by_rank(self.rcx.report_level());
-                if !send_sync_analyses.is_empty() {
+                if send_sync_analyses.report_level() >= self.rcx.report_level() {
                     let tcx = self.rcx.tcx();
                     self.report_map
                         .entry(adt_def_id)
@@ -109,11 +108,10 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
     ) {
         // Iterate over `impl`s that implement `Sync`.
         for &impl_hir_id in self.rcx.tcx().hir().trait_impls(sync_trait_did) {
-            if let Some((struct_def_id, mut send_sync_analyses)) =
+            if let Some((struct_def_id, send_sync_analyses)) =
                 self.suspicious_sync(impl_hir_id, send_trait_did, sync_trait_did, copy_trait_did)
             {
-                send_sync_analyses.filter_by_rank(self.rcx.report_level());
-                if !send_sync_analyses.is_empty() {
+                if send_sync_analyses.report_level() >= self.rcx.report_level() {
                     let tcx = self.rcx.tcx();
                     self.report_map
                         .entry(struct_def_id)
@@ -184,3 +182,40 @@ pub struct PreMapIdx(u32);
 // Index of generic type parameter in the ADT definition.
 #[derive(Copy, Clone, Eq, Hash, PartialEq)]
 pub struct PostMapIdx(u32);
+
+bitflags! {
+    #[derive(Default)]
+    pub struct SendSyncAnalysisKind: u8 {
+        // T: Send for impl Sync (with api check & phantom check)
+        const API_SEND_FOR_SYNC = 0b00000001;
+        // T: Sync for impl Sync (with api check & phantom check)
+        const API_SYNC_FOR_SYNC = 0b00000100;
+        // T: Send for impl Send (with phantom check)
+        const PHANTOM_SEND_FOR_SEND = 0b00000010;
+        // T: Send for impl Send (no api check, no phantom check)
+        const NAIVE_SEND_FOR_SEND = 0b00001000;
+        // T: Sync for impl Sync (no api check, no phantom check)
+        const NAIVE_SYNC_FOR_SYNC = 0b00010000;
+        // Relaxed Send for impl Send (with phantom check)
+        const RELAX_SEND = 0b00100000;
+        // Relaxed Sync for impl Sync (with phantom check)
+        const RELAX_SYNC = 0b01000000;
+    }
+}
+
+impl StateToReportLevel for SendSyncAnalysisKind {
+    fn report_level(&self) -> ReportLevel {
+        let high = SendSyncAnalysisKind::API_SEND_FOR_SYNC | SendSyncAnalysisKind::RELAX_SEND;
+        let med = SendSyncAnalysisKind::API_SYNC_FOR_SYNC
+            | SendSyncAnalysisKind::PHANTOM_SEND_FOR_SEND
+            | SendSyncAnalysisKind::RELAX_SYNC;
+
+        if !(*self & high).is_empty() {
+            ReportLevel::Error
+        } else if !(*self & med).is_empty() {
+            ReportLevel::Warning
+        } else {
+            ReportLevel::Info
+        }
+    }
+}

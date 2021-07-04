@@ -9,10 +9,10 @@ use termcolor::Color;
 
 use crate::prelude::*;
 use crate::{
-    analysis::{AnalysisKind, FilterStateByRank, State},
+    analysis::{AnalysisKind, StateToReportLevel},
     graph, ir,
     paths::{self, *},
-    report::Report,
+    report::{Report, ReportLevel},
     utils,
     visitor::ContainsUnsafe,
 };
@@ -52,9 +52,8 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
         for (_ty_hir_id, (body_id, related_item_span)) in self.rcx.types_with_related_items() {
             if let Some(status) = inner::UnsafeDataflowBodyAnalyzer::analyze_body(self.rcx, body_id)
             {
-                let mut bypass_kinds = status.unsafe_paths();
-                bypass_kinds.filter_by_rank(self.rcx.report_level());
-                if !bypass_kinds.is_empty() {
+                let bypass_kinds = status.unsafe_paths();
+                if bypass_kinds.report_level() >= self.rcx.report_level() {
                     let mut color_span = unwrap_or!(
                         utils::ColorSpan::new(tcx, related_item_span).context(InvalidSpan) => continue
                     );
@@ -184,7 +183,7 @@ mod inner {
                                 self.rcx,
                                 &self.body,
                                 (callee_did, callee_substs, args),
-                                &[PTR_READ, PTR_DIRECT_READ],
+                                &[&PTR_READ[..], &PTR_DIRECT_READ[..]],
                             ) {
                                 // read on Copy types is not a lifetime bypass.
                                 continue;
@@ -207,7 +206,7 @@ mod inner {
                                 self.rcx,
                                 &self.body,
                                 (callee_did, callee_substs, args),
-                                &[PTR_WRITE, PTR_DIRECT_WRITE],
+                                &[&PTR_WRITE[..], &PTR_DIRECT_WRITE[..]],
                             ) {
                                 // writing Copy types is not a lifetime bypass.
                                 continue;
@@ -336,5 +335,37 @@ mod inner {
             }
         }
         false
+    }
+}
+
+// Unsafe Dataflow BypassKind.
+// Used to associate each Unsafe-Dataflow bug report with its cause.
+bitflags! {
+    #[derive(Default)]
+    pub struct State: u16 {
+        const READ_FLOW = 0b00000001;
+        const COPY_FLOW = 0b00000010;
+        const VEC_FROM_RAW = 0b00000100;
+        const TRANSMUTE = 0b00001000;
+        const WRITE_FLOW = 0b00010000;
+        const PTR_AS_REF = 0b00100000;
+        const SLICE_UNCHECKED = 0b01000000;
+        const SLICE_FROM_RAW = 0b10000000;
+        const VEC_SET_LEN = 0b100000000;
+    }
+}
+
+impl StateToReportLevel for State {
+    fn report_level(&self) -> ReportLevel {
+        let high = State::VEC_FROM_RAW | State::VEC_SET_LEN;
+        let med = State::READ_FLOW | State::COPY_FLOW | State::WRITE_FLOW;
+
+        if !(*self & high).is_empty() {
+            ReportLevel::Error
+        } else if !(*self & med).is_empty() {
+            ReportLevel::Warning
+        } else {
+            ReportLevel::Info
+        }
     }
 }

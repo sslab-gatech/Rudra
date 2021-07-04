@@ -105,9 +105,9 @@ fn parse_config() -> (RudraConfig, Vec<String>) {
             "-Zrudra-disable-unsafe-dataflow" => config.unsafe_dataflow_enabled = false,
             "-v" => config.verbosity = Verbosity::Verbose,
             "-vv" => config.verbosity = Verbosity::Trace,
-            "-Zhigh" => config.report_level = ReportLevel::Error,
-            "-Zmed" => config.report_level = ReportLevel::Warning,
-            "-Zlow" => config.report_level = ReportLevel::Info,
+            "-Zsensitivity-high" => config.report_level = ReportLevel::Error,
+            "-Zsensitivity-med" => config.report_level = ReportLevel::Warning,
+            "-Zsensitivity-low" => config.report_level = ReportLevel::Info,
             _ => {
                 rustc_args.push(arg);
             }

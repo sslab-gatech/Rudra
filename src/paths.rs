@@ -18,11 +18,11 @@ to
 `let names = dbg!(self.get_def_path(def_id));`
 */
 // Strong bypasses
-pub const PTR_READ: &[&str] = &["core", "ptr", "read"];
-pub const PTR_DIRECT_READ: &[&str] = &["core", "ptr", "const_ptr", "<impl *const T>", "read"];
+pub const PTR_READ: [&str; 3] = ["core", "ptr", "read"];
+pub const PTR_DIRECT_READ: [&str; 5] = ["core", "ptr", "const_ptr", "<impl *const T>", "read"];
 
-pub const INTRINSICS_COPY: &[&str] = &["core", "intrinsics", "copy"];
-pub const INTRINSICS_COPY_NONOVERLAPPING: &[&str] = &["core", "intrinsics", "copy_nonoverlapping"];
+pub const INTRINSICS_COPY: [&str; 3] = ["core", "intrinsics", "copy"];
+pub const INTRINSICS_COPY_NONOVERLAPPING: [&str; 3] = ["core", "intrinsics", "copy_nonoverlapping"];
 
 pub const VEC_SET_LEN: [&str; 4] = ["alloc", "vec", "Vec", "set_len"];
 pub const VEC_FROM_RAW_PARTS: [&str; 4] = ["alloc", "vec", "Vec", "from_raw_parts"];
@@ -30,8 +30,8 @@ pub const VEC_FROM_RAW_PARTS: [&str; 4] = ["alloc", "vec", "Vec", "from_raw_part
 // Weak bypasses
 pub const TRANSMUTE: [&str; 4] = ["core", "intrinsics", "", "transmute"];
 
-pub const PTR_WRITE: &[&str] = &["core", "ptr", "write"];
-pub const PTR_DIRECT_WRITE: &[&str] = &["core", "ptr", "mut_ptr", "<impl *mut T>", "write"];
+pub const PTR_WRITE: [&str; 3] = ["core", "ptr", "write"];
+pub const PTR_DIRECT_WRITE: [&str; 5] = ["core", "ptr", "mut_ptr", "<impl *mut T>", "write"];
 
 pub const PTR_AS_REF: [&str; 5] = ["core", "ptr", "const_ptr", "<impl *const T>", "as_ref"];
 pub const PTR_AS_MUT: [&str; 5] = ["core", "ptr", "mut_ptr", "<impl *mut T>", "as_mut"];
