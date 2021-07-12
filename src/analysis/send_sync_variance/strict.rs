@@ -11,7 +11,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
         send_trait_def_id: DefId,
         sync_trait_def_id: DefId,
         copy_trait_def_id: DefId,
-    ) -> Option<(DefId, SendSyncAnalysisKind)> {
+    ) -> Option<(DefId, BehaviorFlag)> {
         let rcx = self.rcx;
         let tcx = rcx.tcx();
         if let Some(trait_ref) = tcx.impl_trait_ref(impl_hir_id.owner) {
@@ -19,8 +19,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 let adt_did = adt_def.did;
                 let adt_ty = tcx.type_of(adt_did);
 
-                let mut need_send_sync: FxHashMap<PostMapIdx, SendSyncAnalysisKind> =
-                    FxHashMap::default();
+                let mut need_send_sync: FxHashMap<PostMapIdx, BehaviorFlag> = FxHashMap::default();
 
                 // Generic params that only occur within `PhantomData<_>`
                 let phantom_params = self
@@ -39,7 +38,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                     for gen_param in tcx.generics_of(adt_did).params.iter() {
                         if let GenericParamDefKind::Type { .. } = gen_param.kind {
                             let post_map_idx = PostMapIdx(gen_param.index);
-                            let mut analyses = SendSyncAnalysisKind::NAIVE_SYNC_FOR_SYNC;
+                            let mut analyses = BehaviorFlag::NAIVE_SYNC_FOR_SYNC;
 
                             // Skip generic parameters that are only within `PhantomData<T>`.
                             if phantom_params.contains(&gen_param.index) {
@@ -47,13 +46,13 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                                 continue;
                             }
 
-                            analyses.insert(SendSyncAnalysisKind::RELAX_SYNC);
+                            analyses.insert(BehaviorFlag::RELAX_SYNC);
                             if let Some(behavior) = adt_behavior.get(&post_map_idx) {
                                 if behavior.is_concurrent_queue() {
-                                    analyses.insert(SendSyncAnalysisKind::API_SEND_FOR_SYNC);
+                                    analyses.insert(BehaviorFlag::API_SEND_FOR_SYNC);
                                 }
                                 if behavior.is_deref() {
-                                    analyses.insert(SendSyncAnalysisKind::API_SYNC_FOR_SYNC);
+                                    analyses.insert(BehaviorFlag::API_SYNC_FOR_SYNC);
                                 }
                             }
 
@@ -66,7 +65,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                     for gen_param in tcx.generics_of(adt_did).params.iter() {
                         if let GenericParamDefKind::Type { .. } = gen_param.kind {
                             let post_map_idx = PostMapIdx(gen_param.index);
-                            let mut analyses = SendSyncAnalysisKind::NAIVE_SYNC_FOR_SYNC;
+                            let mut analyses = BehaviorFlag::NAIVE_SYNC_FOR_SYNC;
 
                             // Skip generic parameters that are only within `PhantomData<T>`.
                             if phantom_params.contains(&gen_param.index) {
@@ -74,11 +73,11 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                                 continue;
                             }
 
-                            analyses.insert(SendSyncAnalysisKind::RELAX_SYNC);
-                            analyses.insert(SendSyncAnalysisKind::API_SYNC_FOR_SYNC);
+                            analyses.insert(BehaviorFlag::RELAX_SYNC);
+                            analyses.insert(BehaviorFlag::API_SYNC_FOR_SYNC);
                             if let Some(behavior) = adt_behavior.get(&post_map_idx) {
                                 if behavior.is_concurrent_queue() {
-                                    analyses.insert(SendSyncAnalysisKind::API_SEND_FOR_SYNC);
+                                    analyses.insert(BehaviorFlag::API_SEND_FOR_SYNC);
                                 }
                             }
                             need_send_sync.insert(post_map_idx, analyses);
@@ -105,17 +104,17 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                                 let trait_did = trait_predicate.def_id();
                                 if trait_did == sync_trait_def_id {
                                     if let Some(analyses) = need_send_sync.get_mut(&mapped_idx) {
-                                        analyses.remove(SendSyncAnalysisKind::API_SYNC_FOR_SYNC);
-                                        analyses.remove(SendSyncAnalysisKind::NAIVE_SYNC_FOR_SYNC);
+                                        analyses.remove(BehaviorFlag::API_SYNC_FOR_SYNC);
+                                        analyses.remove(BehaviorFlag::NAIVE_SYNC_FOR_SYNC);
                                     }
                                     for analyses in need_send_sync.values_mut() {
-                                        analyses.remove(SendSyncAnalysisKind::RELAX_SYNC);
+                                        analyses.remove(BehaviorFlag::RELAX_SYNC);
                                     }
                                 } else if (trait_did == send_trait_def_id)
                                     || (trait_did == copy_trait_def_id)
                                 {
                                     if let Some(analyses) = need_send_sync.get_mut(&mapped_idx) {
-                                        analyses.remove(SendSyncAnalysisKind::API_SEND_FOR_SYNC);
+                                        analyses.remove(BehaviorFlag::API_SEND_FOR_SYNC);
                                     }
                                 }
                             }
@@ -126,7 +125,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 return if need_send_sync.is_empty() {
                     None
                 } else {
-                    let mut detected = SendSyncAnalysisKind::empty();
+                    let mut detected = BehaviorFlag::empty();
                     for &analyses in need_send_sync.values() {
                         detected.insert(analyses);
                     }
@@ -149,7 +148,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
         send_trait_def_id: DefId,
         sync_trait_def_id: DefId,
         copy_trait_def_id: DefId,
-    ) -> Option<(DefId, SendSyncAnalysisKind)> {
+    ) -> Option<(DefId, BehaviorFlag)> {
         let tcx = self.rcx.tcx();
         if let Some(trait_ref) = tcx.impl_trait_ref(impl_hir_id.owner) {
             if let ty::TyKind::Adt(adt_def, impl_trait_substs) = trait_ref.self_ty().kind {
@@ -159,8 +158,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 // Keep track of generic params that need to be `Send`.
                 // let mut need_send: FxHashSet<PostMapIdx> = FxHashSet::default();
 
-                let mut need_send_sync: FxHashMap<PostMapIdx, SendSyncAnalysisKind> =
-                    FxHashMap::default();
+                let mut need_send_sync: FxHashMap<PostMapIdx, BehaviorFlag> = FxHashMap::default();
 
                 // Generic params that only occur within `PhantomData<_>`
                 let phantom_params = self
@@ -177,7 +175,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 for gen_param in tcx.generics_of(adt_did).params.iter() {
                     if let GenericParamDefKind::Type { .. } = gen_param.kind {
                         let post_map_idx = PostMapIdx(gen_param.index);
-                        let mut analyses = SendSyncAnalysisKind::NAIVE_SEND_FOR_SEND;
+                        let mut analyses = BehaviorFlag::NAIVE_SEND_FOR_SEND;
 
                         // Skip generic parameters that are only within `PhantomData<T>`.
                         if phantom_params.contains(&gen_param.index) {
@@ -185,8 +183,8 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                             continue;
                         }
 
-                        analyses.insert(SendSyncAnalysisKind::PHANTOM_SEND_FOR_SEND);
-                        analyses.insert(SendSyncAnalysisKind::RELAX_SEND);
+                        analyses.insert(BehaviorFlag::PHANTOM_SEND_FOR_SEND);
+                        analyses.insert(BehaviorFlag::RELAX_SEND);
                         need_send_sync.insert(post_map_idx, analyses);
                     }
                 }
@@ -225,7 +223,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                                 {
                                     need_send_sync.remove(&mapped_idx);
                                     for analyses in need_send_sync.values_mut() {
-                                        analyses.remove(SendSyncAnalysisKind::RELAX_SEND);
+                                        analyses.remove(BehaviorFlag::RELAX_SEND);
                                     }
                                 }
                             }
@@ -236,7 +234,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 return if need_send_sync.is_empty() {
                     None
                 } else {
-                    let mut detected = SendSyncAnalysisKind::empty();
+                    let mut detected = BehaviorFlag::empty();
                     for &analyses in need_send_sync.values() {
                         detected.insert(analyses);
                     }

@@ -22,7 +22,7 @@ use rustc_span::symbol::sym;
 
 use snafu::{OptionExt, Snafu};
 
-use crate::analysis::{AnalysisKind, StateToReportLevel};
+use crate::analysis::{AnalysisKind, IntoReportLevel};
 use crate::prelude::*;
 use crate::report::{Report, ReportLevel};
 
@@ -185,7 +185,7 @@ pub struct PostMapIdx(u32);
 
 bitflags! {
     #[derive(Default)]
-    pub struct SendSyncAnalysisKind: u8 {
+    pub struct BehaviorFlag: u8 {
         // T: Send for impl Sync (with api check & phantom check)
         const API_SEND_FOR_SYNC = 0b00000001;
         // T: Sync for impl Sync (with api check & phantom check)
@@ -203,12 +203,12 @@ bitflags! {
     }
 }
 
-impl StateToReportLevel for SendSyncAnalysisKind {
+impl IntoReportLevel for BehaviorFlag {
     fn report_level(&self) -> ReportLevel {
-        let high = SendSyncAnalysisKind::API_SEND_FOR_SYNC | SendSyncAnalysisKind::RELAX_SEND;
-        let med = SendSyncAnalysisKind::API_SYNC_FOR_SYNC
-            | SendSyncAnalysisKind::PHANTOM_SEND_FOR_SEND
-            | SendSyncAnalysisKind::RELAX_SYNC;
+        let high = BehaviorFlag::API_SEND_FOR_SYNC | BehaviorFlag::RELAX_SEND;
+        let med = BehaviorFlag::API_SYNC_FOR_SYNC
+            | BehaviorFlag::PHANTOM_SEND_FOR_SEND
+            | BehaviorFlag::RELAX_SYNC;
 
         if !(*self & high).is_empty() {
             ReportLevel::Error

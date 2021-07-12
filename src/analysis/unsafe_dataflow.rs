@@ -9,7 +9,7 @@ use termcolor::Color;
 
 use crate::prelude::*;
 use crate::{
-    analysis::{AnalysisKind, StateToReportLevel},
+    analysis::{AnalysisKind, IntoReportLevel},
     graph, ir,
     paths::{self, *},
     report::{Report, ReportLevel},
@@ -52,8 +52,8 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
         for (_ty_hir_id, (body_id, related_item_span)) in self.rcx.types_with_related_items() {
             if let Some(status) = inner::UnsafeDataflowBodyAnalyzer::analyze_body(self.rcx, body_id)
             {
-                let bypass_kinds = status.unsafe_paths();
-                if bypass_kinds.report_level() >= self.rcx.report_level() {
+                let behavior_flags = status.behavior_flags();
+                if behavior_flags.report_level() >= self.rcx.report_level() {
                     let mut color_span = unwrap_or!(
                         utils::ColorSpan::new(tcx, related_item_span).context(InvalidSpan) => continue
                     );
@@ -73,7 +73,7 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
                     rudra_report(Report::with_color_span(
                         tcx,
                         self.rcx.report_level(),
-                        AnalysisKind::UnsafeDataflow(bypass_kinds),
+                        AnalysisKind::UnsafeDataflow(behavior_flags),
                         format!(
                             "Potential unsafe dataflow issue in `{}`",
                             tcx.def_path_str(hir_map.body_owner_def_id(body_id).to_def_id())
@@ -94,12 +94,12 @@ mod inner {
         strong_bypasses: Vec<Span>,
         weak_bypasses: Vec<Span>,
         unresolvable_generic_functions: Vec<Span>,
-        unsafe_paths: State,
+        behavior_flags: BehaviorFlag,
     }
 
     impl UnsafeDataflowStatus {
-        pub fn unsafe_paths(&self) -> State {
-            self.unsafe_paths
+        pub fn behavior_flags(&self) -> BehaviorFlag {
+            self.behavior_flags
         }
 
         pub fn strong_bypass_spans(&self) -> &Vec<Span> {
@@ -251,7 +251,7 @@ mod inner {
                 }
             }
 
-            self.status.unsafe_paths = reachability.find_reachability();
+            self.status.behavior_flags = reachability.find_reachability();
 
             self.status
         }
@@ -342,7 +342,7 @@ mod inner {
 // Used to associate each Unsafe-Dataflow bug report with its cause.
 bitflags! {
     #[derive(Default)]
-    pub struct State: u16 {
+    pub struct BehaviorFlag: u16 {
         const READ_FLOW = 0b00000001;
         const COPY_FLOW = 0b00000010;
         const VEC_FROM_RAW = 0b00000100;
@@ -355,10 +355,12 @@ bitflags! {
     }
 }
 
-impl StateToReportLevel for State {
+impl IntoReportLevel for BehaviorFlag {
     fn report_level(&self) -> ReportLevel {
-        let high = State::VEC_FROM_RAW | State::VEC_SET_LEN;
-        let med = State::READ_FLOW | State::COPY_FLOW | State::WRITE_FLOW;
+        use BehaviorFlag as Flag;
+
+        let high = Flag::VEC_FROM_RAW | Flag::VEC_SET_LEN;
+        let med = Flag::READ_FLOW | Flag::COPY_FLOW | Flag::WRITE_FLOW;
 
         if !(*self & high).is_empty() {
             ReportLevel::Error

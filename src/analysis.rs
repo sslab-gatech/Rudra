@@ -6,8 +6,8 @@ use snafu::{Error, ErrorCompat};
 
 use crate::report::ReportLevel;
 
-pub use send_sync_variance::{SendSyncAnalysisKind, SendSyncVarianceChecker};
-pub use unsafe_dataflow::{State, UnsafeDataflowChecker};
+pub use send_sync_variance::{BehaviorFlag as SendSyncBehaviorFlag, SendSyncVarianceChecker};
+pub use unsafe_dataflow::{BehaviorFlag as UnsafeDataflowBehaviorFlag, UnsafeDataflowChecker};
 pub use unsafe_destructor::UnsafeDestructorChecker;
 
 pub type AnalysisResult<'tcx, T> = Result<T, Box<dyn AnalysisError + 'tcx>>;
@@ -63,11 +63,11 @@ pub enum AnalysisErrorKind {
 #[derive(Debug, Copy, Clone)]
 pub enum AnalysisKind {
     UnsafeDestructor,
-    SendSyncVariance(SendSyncAnalysisKind),
-    UnsafeDataflow(State),
+    SendSyncVariance(SendSyncBehaviorFlag),
+    UnsafeDataflow(UnsafeDataflowBehaviorFlag),
 }
 
-trait StateToReportLevel {
+trait IntoReportLevel {
     fn report_level(&self) -> ReportLevel;
 }
 
@@ -77,56 +77,56 @@ impl Into<Cow<'static, str>> for AnalysisKind {
             AnalysisKind::UnsafeDestructor => "UnsafeDestructor".into(),
             AnalysisKind::SendSyncVariance(sv_analyses) => {
                 let mut v = vec!["SendSyncVariance:"];
-                if sv_analyses.contains(SendSyncAnalysisKind::API_SEND_FOR_SYNC) {
+                if sv_analyses.contains(SendSyncBehaviorFlag::API_SEND_FOR_SYNC) {
                     v.push("ApiSendForSync")
                 }
-                if sv_analyses.contains(SendSyncAnalysisKind::API_SYNC_FOR_SYNC) {
+                if sv_analyses.contains(SendSyncBehaviorFlag::API_SYNC_FOR_SYNC) {
                     v.push("ApiSyncforSync")
                 }
-                if sv_analyses.contains(SendSyncAnalysisKind::PHANTOM_SEND_FOR_SEND) {
+                if sv_analyses.contains(SendSyncBehaviorFlag::PHANTOM_SEND_FOR_SEND) {
                     v.push("PhantomSendForSend")
                 }
-                if sv_analyses.contains(SendSyncAnalysisKind::NAIVE_SEND_FOR_SEND) {
+                if sv_analyses.contains(SendSyncBehaviorFlag::NAIVE_SEND_FOR_SEND) {
                     v.push("NaiveSendForSend")
                 }
-                if sv_analyses.contains(SendSyncAnalysisKind::NAIVE_SYNC_FOR_SYNC) {
+                if sv_analyses.contains(SendSyncBehaviorFlag::NAIVE_SYNC_FOR_SYNC) {
                     v.push("NaiveSyncForSync")
                 }
-                if sv_analyses.contains(SendSyncAnalysisKind::RELAX_SEND) {
+                if sv_analyses.contains(SendSyncBehaviorFlag::RELAX_SEND) {
                     v.push("RelaxSend")
                 }
-                if sv_analyses.contains(SendSyncAnalysisKind::RELAX_SYNC) {
+                if sv_analyses.contains(SendSyncBehaviorFlag::RELAX_SYNC) {
                     v.push("RelaxSync")
                 }
                 v.join("/").into()
             }
             AnalysisKind::UnsafeDataflow(bypass_kinds) => {
                 let mut v = vec!["UnsafeDataflow:"];
-                if bypass_kinds.contains(State::READ_FLOW) {
+                if bypass_kinds.contains(UnsafeDataflowBehaviorFlag::READ_FLOW) {
                     v.push("ReadFlow")
                 }
-                if bypass_kinds.contains(State::COPY_FLOW) {
+                if bypass_kinds.contains(UnsafeDataflowBehaviorFlag::COPY_FLOW) {
                     v.push("CopyFlow")
                 }
-                if bypass_kinds.contains(State::VEC_FROM_RAW) {
+                if bypass_kinds.contains(UnsafeDataflowBehaviorFlag::VEC_FROM_RAW) {
                     v.push("VecFromRaw")
                 }
-                if bypass_kinds.contains(State::TRANSMUTE) {
+                if bypass_kinds.contains(UnsafeDataflowBehaviorFlag::TRANSMUTE) {
                     v.push("Transmute")
                 }
-                if bypass_kinds.contains(State::WRITE_FLOW) {
+                if bypass_kinds.contains(UnsafeDataflowBehaviorFlag::WRITE_FLOW) {
                     v.push("WriteFlow")
                 }
-                if bypass_kinds.contains(State::PTR_AS_REF) {
+                if bypass_kinds.contains(UnsafeDataflowBehaviorFlag::PTR_AS_REF) {
                     v.push("PtrAsRef")
                 }
-                if bypass_kinds.contains(State::SLICE_UNCHECKED) {
+                if bypass_kinds.contains(UnsafeDataflowBehaviorFlag::SLICE_UNCHECKED) {
                     v.push("SliceUnchecked")
                 }
-                if bypass_kinds.contains(State::SLICE_FROM_RAW) {
+                if bypass_kinds.contains(UnsafeDataflowBehaviorFlag::SLICE_FROM_RAW) {
                     v.push("SliceFromRaw")
                 }
-                if bypass_kinds.contains(State::VEC_SET_LEN) {
+                if bypass_kinds.contains(UnsafeDataflowBehaviorFlag::VEC_SET_LEN) {
                     v.push("VecSetLen")
                 }
                 v.join("/").into()

@@ -1,6 +1,6 @@
 use std::{cmp::min, collections::VecDeque};
 
-use crate::analysis::State;
+use crate::analysis::UnsafeDataflowBehaviorFlag;
 use crate::ir;
 
 pub trait Graph {
@@ -26,7 +26,7 @@ impl<'tcx> Graph for ir::Body<'tcx> {
 pub struct Reachability<'a, G: Graph> {
     graph: &'a G,
     len: usize,
-    sources: Vec<State>,
+    sources: Vec<UnsafeDataflowBehaviorFlag>,
     sinks: Vec<bool>,
 }
 
@@ -36,7 +36,7 @@ impl<'a, G: Graph> Reachability<'a, G> {
         Reachability {
             graph,
             len: graph_len,
-            sources: vec![State::empty(); graph_len],
+            sources: vec![UnsafeDataflowBehaviorFlag::empty(); graph_len],
             sinks: vec![false; graph_len],
         }
     }
@@ -45,12 +45,12 @@ impl<'a, G: Graph> Reachability<'a, G> {
         &self.graph
     }
 
-    pub fn mark_source(&mut self, id: usize, bypass_kind: State) {
+    pub fn mark_source(&mut self, id: usize, bypass_kind: UnsafeDataflowBehaviorFlag) {
         self.sources[id].insert(bypass_kind);
     }
 
     pub fn unmark_source(&mut self, id: usize) {
-        self.sources[id] = State::empty();
+        self.sources[id] = UnsafeDataflowBehaviorFlag::empty();
     }
 
     pub fn mark_sink(&mut self, id: usize) {
@@ -63,13 +63,13 @@ impl<'a, G: Graph> Reachability<'a, G> {
 
     // Unmark all sources and sinks
     pub fn clear(&mut self) {
-        self.sources = vec![State::empty(); self.len];
+        self.sources = vec![UnsafeDataflowBehaviorFlag::empty(); self.len];
         self.sinks = vec![false; self.len];
     }
 
     // Checks reachability between `self.sources` & `self.sinks`.
-    pub fn find_reachability(&self) -> State {
-        let mut visited = vec![State::empty(); self.len];
+    pub fn find_reachability(&self) -> UnsafeDataflowBehaviorFlag {
+        let mut visited = vec![UnsafeDataflowBehaviorFlag::empty(); self.len];
         let mut work_list = VecDeque::new();
 
         // Initialize work list
@@ -92,7 +92,7 @@ impl<'a, G: Graph> Reachability<'a, G> {
         }
 
         // Check the result
-        let mut ret = State::empty();
+        let mut ret = UnsafeDataflowBehaviorFlag::empty();
         for id in 0..self.len {
             if self.sinks[id] && !visited[id].is_empty() {
                 ret.insert(visited[id]);
