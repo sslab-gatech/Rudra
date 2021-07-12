@@ -7,10 +7,12 @@ use rustc_span::Span;
 use snafu::{Backtrace, Snafu};
 use termcolor::Color;
 
+use crate::graph::GraphTaint;
 use crate::prelude::*;
 use crate::{
     analysis::{AnalysisKind, IntoReportLevel},
-    graph, ir,
+    graph::TaintAnalyzer,
+    ir,
     paths::{self, *},
     report::{Report, ReportLevel},
     utils,
@@ -52,8 +54,8 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
         for (_ty_hir_id, (body_id, related_item_span)) in self.rcx.types_with_related_items() {
             if let Some(status) = inner::UnsafeDataflowBodyAnalyzer::analyze_body(self.rcx, body_id)
             {
-                let behavior_flags = status.behavior_flags();
-                if behavior_flags.report_level() >= self.rcx.report_level() {
+                let behavior_flag = status.behavior_flag();
+                if behavior_flag.report_level() >= self.rcx.report_level() {
                     let mut color_span = unwrap_or!(
                         utils::ColorSpan::new(tcx, related_item_span).context(InvalidSpan) => continue
                     );
@@ -73,7 +75,7 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
                     rudra_report(Report::with_color_span(
                         tcx,
                         self.rcx.report_level(),
-                        AnalysisKind::UnsafeDataflow(behavior_flags),
+                        AnalysisKind::UnsafeDataflow(behavior_flag),
                         format!(
                             "Potential unsafe dataflow issue in `{}`",
                             tcx.def_path_str(hir_map.body_owner_def_id(body_id).to_def_id())
@@ -94,12 +96,12 @@ mod inner {
         strong_bypasses: Vec<Span>,
         weak_bypasses: Vec<Span>,
         unresolvable_generic_functions: Vec<Span>,
-        behavior_flags: BehaviorFlag,
+        behavior_flag: BehaviorFlag,
     }
 
     impl UnsafeDataflowStatus {
-        pub fn behavior_flags(&self) -> BehaviorFlag {
-            self.behavior_flags
+        pub fn behavior_flag(&self) -> BehaviorFlag {
+            self.behavior_flag
         }
 
         pub fn strong_bypass_spans(&self) -> &Vec<Span> {
@@ -164,7 +166,7 @@ mod inner {
         }
 
         fn analyze(mut self) -> UnsafeDataflowStatus {
-            let mut reachability = graph::Reachability::new(self.body);
+            let mut taint_analyzer = TaintAnalyzer::new(self.body);
 
             for (id, terminator) in self.body.terminators().enumerate() {
                 match terminator.kind {
@@ -196,8 +198,8 @@ mod inner {
                                 continue;
                             }
 
-                            reachability
-                                .mark_source(id, *STRONG_BYPASS_MAP.get(&symbol_vec).unwrap());
+                            taint_analyzer
+                                .mark_source(id, STRONG_BYPASS_MAP.get(&symbol_vec).unwrap());
                             self.status
                                 .strong_bypasses
                                 .push(terminator.original.source_info.span);
@@ -212,13 +214,13 @@ mod inner {
                                 continue;
                             }
 
-                            reachability
-                                .mark_source(id, *WEAK_BYPASS_MAP.get(&symbol_vec).unwrap());
+                            taint_analyzer
+                                .mark_source(id, WEAK_BYPASS_MAP.get(&symbol_vec).unwrap());
                             self.status
                                 .weak_bypasses
                                 .push(terminator.original.source_info.span);
                         } else if paths::GENERIC_FN_LIST.contains(&symbol_vec) {
-                            reachability.mark_sink(id);
+                            taint_analyzer.mark_sink(id);
                             self.status
                                 .unresolvable_generic_functions
                                 .push(terminator.original.source_info.span);
@@ -239,7 +241,7 @@ mod inner {
                                     // Here, we are making a two step approximation:
                                     // 1. Unresolvable generic code is potentially user-provided
                                     // 2. User-provided code potentially panics
-                                    reachability.mark_sink(id);
+                                    taint_analyzer.mark_sink(id);
                                     self.status
                                         .unresolvable_generic_functions
                                         .push(terminator.original.source_info.span);
@@ -251,8 +253,7 @@ mod inner {
                 }
             }
 
-            self.status.behavior_flags = reachability.find_reachability();
-
+            self.status.behavior_flag = taint_analyzer.propagate();
             self.status
         }
     }
@@ -369,5 +370,19 @@ impl IntoReportLevel for BehaviorFlag {
         } else {
             ReportLevel::Info
         }
+    }
+}
+
+impl GraphTaint for BehaviorFlag {
+    fn is_empty(&self) -> bool {
+        self.is_all()
+    }
+
+    fn contains(&self, taint: &Self) -> bool {
+        self.contains(*taint)
+    }
+
+    fn join(&mut self, taint: &Self) {
+        *self |= *taint;
     }
 }

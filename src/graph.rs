@@ -1,6 +1,5 @@
 use std::{cmp::min, collections::VecDeque};
 
-use crate::analysis::UnsafeDataflowBehaviorFlag;
 use crate::ir;
 
 pub trait Graph {
@@ -23,20 +22,26 @@ impl<'tcx> Graph for ir::Body<'tcx> {
     }
 }
 
-pub struct Reachability<'a, G: Graph> {
+pub trait GraphTaint: Clone + Default {
+    fn is_empty(&self) -> bool;
+    fn contains(&self, taint: &Self) -> bool;
+    fn join(&mut self, taint: &Self);
+}
+
+pub struct TaintAnalyzer<'a, G: Graph, T: GraphTaint> {
     graph: &'a G,
     len: usize,
-    sources: Vec<UnsafeDataflowBehaviorFlag>,
+    sources: Vec<T>,
     sinks: Vec<bool>,
 }
 
-impl<'a, G: Graph> Reachability<'a, G> {
+impl<'a, G: Graph, T: GraphTaint> TaintAnalyzer<'a, G, T> {
     pub fn new(graph: &'a G) -> Self {
         let graph_len = graph.len();
-        Reachability {
+        TaintAnalyzer {
             graph,
             len: graph_len,
-            sources: vec![UnsafeDataflowBehaviorFlag::empty(); graph_len],
+            sources: vec![T::default(); graph_len],
             sinks: vec![false; graph_len],
         }
     }
@@ -45,12 +50,12 @@ impl<'a, G: Graph> Reachability<'a, G> {
         &self.graph
     }
 
-    pub fn mark_source(&mut self, id: usize, bypass_kind: UnsafeDataflowBehaviorFlag) {
-        self.sources[id].insert(bypass_kind);
+    pub fn mark_source(&mut self, id: usize, taint: &T) {
+        self.sources[id].join(taint);
     }
 
-    pub fn unmark_source(&mut self, id: usize) {
-        self.sources[id] = UnsafeDataflowBehaviorFlag::empty();
+    pub fn clear_source(&mut self, id: usize) {
+        self.sources[id] = T::default();
     }
 
     pub fn mark_sink(&mut self, id: usize) {
@@ -63,39 +68,41 @@ impl<'a, G: Graph> Reachability<'a, G> {
 
     // Unmark all sources and sinks
     pub fn clear(&mut self) {
-        self.sources = vec![UnsafeDataflowBehaviorFlag::empty(); self.len];
+        self.sources = vec![T::default(); self.len];
         self.sinks = vec![false; self.len];
     }
 
     // Checks reachability between `self.sources` & `self.sinks`.
-    pub fn find_reachability(&self) -> UnsafeDataflowBehaviorFlag {
-        let mut visited = vec![UnsafeDataflowBehaviorFlag::empty(); self.len];
+    pub fn propagate(&self) -> T {
+        let mut taint_state = vec![T::default(); self.len];
         let mut work_list = VecDeque::new();
 
         // Initialize work list
         for id in 0..self.len {
             if !self.sources[id].is_empty() {
-                visited[id].insert(self.sources[id]);
-                work_list.push_back((id, self.sources[id]));
+                taint_state[id].join(&self.sources[id]);
+                work_list.push_back(id);
             }
         }
 
         // Breadth-first propagation
-        while let Some((current, bypass_kind)) = work_list.pop_front() {
+        while let Some(current) = work_list.pop_front() {
             for next in self.graph.next(current) {
-                // If-condition below is to prevent getting stuck in loops
-                if !visited[next].contains(bypass_kind) {
-                    visited[next].insert(bypass_kind);
-                    work_list.push_back((next, bypass_kind));
+                let mut next_state = std::mem::take(&mut taint_state[next]);
+                let taint = &taint_state[current];
+                if !next_state.contains(taint) {
+                    next_state.join(taint);
+                    work_list.push_back(next);
                 }
+                taint_state[next] = next_state;
             }
         }
 
-        // Check the result
-        let mut ret = UnsafeDataflowBehaviorFlag::empty();
+        // Join all taints in the sink nodes
+        let mut ret = T::default();
         for id in 0..self.len {
-            if self.sinks[id] && !visited[id].is_empty() {
-                ret.insert(visited[id]);
+            if self.sinks[id] && !taint_state[id].is_empty() {
+                ret.join(&taint_state[id]);
             }
         }
 
