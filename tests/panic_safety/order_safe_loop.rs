@@ -1,7 +1,7 @@
 /*!
 ```rudra-test
 test_type = "normal"
-expected_analyzers = ["UnsafeDataflow"]
+expected_analyzers = []
 ```
 !*/
 
