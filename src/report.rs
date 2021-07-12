@@ -50,11 +50,14 @@ pub fn rudra_report(report: Report) {
     REPORT_LOGGER.get().unwrap().log(report);
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ReportLevel {
-    Error,
-    Warning,
-    Info,
+    // Rank: High
+    Error = 2,
+    // Rank: Med
+    Warning = 1,
+    // Rank: Low
+    Info = 0,
 }
 
 impl fmt::Display for ReportLevel {

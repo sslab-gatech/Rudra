@@ -22,20 +22,26 @@ impl<'tcx> Graph for ir::Body<'tcx> {
     }
 }
 
-pub struct Reachability<'a, G: Graph> {
+pub trait GraphTaint: Clone + Default {
+    fn is_empty(&self) -> bool;
+    fn contains(&self, taint: &Self) -> bool;
+    fn join(&mut self, taint: &Self);
+}
+
+pub struct TaintAnalyzer<'a, G: Graph, T: GraphTaint> {
     graph: &'a G,
     len: usize,
-    sources: Vec<bool>,
+    sources: Vec<T>,
     sinks: Vec<bool>,
 }
 
-impl<'a, G: Graph> Reachability<'a, G> {
+impl<'a, G: Graph, T: GraphTaint> TaintAnalyzer<'a, G, T> {
     pub fn new(graph: &'a G) -> Self {
         let graph_len = graph.len();
-        Reachability {
+        TaintAnalyzer {
             graph,
             len: graph_len,
-            sources: vec![false; graph_len],
+            sources: vec![T::default(); graph_len],
             sinks: vec![false; graph_len],
         }
     }
@@ -44,12 +50,12 @@ impl<'a, G: Graph> Reachability<'a, G> {
         &self.graph
     }
 
-    pub fn mark_source(&mut self, id: usize) {
-        self.sources[id] = true;
+    pub fn mark_source(&mut self, id: usize, taint: &T) {
+        self.sources[id].join(taint);
     }
 
-    pub fn unmark_source(&mut self, id: usize) {
-        self.sources[id] = false;
+    pub fn clear_source(&mut self, id: usize) {
+        self.sources[id] = T::default();
     }
 
     pub fn mark_sink(&mut self, id: usize) {
@@ -62,18 +68,19 @@ impl<'a, G: Graph> Reachability<'a, G> {
 
     // Unmark all sources and sinks
     pub fn clear(&mut self) {
-        self.sources = vec![false; self.len];
+        self.sources = vec![T::default(); self.len];
         self.sinks = vec![false; self.len];
     }
 
-    pub fn is_reachable(&self) -> bool {
-        let mut visited = vec![false; self.len];
+    // Checks reachability between `self.sources` & `self.sinks`.
+    pub fn propagate(&self) -> T {
+        let mut taint_state = vec![T::default(); self.len];
         let mut work_list = VecDeque::new();
 
         // Initialize work list
         for id in 0..self.len {
-            if self.sources[id] {
-                visited[id] = true;
+            if !self.sources[id].is_empty() {
+                taint_state[id].join(&self.sources[id]);
                 work_list.push_back(id);
             }
         }
@@ -81,21 +88,25 @@ impl<'a, G: Graph> Reachability<'a, G> {
         // Breadth-first propagation
         while let Some(current) = work_list.pop_front() {
             for next in self.graph.next(current) {
-                if !visited[next] {
-                    visited[next] = true;
+                let mut next_state = std::mem::take(&mut taint_state[next]);
+                let taint = &taint_state[current];
+                if !next_state.contains(taint) {
+                    next_state.join(taint);
                     work_list.push_back(next);
                 }
+                taint_state[next] = next_state;
             }
         }
 
-        // Check the result
+        // Join all taints in the sink nodes
+        let mut ret = T::default();
         for id in 0..self.len {
-            if self.sinks[id] && visited[id] {
-                return true;
+            if self.sinks[id] && !taint_state[id].is_empty() {
+                ret.join(&taint_state[id]);
             }
         }
 
-        return false;
+        return ret;
     }
 }
 

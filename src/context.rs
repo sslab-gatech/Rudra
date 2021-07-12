@@ -10,6 +10,7 @@ use snafu::Snafu;
 
 use crate::ir;
 use crate::prelude::*;
+use crate::report::ReportLevel;
 use crate::visitor::{create_adt_impl_map, AdtImplMap, RelatedFnCollector, RelatedItemMap};
 
 #[derive(Debug, Snafu, Clone)]
@@ -34,20 +35,21 @@ pub struct RudraCtxtOwner<'tcx> {
     tcx: TyCtxt<'tcx>,
     translation_cache: DashMap<DefId, Rc<TranslationResult<'tcx, ir::Body<'tcx>>>>,
     related_item_cache: RelatedItemMap,
-    // ADT symbol => list of associated impl blocks
     adt_impl_cache: AdtImplMap<'tcx>,
+    report_level: ReportLevel,
 }
 
 /// Visit MIR body and returns a Rudra IR function
 /// Check rustc::mir::visit::Visitor for possible visit targets
 /// https://doc.rust-lang.org/nightly/nightly-rustc/rustc/mir/visit/trait.Visitor.html
 impl<'tcx> RudraCtxtOwner<'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>) -> Self {
+    pub fn new(tcx: TyCtxt<'tcx>, report_level: ReportLevel) -> Self {
         RudraCtxtOwner {
             tcx,
             translation_cache: DashMap::new(),
             related_item_cache: RelatedFnCollector::collect(tcx),
             adt_impl_cache: create_adt_impl_map(tcx),
+            report_level,
         }
     }
 
@@ -202,5 +204,9 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
 
     pub fn index_adt_cache(&self, adt_did: &DefId) -> Option<&Vec<(&HirId, Ty)>> {
         self.adt_impl_cache.get(adt_did)
+    }
+
+    pub fn report_level(&self) -> ReportLevel {
+        self.report_level
     }
 }

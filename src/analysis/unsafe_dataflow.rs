@@ -1,13 +1,19 @@
 use rustc_hir::{def_id::DefId, BodyId};
-use rustc_middle::ty::{Instance, ParamEnv};
+use rustc_middle::mir::Operand;
+use rustc_middle::ty::subst::SubstsRef;
+use rustc_middle::ty::{Instance, ParamEnv, TyKind};
 use rustc_span::Span;
 
 use snafu::{Backtrace, Snafu};
 use termcolor::Color;
 
+use crate::graph::GraphTaint;
 use crate::prelude::*;
 use crate::{
-    graph, ir, paths,
+    analysis::{AnalysisKind, IntoReportLevel},
+    graph::TaintAnalyzer,
+    ir,
+    paths::{self, *},
     report::{Report, ReportLevel},
     utils,
     visitor::ContainsUnsafe,
@@ -48,7 +54,10 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
         for (_ty_hir_id, (body_id, related_item_span)) in self.rcx.types_with_related_items() {
             if let Some(status) = inner::UnsafeDataflowBodyAnalyzer::analyze_body(self.rcx, body_id)
             {
-                if status.is_unsafe() {
+                let behavior_flag = status.behavior_flag();
+                if !behavior_flag.is_empty()
+                    && behavior_flag.report_level() >= self.rcx.report_level()
+                {
                     let mut color_span = unwrap_or!(
                         utils::ColorSpan::new(tcx, related_item_span).context(InvalidSpan) => continue
                     );
@@ -65,16 +74,10 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
                         color_span.add_sub_span(Color::Cyan, span);
                     }
 
-                    let level = if status.strong_bypass_spans().is_empty() {
-                        ReportLevel::Info
-                    } else {
-                        ReportLevel::Warning
-                    };
-
                     rudra_report(Report::with_color_span(
                         tcx,
-                        level,
-                        "UnsafeDataflow",
+                        self.rcx.report_level(),
+                        AnalysisKind::UnsafeDataflow(behavior_flag),
                         format!(
                             "Potential unsafe dataflow issue in `{}`",
                             tcx.def_path_str(hir_map.body_owner_def_id(body_id).to_def_id())
@@ -95,12 +98,12 @@ mod inner {
         strong_bypasses: Vec<Span>,
         weak_bypasses: Vec<Span>,
         unresolvable_generic_functions: Vec<Span>,
-        is_unsafe: bool,
+        behavior_flag: BehaviorFlag,
     }
 
     impl UnsafeDataflowStatus {
-        pub fn is_unsafe(&self) -> bool {
-            self.is_unsafe
+        pub fn behavior_flag(&self) -> BehaviorFlag {
+            self.behavior_flag
         }
 
         pub fn strong_bypass_spans(&self) -> &Vec<Span> {
@@ -165,31 +168,61 @@ mod inner {
         }
 
         fn analyze(mut self) -> UnsafeDataflowStatus {
-            let mut reachability = graph::Reachability::new(self.body);
+            let mut taint_analyzer = TaintAnalyzer::new(self.body);
 
             for (id, terminator) in self.body.terminators().enumerate() {
                 match terminator.kind {
                     ir::TerminatorKind::StaticCall {
                         callee_did,
                         callee_substs,
+                        ref args,
                         ..
                     } => {
-                        let ext = self.rcx.tcx().ext();
-
+                        let tcx = self.rcx.tcx();
+                        let ext = tcx.ext();
                         // Check for lifetime bypass
                         let symbol_vec = ext.get_def_path(callee_did);
                         if paths::STRONG_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
-                            reachability.mark_source(id);
+                            if fn_called_on_copy(
+                                self.rcx,
+                                &self.body,
+                                (callee_did, callee_substs, args),
+                                &[&PTR_READ[..], &PTR_DIRECT_READ[..]],
+                            ) {
+                                // read on Copy types is not a lifetime bypass.
+                                continue;
+                            }
+
+                            if ext.match_def_path(callee_did, &VEC_SET_LEN)
+                                && vec_set_len_to_0(self.rcx, callee_did, args)
+                            {
+                                // Leaking data is safe (`vec.set_len(0);`)
+                                continue;
+                            }
+
+                            taint_analyzer
+                                .mark_source(id, STRONG_BYPASS_MAP.get(&symbol_vec).unwrap());
                             self.status
                                 .strong_bypasses
                                 .push(terminator.original.source_info.span);
                         } else if paths::WEAK_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
-                            reachability.mark_source(id);
+                            if fn_called_on_copy(
+                                self.rcx,
+                                &self.body,
+                                (callee_did, callee_substs, args),
+                                &[&PTR_WRITE[..], &PTR_DIRECT_WRITE[..]],
+                            ) {
+                                // writing Copy types is not a lifetime bypass.
+                                continue;
+                            }
+
+                            taint_analyzer
+                                .mark_source(id, WEAK_BYPASS_MAP.get(&symbol_vec).unwrap());
                             self.status
                                 .weak_bypasses
                                 .push(terminator.original.source_info.span);
                         } else if paths::GENERIC_FN_LIST.contains(&symbol_vec) {
-                            reachability.mark_sink(id);
+                            taint_analyzer.mark_sink(id);
                             self.status
                                 .unresolvable_generic_functions
                                 .push(terminator.original.source_info.span);
@@ -210,7 +243,7 @@ mod inner {
                                     // Here, we are making a two step approximation:
                                     // 1. Unresolvable generic code is potentially user-provided
                                     // 2. User-provided code potentially panics
-                                    reachability.mark_sink(id);
+                                    taint_analyzer.mark_sink(id);
                                     self.status
                                         .unresolvable_generic_functions
                                         .push(terminator.original.source_info.span);
@@ -222,8 +255,7 @@ mod inner {
                 }
             }
 
-            self.status.is_unsafe = reachability.is_reachable();
-
+            self.status.behavior_flag = taint_analyzer.propagate();
             self.status
         }
     }
@@ -246,5 +278,113 @@ mod inner {
                 }
             }
         }
+    }
+
+    fn fn_called_on_copy<'tcx>(
+        rcx: RudraCtxt<'tcx>,
+        caller_body: &ir::Body<'tcx>,
+        (callee_did, callee_substs, callee_args): (DefId, SubstsRef<'tcx>, &Vec<Operand<'tcx>>),
+        paths: &[&[&str]],
+    ) -> bool {
+        let tcx = rcx.tcx();
+        let ext = tcx.ext();
+        for path in paths.iter() {
+            if ext.match_def_path(callee_did, path) {
+                for arg in callee_args.iter() {
+                    if_chain! {
+                        if let Operand::Move(place) = arg;
+                        let place_ty = place.ty(caller_body, tcx);
+                        if let TyKind::RawPtr(ty_and_mut) = place_ty.ty.kind;
+                        let pointed_ty = ty_and_mut.ty;
+                        if let Some(copy_trait_did) = tcx.lang_items().copy_trait();
+                        if tcx.type_implements_trait((
+                            copy_trait_did,
+                            pointed_ty,
+                            callee_substs,
+                            tcx.param_env(callee_did),
+                        ));
+                        then {
+                            return true;
+                        }
+                    }
+                    // No need to inspect beyond first arg of the
+                    // target bypass functions.
+                    break;
+                }
+            }
+        }
+        false
+    }
+
+    // Check if the argument of `Vec::set_len()` is 0_usize.
+    fn vec_set_len_to_0<'tcx>(
+        rcx: RudraCtxt<'tcx>,
+        callee_did: DefId,
+        args: &Vec<Operand<'tcx>>,
+    ) -> bool {
+        let tcx = rcx.tcx();
+        for arg in args.iter() {
+            if_chain! {
+                if let Operand::Constant(c) = arg;
+                if let Some(c_val) = c.literal.try_eval_usize(
+                    tcx,
+                    tcx.param_env(callee_did),
+                );
+                if c_val == 0;
+                then {
+                    // Leaking(`vec.set_len(0);`) is safe.
+                    return true;
+                }
+            }
+        }
+        false
+    }
+}
+
+// Unsafe Dataflow BypassKind.
+// Used to associate each Unsafe-Dataflow bug report with its cause.
+bitflags! {
+    #[derive(Default)]
+    pub struct BehaviorFlag: u16 {
+        const READ_FLOW = 0b00000001;
+        const COPY_FLOW = 0b00000010;
+        const VEC_FROM_RAW = 0b00000100;
+        const TRANSMUTE = 0b00001000;
+        const WRITE_FLOW = 0b00010000;
+        const PTR_AS_REF = 0b00100000;
+        const SLICE_UNCHECKED = 0b01000000;
+        const SLICE_FROM_RAW = 0b10000000;
+        const VEC_SET_LEN = 0b100000000;
+    }
+}
+
+impl IntoReportLevel for BehaviorFlag {
+    fn report_level(&self) -> ReportLevel {
+        use BehaviorFlag as Flag;
+
+        let high = Flag::VEC_FROM_RAW | Flag::VEC_SET_LEN;
+        let med = Flag::READ_FLOW | Flag::COPY_FLOW | Flag::WRITE_FLOW;
+
+        if !(*self & high).is_empty() {
+            ReportLevel::Error
+        } else if !(*self & med).is_empty() {
+            ReportLevel::Warning
+        } else {
+            ReportLevel::Info
+        }
+    }
+}
+
+impl GraphTaint for BehaviorFlag {
+    fn is_empty(&self) -> bool {
+        self.is_all()
+    }
+
+    fn contains(&self, taint: &Self) -> bool {
+        self.contains(*taint)
+    }
+
+    fn join(&mut self, taint: &Self) {
+        *self |= *taint;
     }
 }

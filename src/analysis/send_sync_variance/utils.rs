@@ -29,16 +29,25 @@ pub fn generic_param_idx_mapper<'tcx>(
     return generic_param_idx_mapper;
 }
 
+const OWNING_ADTS: &[&[&str]] = &[&["core", "option", "Option"], &["core", "result", "Result"]];
+
 // Within the given `ty`,
 // return generic parameters that exist as owned `T`
 pub fn owned_generic_params_in_ty<'tcx>(
     tcx: TyCtxt<'tcx>,
     ty: Ty<'tcx>,
 ) -> impl IntoIterator<Item = PreMapIdx> {
+    let ext = tcx.ext();
     let mut owned_generic_params = FxHashSet::default();
 
     let mut worklist = vec![ty];
+    let mut visited = FxHashSet::default();
     while let Some(ty) = worklist.pop() {
+        if visited.contains(&ty) {
+            continue;
+        }
+
+        visited.insert(ty);
         match ty.kind {
             ty::TyKind::Param(param_ty) => {
                 owned_generic_params.insert(param_ty.index);
@@ -53,9 +62,17 @@ pub fn owned_generic_params_in_ty<'tcx>(
                 //   do we need special handling for types that own T but doesn't have a field `T`?
                 //   ex) Arc<T> or Rc<T> ?
 
-                for adt_variant in adt_def.variants.iter() {
-                    for adt_field in adt_variant.fields.iter() {
-                        worklist.push(adt_field.ty(tcx, substs));
+                // Try limiting to cases like Option<T> & Result<T, !> to reduce FP rate.
+                for path in OWNING_ADTS {
+                    if ext.match_def_path(adt_def.did, path) {
+                        for adt_variant in adt_def.variants.iter() {
+                            for adt_field in adt_variant.fields.iter() {
+                                let ty = adt_field.ty(tcx, substs);
+                                if let ty::TyKind::Param(_) = ty.kind {
+                                    worklist.push(ty);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -83,7 +100,13 @@ pub fn borrowed_generic_params_in_ty<'tcx>(
     let mut borrowed_generic_params = FxHashSet::default();
 
     let mut worklist = vec![(ty, false)];
+    let mut visited = FxHashSet::default();
     while let Some((ty, borrowed)) = worklist.pop() {
+        if visited.contains(&ty) {
+            continue;
+        }
+
+        visited.insert(ty);
         match ty.kind {
             ty::TyKind::Param(param_ty) => {
                 if borrowed {
@@ -98,10 +121,6 @@ pub fn borrowed_generic_params_in_ty<'tcx>(
                     worklist.push((ty.boxed_ty(), borrowed));
                     continue;
                 }
-                // TODO:
-                //   Besides `Box<T>`,
-                //   do we need special handling for types that own T but doesn't have a field `T`?
-                //   ex) Arc<T> or Rc<T> ?
 
                 for adt_variant in adt_def.variants.iter() {
                     for adt_field in adt_variant.fields.iter() {
@@ -166,9 +185,11 @@ pub fn find_pseudo_owned_in_fn_ctxt<'tcx>(
                 //                     |    |
                 //             (param_ty)  (trait_predicate.trait_ref)
                 if PSEUDO_OWNED.contains(&tcx.def_path_str(trait_predicate.def_id()).as_str()) {
-                    if let ty::TyKind::Param(param_1) = substs_types[1].kind {
-                        fn_ctxt_pseudo_owned_param_idx_map
-                            .insert(PreMapIdx(param_ty.index), PreMapIdx(param_1.index));
+                    if substs_types.len() > 1 {
+                        if let ty::TyKind::Param(param_1) = substs_types[1].kind {
+                            fn_ctxt_pseudo_owned_param_idx_map
+                                .insert(PreMapIdx(param_ty.index), PreMapIdx(param_1.index));
+                        }
                     }
                 }
             }

@@ -367,10 +367,6 @@ fn in_cargo_rudra() {
 
         // Add suffix to RUDRA_REPORT_PATH
         if let Ok(report) = env::var("RUDRA_REPORT_PATH") {
-            // TODO: RUDRA_REPORT_PATH does not play well with `RUDRA_ALSO_ANALYZE`
-            //       from below, currently only the last crate analyzed will make
-            //       it into the report. Maybe use `CARGO_PKG_NAME` for the prefix
-            //       to avoid this?
             cmd.env(
                 "RUDRA_REPORT_PATH",
                 format!("{}-{}-{}", report, kind, &target.name),
@@ -494,6 +490,17 @@ fn inside_cargo_rustc() {
     if is_direct_target || is_additional_target {
         let mut cmd = Command::new(find_rudra());
         cmd.args(std::env::args().skip(2)); // skip `cargo-rudra rustc`
+
+        if let Ok(report) = env::var("RUDRA_REPORT_PATH") {
+            cmd.env(
+                "RUDRA_REPORT_PATH",
+                format!(
+                    "{}-{}",
+                    report,
+                    env::var("CARGO_PKG_NAME").unwrap_or(String::from("unknown"))
+                ),
+            );
+        }
 
         // This is the local crate that we want to analyze with Rudra.
         // (Testing `target_crate` is needed to exclude build scripts.)

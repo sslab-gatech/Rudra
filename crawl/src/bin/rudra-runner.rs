@@ -115,7 +115,7 @@ fn main() -> Result<()> {
                 &[
                     (
                         "RUSTUP_TOOLCHAIN",
-                        include_str!("../../../rust-toolchain").as_ref(),
+                        include_str!("../../../rust-toolchain").trim().as_ref(),
                     ),
                     ("CARGO_HOME", rudra_home_dir.cargo_home_dir().as_ref()),
                     ("SCCACHE_DIR", rudra_home_dir.sccache_home_dir().as_ref()),

@@ -68,6 +68,11 @@ class TestResult:
             return "\u001b[31;1mFAIL          \u001b[0m  {}\n{}".format(self.test_case.path, self.failure)
 
 
+def extract_analyzer_name(report):
+    analyzer = report["analyzer"]
+    return analyzer.split(":/")[0]
+
+
 def run_test(test_case):
     metadata = test_case.metadata()
     test_type = metadata["test_type"]
@@ -95,7 +100,7 @@ def run_test(test_case):
                 reports = tomlkit.loads(reports_str)
             expected_analyzers = set(metadata["expected_analyzers"])
             if "reports" in reports:
-                reported_analyzers = set(map(lambda report: report["analyzer"], reports["reports"]))
+                reported_analyzers = set(map(extract_analyzer_name, reports["reports"]))
             else:
                 reported_analyzers = set()
 
