@@ -12,6 +12,11 @@ def download_crate(crate_name, version):
         return subprocess.check_output(['tar', 'xvf', f.name]).decode('ascii').split('\n')[0].split('/')[0]
 
 
+def extract_analyzer_name(report):
+    analyzer = report["analyzer"]
+    return analyzer.split(":/")[0]
+
+
 def run_rudra(crate_name, crate_path):
     with tempfile.NamedTemporaryFile(prefix="rudra") as report_file:
         env_dict = dict(os.environ)
@@ -27,7 +32,7 @@ def run_rudra(crate_name, crate_path):
         except subprocess.CalledProcessError as err:
             print(err.stdout, file=sys.stderr)
             raise err
-        with open(report_file.name + '-lib-' + crate_name) as report_file_handle:
+        with open(report_file.name + '-lib-' + crate_name + '-' + crate_name) as report_file_handle:
             return tomlkit.loads(report_file_handle.read())['reports']
 
 
@@ -38,7 +43,7 @@ if __name__ == "__main__":
         rudra_reports = run_rudra(crate['name'], download_crate(crate['name'], crate['version']))
         rudra_reports_set = set()
         for rudra_report in rudra_reports:
-            rudra_reports_set.add((rudra_report['analyzer'], rudra_report['location']))
+            rudra_reports_set.add((extract_analyzer_name(rudra_report), rudra_report['location']))
         for expected_report in crate['expected_reports']:
             expected_report = tuple(expected_report)
             if expected_report not in rudra_reports_set:
