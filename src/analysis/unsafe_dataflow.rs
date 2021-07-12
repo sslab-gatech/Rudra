@@ -55,7 +55,9 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
             if let Some(status) = inner::UnsafeDataflowBodyAnalyzer::analyze_body(self.rcx, body_id)
             {
                 let behavior_flag = status.behavior_flag();
-                if behavior_flag.report_level() >= self.rcx.report_level() {
+                if !behavior_flag.is_empty()
+                    && behavior_flag.report_level() >= self.rcx.report_level()
+                {
                     let mut color_span = unwrap_or!(
                         utils::ColorSpan::new(tcx, related_item_span).context(InvalidSpan) => continue
                     );
