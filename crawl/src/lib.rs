@@ -34,7 +34,7 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
     let mut headers = header::HeaderMap::new();
     headers.insert(
         header::USER_AGENT,
-        header::HeaderValue::from_static("rudra runner 0.1.0 (yechan@gatech.edu)"),
+        header::HeaderValue::from_static("rudra runner 0.1.0"),
     );
 
     Client::builder()
