@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -e
+
+if [[ $# -eq 0 ]]; then
+    echo 'Please provide the target directory as an argument'
+    exit 1
+fi
+
+if [[ ! -d $1 ]]; then
+    echo "$1 is not a directory"
+    exit 1
+fi
+
+if [[ -z $RUDRA_RUNNER_HOME ]]; then
+    echo '$RUDRA_RUNNER_HOME is not set'
+    exit 1
+fi
+
+docker run -t --rm --user "$(id -u)":"$(id -g)" -v "$RUDRA_RUNNER_HOME":/tmp/rudra-runner-home \
+  --env CARGO_HOME=/tmp/rudra-runner-home/cargo_home \
+  --env SCCACHE_DIR=/tmp/rudra-runner-home/sccache_home --env SCCACHE_CACHE_SIZE=10T \
+  --env RUSTUP_TOOLCHAIN=nightly-2020-08-26 \
+  -v "$1":/tmp/rudra -w /tmp/rudra rudra:latest cargo rudra -Zno-index-update
