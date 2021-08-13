@@ -12,8 +12,9 @@ The easiest way to use Rudra is to use [Docker](https://www.docker.com/).
 2. Run `docker build . -t rudra:latest`.
 3. Run `./setup_rudra_runner_home.py <directory>` and set `RUDRA_RUNNER_HOME` to that directory.
    Example: `./setup_rudra_runner_home.py ~/rudra-home && export RUDRA_RUNNER_HOME=$HOME/rudra-home`.
-    * `./setup_rudra_runner_home_fixed.py` setup your environment to use a fixed cargo index.
-      In general, `./setup_rudra_runner_home.py` should be used in most of the case unless you want to reproduce the result in the paper.
+    * There are two scripts, `./setup_rudra_runner_home.py` and `./setup_rudra_runner_home_fixed.py`.
+      In general, `./setup_rudra_runner_home.py` should be used unless you want to reproduce the result of the paper
+      with a fixed cargo index.
 4. Add `docker-helper` in Rudra repository to `$PATH`. Now you are ready to test Rudra!
 
 For development, you might want to install Rudra on your host system.
