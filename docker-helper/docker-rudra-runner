@@ -2,16 +2,6 @@
 
 set -e
 
-if [[ $# -eq 0 ]]; then
-    echo 'Please provide the target directory as an argument'
-    exit 1
-fi
-
-if [[ ! -d $1 ]]; then
-    echo "$1 is not a directory"
-    exit 1
-fi
-
 if [[ -z $RUDRA_RUNNER_HOME ]]; then
     echo '$RUDRA_RUNNER_HOME is not set'
     exit 1
