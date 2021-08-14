@@ -1,8 +1,12 @@
 #!/bin/bash
 
+# First argument: crate directory
+# Second argument: 
+
 set -e
 
 if [[ $# -eq 0 ]]; then
+    echo "Usage: $0 <target_dir> [report_path]"
     echo 'Please provide the target directory as an argument'
     exit 1
 fi
@@ -17,8 +21,16 @@ if [[ -z $RUDRA_RUNNER_HOME ]]; then
     exit 1
 fi
 
+if [[ -n $2 ]]; then
+    echo "[*] Creating report directory at $2"
+    mkdir $2
+    ABS_PATH=$(realpath $2)
+    MORE_ARGS="-v $ABS_PATH:/tmp/report --env RUDRA_REPORT_PATH=/tmp/report/report"
+fi
+
 docker run -t --rm --user "$(id -u)":"$(id -g)" -v "$RUDRA_RUNNER_HOME":/tmp/rudra-runner-home \
-  --env CARGO_HOME=/tmp/rudra-runner-home/cargo_home \
-  --env SCCACHE_DIR=/tmp/rudra-runner-home/sccache_home --env SCCACHE_CACHE_SIZE=10T \
-  --env RUSTUP_TOOLCHAIN=nightly-2020-08-26 \
-  -v "$1":/tmp/rudra -w /tmp/rudra rudra:latest cargo rudra -Zno-index-update
+    $MORE_ARGS \
+    --env CARGO_HOME=/tmp/rudra-runner-home/cargo_home \
+    --env SCCACHE_DIR=/tmp/rudra-runner-home/sccache_home --env SCCACHE_CACHE_SIZE=10T \
+    --env RUSTUP_TOOLCHAIN=nightly-2020-08-26 \
+    -v "$1":/tmp/rudra -w /tmp/rudra rudra:latest cargo rudra -Zno-index-update
