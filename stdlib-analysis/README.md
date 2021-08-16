@@ -6,6 +6,28 @@ standard library using Rudra.
 The process is roughly based on [RalfJung's miri-test-libstd](https://github.com/RalfJung/miri-test-libstd)
 and uses `xargo` to build the standard library.
 
+We offer two ways to analyze the standard library:
+
+# Running Through Docker
+
+The easiest way to analyze the standard library with Rudra is under docker.
+
+1. Build the base `rudra` docker image in the top level directory and tag it
+   as `rudra`.
+
+2. Build the docker image from this folder: `docker build -t rudra-std .`
+
+3. Run the docker image: `docker run -it rudra-std`
+
+(Note: the run command will output a large number of reports, we recommend
+ piping them to a file e.g `docker run -it rudra-std > /tmp/std-report.txt` to
+ go through them more easily.)
+
+# Running Manually
+
+Alternatively, you can manually try to follow the steps that Docker will do
+automatically for you as follows:
+
 ## Pre-requisites
 
 1. Set up `rudra` as per instructions in the main README.
