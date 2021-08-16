@@ -88,7 +88,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                         .or_insert_with(|| Vec::with_capacity(2))
                         .push(Report::with_hir_id(
                             tcx,
-                            self.rcx.report_level(),
+                            send_sync_analyses.report_level(),
                             AnalysisKind::SendSyncVariance(send_sync_analyses),
                             "Suspicious impl of `Send` found",
                             impl_hir_id,
@@ -118,7 +118,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                         .or_insert_with(|| Vec::with_capacity(2))
                         .push(Report::with_hir_id(
                             tcx,
-                            self.rcx.report_level(),
+                            send_sync_analyses.report_level(),
                             AnalysisKind::SendSyncVariance(send_sync_analyses),
                             "Suspicious impl of `Sync` found",
                             impl_hir_id,

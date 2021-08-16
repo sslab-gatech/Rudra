@@ -76,7 +76,7 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
 
                     rudra_report(Report::with_color_span(
                         tcx,
-                        self.rcx.report_level(),
+                        behavior_flag.report_level(),
                         AnalysisKind::UnsafeDataflow(behavior_flag),
                         format!(
                             "Potential unsafe dataflow issue in `{}`",
