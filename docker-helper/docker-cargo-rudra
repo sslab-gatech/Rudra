@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# First argument: crate directory
-# Second argument: 
+# First argument: target directory
+# Second argument: report directory
 
 set -e
 
