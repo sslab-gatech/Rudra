@@ -1,6 +1,13 @@
 # Rudra
 
 Rudra is a static analyzer to detect common undefined behaviors in Rust programs.
+It is capable of analyzing single Rust packages as well as all the packages on
+crates.io.
+
+Rudra and its associated paper were presented at the
+*Proceedings of the 28th ACM Symposium on Operating Systems Principles 2021*
+(SOSP '21). ([PDF](https://github.com/sslab-gatech/Rudra-Artifacts/raw/master/paper/sosp21-paper341.pdf))
+
 
 TODO: briefly explain bug patterns, add links to our paper and PoC repositories.
 
@@ -27,3 +34,13 @@ docker-cargo-rudra <directory>
 ```
 
 The log and report are printed to stderr by default.
+
+## Bug Types Detected by Rudra
+
+## Bugs Found by Rudra
+
+Rudra was ran on the entirety of crates.io state as of July 4th, 2020 as well
+as the Rust standard library from `nightly-2020-08-26`. It managed to find 264
+new memory safety issues across the Rust ecosystem which resulted in 78 CVEs.
+
+The details of these bugs can be found in the [Rudra-PoC repo](https://github.com/sslab-gatech/Rudra-PoC).
