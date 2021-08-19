@@ -9,8 +9,6 @@ Rudra and its associated paper were presented at the
 (SOSP '21). ([PDF](https://github.com/sslab-gatech/Rudra-Artifacts/raw/master/paper/sosp21-paper341.pdf))
 
 
-TODO: briefly explain bug patterns, add links to our paper and PoC repositories.
-
 ## Usage
 
 The easiest way to use Rudra is to use [Docker](https://www.docker.com/).
@@ -36,6 +34,70 @@ docker-cargo-rudra <directory>
 The log and report are printed to stderr by default.
 
 ## Bug Types Detected by Rudra
+
+Rudra currently detects the following bug types.
+
+### Panic Safety (Unsafe code that can create memory-safety issues when panicked)
+
+Detects when unsafe code may lead to memory safety issues if a user provided
+closure or trait panics. For example, consider a function that dereferences a
+pointer with `ptr::read`, duplicating its ownership and then calls a user
+provided function `f`. This can lead to a double-free if the function `f`
+panics.
+
+See [this section of the Rustonomicon](https://doc.rust-lang.org/nomicon/exception-safety.html)
+for more details.
+
+```rust
+while idx < len {
+    let ch = unsafe { self.get_unchecked(idx..len).chars().next().unwrap() };
+    let ch_len = ch.len_utf8();
+
+    // Call to user provided predicate function f that can panic.
+    if !f(ch) {
+        del_bytes += ch_len;
+    } else if del_bytes > 0 {
+        unsafe {
+            ptr::copy(
+                self.vec.as_ptr().add(idx),
+                self.vec.as_mut_ptr().add(idx - del_bytes),
+                ch_len,
+            );
+        }
+    }
+
+    // Point idx to the next char
+    idx += ch_len;
+}
+```
+
+Example: [rust#78498](https://github.com/rust-lang/rust/issues/78498)
+
+### Higher Order Invariant (Assumed properties about traits)
+
+When code assumes certain properties about trait methods that aren't enforced,
+such as expecting the `Borrow` trait to return the same reference on multiple
+calls to `borrow`.
+
+```rust
+let mut g = Guard { len: buf.len(), buf }; 
+// ...
+  Ok(n) => g.len += n, 
+```
+
+Example: [rust#80894](https://github.com/rust-lang/rust/issues/80894)
+
+### Send Sync Variance (Unrestricted Send or Sync on generic types)
+
+This occurs when a type generic over `T` implements Send or Sync without having
+correct bounds on `T`.
+
+```rust
+unsafe impl<T: ?Sized + Send, U: ?Sized> Send for MappedMutexGuard<'_, T, U> {} 
+unsafe impl<T: ?Sized + Sync, U: ?Sized> Sync for MappedMutexGuard<'_, T, U> {} 
+```
+
+Example: [futures#2239](https://github.com/rust-lang/futures-rs/issues/2239)
 
 ## Bugs Found by Rudra
 
