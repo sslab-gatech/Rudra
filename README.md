@@ -36,6 +36,7 @@ The log and report are printed to stderr by default.
 ## Bug Types Detected by Rudra
 
 Rudra currently detects the following bug types.
+For the full detail, please check our SOSP 2021 paper.
 
 ### Panic Safety (Unsafe code that can create memory-safety issues when panicked)
 
