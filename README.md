@@ -103,6 +103,6 @@ Example: [futures#2239](https://github.com/rust-lang/futures-rs/issues/2239)
 
 Rudra was ran on the entirety of crates.io state as of July 4th, 2020 as well
 as the Rust standard library from `nightly-2020-08-26`. It managed to find 264
-new memory safety issues across the Rust ecosystem which resulted in 78 CVEs.
+new memory safety issues across the Rust ecosystem which resulted in 76 CVEs.
 
 The details of these bugs can be found in the [Rudra-PoC repo](https://github.com/sslab-gatech/Rudra-PoC).
