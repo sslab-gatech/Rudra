@@ -4,9 +4,9 @@ Rudra is a static analyzer to detect common undefined behaviors in Rust programs
 It is capable of analyzing single Rust packages as well as all the packages on
 crates.io.
 
-Rudra and its associated paper were presented at the
+Rudra and its associated paper will be presented at the
 *Proceedings of the 28th ACM Symposium on Operating Systems Principles 2021*
-(SOSP '21). ([PDF](https://github.com/sslab-gatech/Rudra-Artifacts/raw/master/paper/sosp21-paper341.pdf))
+(SOSP '21). ([preprint PDF](https://github.com/sslab-gatech/Rudra-Artifacts/raw/master/paper/sosp21-paper341.pdf))
 
 
 ## Usage
