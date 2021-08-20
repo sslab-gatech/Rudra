@@ -8,7 +8,6 @@ Rudra and its associated paper will be presented at the
 *Proceedings of the 28th ACM Symposium on Operating Systems Principles 2021*
 (SOSP '21). ([preprint PDF](https://github.com/sslab-gatech/Rudra-Artifacts/raw/master/paper/sosp21-paper341.pdf))
 
-
 ## Usage
 
 The easiest way to use Rudra is to use [Docker](https://www.docker.com/).

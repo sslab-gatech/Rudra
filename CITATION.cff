@@ -1,0 +1,45 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: Bae
+    given-names: Yechan
+    affiliation: "Georgia Institute of Technology"
+  - family-names: Kim
+    given-names: Youngsuk
+    affiliation: "Georgia Institute of Technology"
+  - family-names: Askar
+    given-names: Ammar
+    affiliation: "Georgia Institute of Technology"
+  - family-names: Lim
+    given-names: Jungwon
+    affiliation: "Georgia Institute of Technology"
+  - family-names: Kim
+    given-names: Taesoo
+    affiliation: "Georgia Institute of Technology"
+title: "Rudra Static Analyzer"
+date-released: 2021-08-20
+version: 0.1.0
+url: "https://github.com/sslab-gatech/Rudra"
+preferred-citation:
+  # This part is currently incomplete (no page numbers, etc.) and will be filled after the conference.
+  type: conference-paper
+  authors:
+    - family-names: Bae
+      given-names: Yechan
+      affiliation: "Georgia Institute of Technology"
+    - family-names: Kim
+      given-names: Youngsuk
+      affiliation: "Georgia Institute of Technology"
+    - family-names: Askar
+      given-names: Ammar
+      affiliation: "Georgia Institute of Technology"
+    - family-names: Lim
+      given-names: Jungwon
+      affiliation: "Georgia Institute of Technology"
+    - family-names: Kim
+      given-names: Taesoo
+      affiliation: "Georgia Institute of Technology"
+  journal: "ACM Symposium on Operating Systems Principles (SOSP)"
+  month: 10
+  title: "Rudra: Finding Memory Safety Bugs in Rust at the Ecosystem Scale"
+  year: 2021
