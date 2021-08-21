@@ -37,7 +37,10 @@ impl rustc_driver::Callbacks for RudraCompilerCalls {
 
         rudra::log::setup_logging(self.config.verbosity).expect("Rudra failed to initialize");
 
-        debug!("Input file name: {}", compiler.input().source_name());
+        debug!(
+            "Input file name: {}",
+            compiler.input().source_name().prefer_local()
+        );
         debug!("Crate name: {}", queries.crate_name().unwrap().peek_mut());
 
         progress_info!("Rudra started");
@@ -80,7 +83,7 @@ fn run_compiler(
 
     // Invoke compiler, and handle return code.
     let exit_code = rustc_driver::catch_with_exit_code(move || {
-        rustc_driver::run_compiler(&args, callbacks, None, None)
+        rustc_driver::RunCompiler::new(&args, callbacks).run()
     });
 
     exit_code

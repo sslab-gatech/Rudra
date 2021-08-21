@@ -8,7 +8,7 @@ pub fn phantom_indices<'tcx>(tcx: TyCtxt<'tcx>, adt_ty: Ty<'tcx>) -> Vec<u32> {
     // Store indices of gen_params that are in/out of `PhantomData<_>`
     let (mut in_phantom, mut out_phantom) = (FxHashSet::default(), FxHashSet::default());
 
-    if let ty::TyKind::Adt(adt_def, substs) = adt_ty.kind {
+    if let ty::TyKind::Adt(adt_def, substs) = adt_ty.kind() {
         for variant in &adt_def.variants {
             for field in &variant.fields {
                 let field_ty = field.ty(tcx, substs);
@@ -21,7 +21,7 @@ pub fn phantom_indices<'tcx>(tcx: TyCtxt<'tcx>, adt_ty: Ty<'tcx>) -> Vec<u32> {
 
                             for x in inner_ty.walk() {
                                 if let GenericArgKind::Type(ph_ty) = x.unpack() {
-                                    if let ty::TyKind::Param(ty) = ph_ty.kind {
+                                    if let ty::TyKind::Param(ty) = ph_ty.kind() {
                                         in_phantom.insert(ty.index);
                                     }
                                 }
@@ -29,7 +29,7 @@ pub fn phantom_indices<'tcx>(tcx: TyCtxt<'tcx>, adt_ty: Ty<'tcx>) -> Vec<u32> {
                             continue;
                         }
 
-                        if let ty::TyKind::Param(ty) = inner_ty.kind {
+                        if let ty::TyKind::Param(ty) = inner_ty.kind() {
                             out_phantom.insert(ty.index);
                         }
                     }

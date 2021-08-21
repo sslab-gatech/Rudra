@@ -229,7 +229,7 @@ pub fn print_span<'tcx>(tcx: TyCtxt<'tcx>, span: &Span) {
     let source_map = tcx.sess.source_map();
     eprintln!(
         "{}\n{}\n",
-        source_map.span_to_string(span.clone()),
+        source_map.span_to_diagnostic_string(span.clone()),
         source_map.span_to_snippet(span.clone()).unwrap()
     );
 }
@@ -240,7 +240,7 @@ pub fn print_span_to_file<'tcx>(tcx: TyCtxt<'tcx>, span: &Span, output_name: &st
     let filename = format!("{}/logs/{}", sysroot, output_name);
     let content = format!(
         "{}\n{}\n",
-        source_map.span_to_string(span.clone()),
+        source_map.span_to_diagnostic_string(span.clone()),
         source_map.span_to_snippet(span.clone()).unwrap()
     );
     std::fs::write(filename, content).expect("Unable to write file");

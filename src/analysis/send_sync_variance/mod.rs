@@ -9,14 +9,14 @@ mod strict;
 mod utils;
 
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
-use rustc_hir::def_id::DefId;
+use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_hir::{GenericBound, GenericParam, GenericParamKind, WherePredicate};
-use rustc_hir::{HirId, ItemKind, Node};
+use rustc_hir::{HirId, Impl, ItemKind, Node};
 use rustc_middle::mir::terminator::Mutability;
 use rustc_middle::ty::{
     self,
     subst::{self, GenericArgKind},
-    AssocKind, GenericParamDef, GenericParamDefKind, List, PredicateAtom, Ty, TyCtxt, TyS,
+    AssocKind, GenericParamDef, GenericParamDefKind, List, PredicateKind, Ty, TyCtxt, TyS,
 };
 use rustc_span::symbol::sym;
 

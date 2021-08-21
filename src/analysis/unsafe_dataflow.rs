@@ -2,7 +2,7 @@ use rustc_hir::{def_id::DefId, BodyId};
 use rustc_middle::mir::Operand;
 use rustc_middle::ty::subst::SubstsRef;
 use rustc_middle::ty::{Instance, ParamEnv, TyKind};
-use rustc_span::Span;
+use rustc_span::{Span, DUMMY_SP};
 
 use snafu::{Backtrace, Snafu};
 use termcolor::Color;
@@ -294,15 +294,14 @@ mod inner {
                     if_chain! {
                         if let Operand::Move(place) = arg;
                         let place_ty = place.ty(caller_body, tcx);
-                        if let TyKind::RawPtr(ty_and_mut) = place_ty.ty.kind;
+                        if let TyKind::RawPtr(ty_and_mut) = place_ty.ty.kind();
                         let pointed_ty = ty_and_mut.ty;
-                        if let Some(copy_trait_did) = tcx.lang_items().copy_trait();
-                        if tcx.type_implements_trait((
-                            copy_trait_did,
-                            pointed_ty,
-                            callee_substs,
-                            tcx.param_env(callee_did),
-                        ));
+                        if tcx.subst_and_normalize_erasing_regions(
+                                callee_substs,
+                                ParamEnv::reveal_all(),
+                                pointed_ty,
+                            )
+                            .is_copy_modulo_regions(tcx.at(DUMMY_SP), tcx.param_env(callee_did));
                         then {
                             return true;
                         }

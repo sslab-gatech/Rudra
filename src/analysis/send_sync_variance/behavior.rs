@@ -126,7 +126,7 @@ pub(crate) fn adt_behavior<'tcx>(
     if let Some(relevant_impls) = rcx.index_adt_cache(&adt_did) {
         // Inspect `impl`s relevant to the given ADT.
         for (impl_hir_id, impl_self_ty) in relevant_impls.iter() {
-            if let ty::TyKind::Adt(impl_self_adt_def, impl_substs) = impl_self_ty.kind {
+            if let ty::TyKind::Adt(impl_self_adt_def, impl_substs) = impl_self_ty.kind() {
                 let impl_self_ty_name = tcx.item_name(impl_self_adt_def.did);
                 if adt_ty_name != impl_self_ty_name {
                     continue;
@@ -145,7 +145,7 @@ pub(crate) fn adt_behavior<'tcx>(
                 // * Take `&self` within its first parameter type.
                 // * Construct the Self type, but don't contain `self` within its inputs.
                 let relevant_safe_fns = tcx
-                    .associated_items(impl_hir_id.owner)
+                    .associated_items(impl_hir_id.to_def_id())
                     .in_definition_order()
                     .filter_map(|assoc_item| {
                         if assoc_item.kind == AssocKind::Fn {
@@ -162,7 +162,7 @@ pub(crate) fn adt_behavior<'tcx>(
                                 let mut walker = fn_sig.inputs()[0].walk();
                                 while let Some(node) = walker.next() {
                                     if let GenericArgKind::Type(ty) = node.unpack() {
-                                        if let ty::TyKind::Ref(_, _, Mutability::Not) = ty.kind {
+                                        if let ty::TyKind::Ref(_, _, Mutability::Not) = ty.kind() {
                                             return Some(FnType::TakeBorrowedSelf(fn_did));
                                         }
                                     }

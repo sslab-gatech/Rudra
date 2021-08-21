@@ -6,7 +6,7 @@ macro_rules! convert {
 
 macro_rules! log_err {
     ($err:expr) => {
-        $err.fail::<()>().unwrap_err().log();
+        $err.fail::<()>().unwrap_err().log()
     };
 }
 

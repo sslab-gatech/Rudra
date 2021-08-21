@@ -7,15 +7,15 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
     /// (ADT: struct / enum / union)
     pub fn suspicious_sync(
         &mut self,
-        impl_hir_id: HirId,
+        impl_hir_id: LocalDefId,
         send_trait_def_id: DefId,
         sync_trait_def_id: DefId,
         copy_trait_def_id: DefId,
     ) -> Option<(DefId, BehaviorFlag)> {
         let rcx = self.rcx;
         let tcx = rcx.tcx();
-        if let Some(trait_ref) = tcx.impl_trait_ref(impl_hir_id.owner) {
-            if let ty::TyKind::Adt(adt_def, impl_trait_substs) = trait_ref.self_ty().kind {
+        if let Some(trait_ref) = tcx.impl_trait_ref(impl_hir_id) {
+            if let ty::TyKind::Adt(adt_def, impl_trait_substs) = trait_ref.self_ty().kind() {
                 let adt_did = adt_def.did;
                 let adt_ty = tcx.type_of(adt_did);
 
@@ -92,13 +92,13 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
 
                 // Iterate over predicates to check trait bounds on generic params.
                 for atom in tcx
-                    .param_env(impl_hir_id.owner)
+                    .param_env(impl_hir_id)
                     .caller_bounds()
                     .iter()
-                    .map(|x| x.skip_binders())
+                    .map(|x| x.kind().skip_binder())
                 {
-                    if let PredicateAtom::Trait(trait_predicate, _) = atom {
-                        if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind {
+                    if let PredicateKind::Trait(trait_predicate) = atom {
+                        if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind() {
                             let pre_map_idx = PreMapIdx(param_ty.index);
                             if let Some(mapped_idx) = generic_param_idx_map.get(&pre_map_idx) {
                                 let trait_did = trait_predicate.def_id();
@@ -144,14 +144,14 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
     /// (ADT: struct / enum / union)
     pub fn suspicious_send(
         &mut self,
-        impl_hir_id: HirId,
+        impl_hir_id: LocalDefId,
         send_trait_def_id: DefId,
         sync_trait_def_id: DefId,
         copy_trait_def_id: DefId,
     ) -> Option<(DefId, BehaviorFlag)> {
         let tcx = self.rcx.tcx();
-        if let Some(trait_ref) = tcx.impl_trait_ref(impl_hir_id.owner) {
-            if let ty::TyKind::Adt(adt_def, impl_trait_substs) = trait_ref.self_ty().kind {
+        if let Some(trait_ref) = tcx.impl_trait_ref(impl_hir_id) {
+            if let ty::TyKind::Adt(adt_def, impl_trait_substs) = trait_ref.self_ty().kind() {
                 let adt_did = adt_def.did;
                 let adt_ty = tcx.type_of(adt_did);
 
@@ -207,13 +207,13 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
 
                 // Iterate over predicates to check trait bounds on generic params.
                 for atom in tcx
-                    .param_env(impl_hir_id.owner)
+                    .param_env(impl_hir_id)
                     .caller_bounds()
                     .iter()
-                    .map(|x| x.skip_binders())
+                    .map(|x| x.kind().skip_binder())
                 {
-                    if let PredicateAtom::Trait(trait_predicate, _) = atom {
-                        if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind {
+                    if let PredicateKind::Trait(trait_predicate) = atom {
+                        if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind() {
                             let pre_map_idx = PreMapIdx(param_ty.index);
                             if let Some(mapped_idx) = generic_param_idx_map.get(&pre_map_idx) {
                                 let trait_did = trait_predicate.def_id();

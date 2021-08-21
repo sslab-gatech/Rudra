@@ -1,6 +1,9 @@
 use std::rc::Rc;
 
-use rustc_hir::{def_id::DefId, BodyId, HirId};
+use rustc_hir::{
+    def_id::{DefId, LocalDefId},
+    BodyId, ConstContext, HirId,
+};
 use rustc_middle::mir::{self, TerminatorKind};
 use rustc_middle::ty::{Ty, TyCtxt, TyKind};
 use rustc_span::Span;
@@ -148,11 +151,11 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
                         .map(|(place, block)| (place, block.index()));
 
                     if let mir::Operand::Constant(box func) = func_operand {
-                        let func_ty = func.literal.ty;
-                        match func_ty.kind {
+                        let func_ty = func.literal.ty();
+                        match func_ty.kind() {
                             TyKind::FnDef(def_id, callee_substs) => {
                                 ir::TerminatorKind::StaticCall {
-                                    callee_did: def_id,
+                                    callee_did: *def_id,
                                     callee_substs,
                                     args: args.clone(),
                                     cleanup,
@@ -160,7 +163,7 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
                                 }
                             }
                             TyKind::FnPtr(_) => ir::TerminatorKind::FnPtr {
-                                value: func.literal.val.clone(),
+                                value: func.literal.clone(),
                             },
                             _ => panic!("invalid callee of type {:?}", func_ty),
                         }
@@ -191,7 +194,12 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
         tcx: TyCtxt<'tcx>,
         def_id: DefId,
     ) -> Result<&'tcx mir::Body<'tcx>, MirInstantiationError> {
-        if tcx.is_mir_available(def_id) {
+        if tcx.is_mir_available(def_id)
+            && matches!(
+                tcx.hir().body_const_context(def_id.expect_local()),
+                None | Some(ConstContext::ConstFn)
+            )
+        {
             Ok(tcx.optimized_mir(def_id))
         } else {
             debug!(
@@ -202,7 +210,7 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
         }
     }
 
-    pub fn index_adt_cache(&self, adt_did: &DefId) -> Option<&Vec<(&HirId, Ty)>> {
+    pub fn index_adt_cache(&self, adt_did: &DefId) -> Option<&Vec<(LocalDefId, Ty)>> {
         self.adt_impl_cache.get(adt_did)
     }
 

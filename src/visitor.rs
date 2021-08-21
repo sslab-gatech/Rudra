@@ -1,6 +1,9 @@
 use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::{
-    def_id::DefId, intravisit, itemlikevisit::ItemLikeVisitor, Block, BodyId, HirId, ItemKind,
+    def_id::{DefId, LocalDefId},
+    intravisit,
+    itemlikevisit::ItemLikeVisitor,
+    Block, BodyId, HirId, Impl, ItemKind,
 };
 use rustc_middle::ty::{Ty, TyCtxt, TyKind};
 use rustc_span::Span;
@@ -34,17 +37,17 @@ impl<'tcx> ItemLikeVisitor<'tcx> for RelatedFnCollector<'tcx> {
     fn visit_item(&mut self, item: &'tcx rustc_hir::Item<'tcx>) {
         let hir_map = self.tcx.hir();
         match &item.kind {
-            ItemKind::Impl {
+            ItemKind::Impl(Impl {
                 unsafety: _unsafety,
                 generics: _generics,
                 self_ty,
                 items: impl_items,
                 ..
-            } => {
+            }) => {
                 let key = Some(self_ty.hir_id);
                 let entry = self.hash_map.entry(key).or_insert(Vec::new());
                 entry.extend(impl_items.iter().filter_map(|impl_item_ref| {
-                    let hir_id = impl_item_ref.id.hir_id;
+                    let hir_id = impl_item_ref.id.hir_id();
                     hir_map
                         .maybe_body_owned_by(hir_id)
                         .map(|body_id| (body_id, impl_item_ref.span))
@@ -55,7 +58,7 @@ impl<'tcx> ItemLikeVisitor<'tcx> for RelatedFnCollector<'tcx> {
                 let key = None;
                 let entry = self.hash_map.entry(key).or_insert(Vec::new());
                 entry.extend(trait_items.iter().filter_map(|trait_item_ref| {
-                    let hir_id = trait_item_ref.id.hir_id;
+                    let hir_id = trait_item_ref.id.hir_id();
                     hir_map
                         .maybe_body_owned_by(hir_id)
                         .map(|body_id| (body_id, trait_item_ref.span))
@@ -76,6 +79,10 @@ impl<'tcx> ItemLikeVisitor<'tcx> for RelatedFnCollector<'tcx> {
 
     fn visit_impl_item(&mut self, _impl_item: &'tcx rustc_hir::ImplItem<'tcx>) {
         // We don't process items inside impl blocks
+    }
+
+    fn visit_foreign_item(&mut self, _foreign_item: &'tcx rustc_hir::ForeignItem<'tcx>) {
+        // We don't process foreign items
     }
 }
 
@@ -124,7 +131,7 @@ impl<'tcx> intravisit::Visitor<'tcx> for ContainsUnsafe<'tcx> {
 /// `impl_self_ty` in the return value may differ from `tcx.type_of(ADT.DefID)`,
 /// as different instantiations of the same ADT are distinct `Ty`s.
 /// (e.g. Foo<i32, i64>, Foo<String, i32>)
-pub type AdtImplMap<'tcx> = FxHashMap<DefId, Vec<(&'tcx HirId, Ty<'tcx>)>>;
+pub type AdtImplMap<'tcx> = FxHashMap<DefId, Vec<(LocalDefId, Ty<'tcx>)>>;
 
 /// Create & initialize `AdtImplMap`.
 /// `AdtImplMap` is initialized before analysis of each crate,
@@ -132,12 +139,12 @@ pub type AdtImplMap<'tcx> = FxHashMap<DefId, Vec<(&'tcx HirId, Ty<'tcx>)>>;
 pub fn create_adt_impl_map<'tcx>(tcx: TyCtxt<'tcx>) -> AdtImplMap<'tcx> {
     let mut map = FxHashMap::default();
 
-    for (impl_hir_id, item) in tcx.hir().krate().items.iter() {
-        if let ItemKind::Impl { self_ty, .. } = &item.kind {
+    for item in tcx.hir().krate().items() {
+        if let ItemKind::Impl(Impl { self_ty, .. }) = item.kind {
             // `Self` type of the given impl block.
             let impl_self_ty = tcx.type_of(self_ty.hir_id.owner);
 
-            if let TyKind::Adt(impl_self_adt_def, _impl_substs) = impl_self_ty.kind {
+            if let TyKind::Adt(impl_self_adt_def, _impl_substs) = impl_self_ty.kind() {
                 // We use `AdtDef.did` as key for `AdtImplMap`.
                 // For any crazy instantiation of the same generic ADT (Foo<i32>, Foo<String>, etc..),
                 // `AdtDef.did` refers to the original ADT definition.
@@ -145,7 +152,7 @@ pub fn create_adt_impl_map<'tcx>(tcx: TyCtxt<'tcx>) -> AdtImplMap<'tcx> {
 
                 map.entry(impl_self_adt_def.did)
                     .or_insert_with(|| Vec::new())
-                    .push((impl_hir_id, impl_self_ty));
+                    .push((item.def_id, impl_self_ty));
             }
         }
     }
