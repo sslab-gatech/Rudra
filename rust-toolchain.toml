@@ -1,3 +1,4 @@
 [toolchain]
+# Update rudra-runner.rs when updating the compiler version
 channel = "nightly-2020-08-26"
 components = ["rustc-dev", "llvm-tools-preview"]

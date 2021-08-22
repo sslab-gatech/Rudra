@@ -1,4 +1,5 @@
 use std::env;
+use std::ffi::OsStr;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
@@ -113,10 +114,7 @@ fn main() -> Result<()> {
                 "cargo rudra -Zno-index-update --locked -j 1",
                 &path,
                 &[
-                    (
-                        "RUSTUP_TOOLCHAIN",
-                        include_str!("../../../rust-toolchain").trim().as_ref(),
-                    ),
+                    ("RUSTUP_TOOLCHAIN", OsStr::new("nightly-2020-08-26")),
                     ("CARGO_HOME", rudra_home_dir.cargo_home_dir().as_ref()),
                     ("SCCACHE_DIR", rudra_home_dir.sccache_home_dir().as_ref()),
                     ("SCCACHE_CACHE_SIZE", "10T".as_ref()),
