@@ -128,10 +128,9 @@ fn cargo_package() -> cargo_metadata::Package {
     if let Some(manifest_path) = &manifest_path {
         cmd.manifest_path(manifest_path);
     }
-    let mut metadata = if let Ok(metadata) = cmd.exec() {
-        metadata
-    } else {
-        show_error("Could not obtain Cargo metadata");
+    let mut metadata = match cmd.exec() {
+        Ok(metadata) => metadata,
+        Err(e) => show_error(format!("Could not obtain Cargo metadata\n{}", e)),
     };
 
     let current_dir = std::env::current_dir();
