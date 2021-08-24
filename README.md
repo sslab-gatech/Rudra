@@ -13,7 +13,9 @@ Rudra and its associated paper will be presented at the
 The easiest way to use Rudra is to use [Docker](https://www.docker.com/).
 
 1. First, make sure your system has Docker and Python 3 installed.
-2. Run `docker build . -t rudra:latest`.
+2. Add `rudra:latest` image on your system. There are two ways of doing this:
+    * `docker pull ghcr.io/sslab-gatech/rudra:master && docker tag ghcr.io/sslab-gatech/rudra:master rudra:latest`
+    * Alternatively, you can build your own image with `docker build . -t rudra:latest`
 3. Run `./setup_rudra_runner_home.py <directory>` and set `RUDRA_RUNNER_HOME` to that directory.
    Example: `./setup_rudra_runner_home.py ~/rudra-home && export RUDRA_RUNNER_HOME=$HOME/rudra-home`.
     * There are two scripts, `./setup_rudra_runner_home.py` and `./setup_rudra_runner_home_fixed.py`.
@@ -31,6 +33,17 @@ docker-cargo-rudra <directory>
 ```
 
 The log and report are printed to stderr by default.
+
+### Run Rudra with different compiler version
+
+Rudra uses `nightly-2020-08-26` compiler,
+and it can only analyze projects that compiles with this version of the compiler.
+We plan to update the supported compiler version after SOSP '21 [artifact evaluation](https://sysartifacts.github.io/sosp2021/).
+Meanwhile, you can use ghcr.io/sslab-gatech/rudra:2021-08-20 image for Rudra with `nightly-2021-08-20` compiler.
+
+Check [the version page][version] for all supported versions.
+
+[version]: https://github.com/sslab-gatech/Rudra/pkgs/container/rudra/versions?filters%5Bversion_type%5D=tagged
 
 ## Bug Types Detected by Rudra
 
