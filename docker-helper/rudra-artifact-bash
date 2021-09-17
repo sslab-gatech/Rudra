@@ -7,8 +7,12 @@ if [[ -z $RUDRA_RUNNER_HOME ]]; then
     exit 1
 fi
 
+if [[ -z $RUSTUP_TOOLCHAIN ]]; then
+    RUSTUP_TOOLCHAIN="nightly-2020-08-26"
+fi
+
 docker run -it --rm --user "$(id -u)":"$(id -g)" -v "$RUDRA_RUNNER_HOME":/tmp/rudra-runner-home \
   --env CARGO_HOME=/tmp/rudra-runner-home/cargo_home \
   --env SCCACHE_DIR=/tmp/rudra-runner-home/sccache_home --env SCCACHE_CACHE_SIZE=10T \
-  --env RUSTUP_TOOLCHAIN=nightly-2020-08-26 \
+  --env RUSTUP_TOOLCHAIN="$RUSTUP_TOOLCHAIN" \
   --env RUDRA_RUNNER_HOME=/tmp/rudra-runner-home rudra-artifact:latest
