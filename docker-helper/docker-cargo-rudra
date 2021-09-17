@@ -21,8 +21,8 @@ if [[ -z $RUDRA_RUNNER_HOME ]]; then
     exit 1
 fi
 
-if [[ -z $RUSTUP_TOOLCHAIN ]]; then
-    RUSTUP_TOOLCHAIN="nightly-2020-08-26"
+if [[ -z $RUDRA_RUSTUP_TOOLCHAIN ]]; then
+    RUDRA_RUSTUP_TOOLCHAIN="nightly-2020-08-26"
 fi
 
 if [[ -n $2 ]]; then
@@ -36,5 +36,5 @@ docker run -t --rm --user "$(id -u)":"$(id -g)" -v "$RUDRA_RUNNER_HOME":/tmp/rud
     ${DOCKER_ARGS} \
     --env CARGO_HOME=/tmp/rudra-runner-home/cargo_home \
     --env SCCACHE_DIR=/tmp/rudra-runner-home/sccache_home --env SCCACHE_CACHE_SIZE=10T \
-    --env RUSTUP_TOOLCHAIN="$RUSTUP_TOOLCHAIN" \
+    --env RUSTUP_TOOLCHAIN="$RUDRA_RUSTUP_TOOLCHAIN" \
     -v "$(realpath $1)":/tmp/rudra -it -w /tmp/rudra rudra:latest cargo rudra ${CARGO_ARGS}
