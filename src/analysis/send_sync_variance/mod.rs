@@ -10,8 +10,10 @@ mod utils;
 
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::{DefId, LocalDefId};
-use rustc_hir::{GenericBound, GenericParam, GenericParamKind, WherePredicate};
-use rustc_hir::{HirId, Impl, ItemKind, Node};
+use rustc_hir::{
+    GenericBound, GenericParam, GenericParamKind, HirId, Impl, ImplPolarity, ItemId, ItemKind,
+    Node, WherePredicate,
+};
 use rustc_middle::mir::terminator::Mutability;
 use rustc_middle::ty::{
     self,
@@ -77,11 +79,16 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
         copy_trait_did: DefId,
     ) {
         // Iterate over `impl`s that implement `Send`.
-        for &impl_hir_id in self.rcx.tcx().hir().trait_impls(send_trait_did) {
-            if let Some((adt_def_id, send_sync_analyses)) =
-                self.suspicious_send(impl_hir_id, send_trait_did, sync_trait_did, copy_trait_did)
-            {
-                if send_sync_analyses.report_level() >= self.rcx.report_level() {
+        let hir = self.rcx.tcx().hir();
+        for &impl_id in hir.trait_impls(send_trait_did) {
+            let item = hir.item(ItemId { def_id: impl_id });
+            if_chain! {
+                if let ItemKind::Impl(impl_item) = &item.kind;
+                if impl_item.polarity == ImplPolarity::Positive;
+                if let Some((adt_def_id, send_sync_analyses)) =
+                    self.suspicious_send(impl_id, send_trait_did, sync_trait_did, copy_trait_did);
+                if send_sync_analyses.report_level() >= self.rcx.report_level();
+                then {
                     let tcx = self.rcx.tcx();
                     self.report_map
                         .entry(adt_def_id)
@@ -91,7 +98,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                             send_sync_analyses.report_level(),
                             AnalysisKind::SendSyncVariance(send_sync_analyses),
                             "Suspicious impl of `Send` found",
-                            impl_hir_id,
+                            impl_id,
                         ));
                 }
             }
@@ -107,11 +114,16 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
         copy_trait_did: DefId,
     ) {
         // Iterate over `impl`s that implement `Sync`.
-        for &impl_hir_id in self.rcx.tcx().hir().trait_impls(sync_trait_did) {
-            if let Some((struct_def_id, send_sync_analyses)) =
-                self.suspicious_sync(impl_hir_id, send_trait_did, sync_trait_did, copy_trait_did)
-            {
-                if send_sync_analyses.report_level() >= self.rcx.report_level() {
+        let hir = self.rcx.tcx().hir();
+        for &impl_id in hir.trait_impls(sync_trait_did) {
+            let item = hir.item(ItemId { def_id: impl_id });
+            if_chain! {
+                if let ItemKind::Impl(impl_item) = &item.kind;
+                if impl_item.polarity == ImplPolarity::Positive;
+                if let Some((struct_def_id, send_sync_analyses)) =
+                    self.suspicious_sync(impl_id, send_trait_did, sync_trait_did, copy_trait_did);
+                if send_sync_analyses.report_level() >= self.rcx.report_level();
+                then {
                     let tcx = self.rcx.tcx();
                     self.report_map
                         .entry(struct_def_id)
@@ -121,7 +133,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                             send_sync_analyses.report_level(),
                             AnalysisKind::SendSyncVariance(send_sync_analyses),
                             "Suspicious impl of `Sync` found",
-                            impl_hir_id,
+                            impl_id,
                         ));
                 }
             }
