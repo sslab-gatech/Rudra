@@ -38,11 +38,9 @@ The log and report are printed to stderr by default.
 
 ### Run Rudra with different compiler version
 
-Rudra uses `nightly-2020-08-26` compiler,
+Rudra is tied to a specific Rust compiler version,
 and it can only analyze projects that compiles with this version of the compiler.
-We plan to update the supported compiler version after SOSP '21 [artifact evaluation](https://sysartifacts.github.io/sosp2021/).
-Meanwhile, you can use ghcr.io/sslab-gatech/rudra:2021-08-20 image for Rudra with `nightly-2021-08-20` compiler.
-
+`master` branch uses `nightly-2021-08-20` version of Rust right now.
 Check [the version page][version] for all supported versions.
 
 [version]: https://github.com/sslab-gatech/Rudra/pkgs/container/rudra/versions?filters%5Bversion_type%5D=tagged
