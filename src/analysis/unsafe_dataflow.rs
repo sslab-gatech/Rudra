@@ -182,9 +182,7 @@ mod inner {
                         // Check for lifetime bypass
                         let symbol_vec = ext.get_def_path(callee_did);
                         if paths::STRONG_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
-                            if fn_called_on_copy(
-                                self.rcx,
-                                &self.body,
+                            if self.fn_called_on_copy(
                                 (callee_did, args),
                                 &[&PTR_READ[..], &PTR_DIRECT_READ[..]],
                             ) {
@@ -205,9 +203,7 @@ mod inner {
                                 .strong_bypasses
                                 .push(terminator.original.source_info.span);
                         } else if paths::WEAK_LIFETIME_BYPASS_LIST.contains(&symbol_vec) {
-                            if fn_called_on_copy(
-                                self.rcx,
-                                &self.body,
+                            if self.fn_called_on_copy(
                                 (callee_did, args),
                                 &[&PTR_WRITE[..], &PTR_DIRECT_WRITE[..]],
                             ) {
@@ -257,6 +253,35 @@ mod inner {
             self.status.behavior_flag = taint_analyzer.propagate();
             self.status
         }
+
+        fn fn_called_on_copy(
+            &self,
+            (callee_did, callee_args): (DefId, &Vec<Operand<'tcx>>),
+            paths: &[&[&str]],
+        ) -> bool {
+            let tcx = self.rcx.tcx();
+            let ext = tcx.ext();
+            for path in paths.iter() {
+                if ext.match_def_path(callee_did, path) {
+                    for arg in callee_args.iter() {
+                        if_chain! {
+                            if let Operand::Move(place) = arg;
+                            let place_ty = place.ty(self.body, tcx);
+                            if let TyKind::RawPtr(ty_and_mut) = place_ty.ty.kind();
+                            let pointed_ty = ty_and_mut.ty;
+                            if pointed_ty.is_copy_modulo_regions(tcx.at(DUMMY_SP), self.param_env);
+                            then {
+                                return true;
+                            }
+                        }
+                        // No need to inspect beyond first arg of the
+                        // target bypass functions.
+                        break;
+                    }
+                }
+            }
+            false
+        }
     }
 
     fn trace_calls_in_body<'tcx>(rcx: RudraCtxt<'tcx>, body_def_id: DefId) {
@@ -277,36 +302,6 @@ mod inner {
                 }
             }
         }
-    }
-
-    fn fn_called_on_copy<'tcx>(
-        rcx: RudraCtxt<'tcx>,
-        caller_body: &ir::Body<'tcx>,
-        (callee_did, callee_args): (DefId, &Vec<Operand<'tcx>>),
-        paths: &[&[&str]],
-    ) -> bool {
-        let tcx = rcx.tcx();
-        let ext = tcx.ext();
-        for path in paths.iter() {
-            if ext.match_def_path(callee_did, path) {
-                for arg in callee_args.iter() {
-                    if_chain! {
-                        if let Operand::Move(place) = arg;
-                        let place_ty = place.ty(caller_body, tcx);
-                        if let TyKind::RawPtr(ty_and_mut) = place_ty.ty.kind();
-                        let pointed_ty = ty_and_mut.ty;
-                        if pointed_ty.is_copy_modulo_regions(tcx.at(DUMMY_SP), tcx.param_env(callee_did));
-                        then {
-                            return true;
-                        }
-                    }
-                    // No need to inspect beyond first arg of the
-                    // target bypass functions.
-                    break;
-                }
-            }
-        }
-        false
     }
 
     // Check if the argument of `Vec::set_len()` is 0_usize.

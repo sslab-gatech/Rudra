@@ -25,3 +25,14 @@ where
     }
     f();
 }
+
+pub fn test_copy3<F, T, U>(f: F)
+where
+    F: FnOnce(),
+    U: Copy,
+{
+    unsafe {
+        core::ptr::read(0x1234 as *const T as *const U);
+    }
+    f();
+}
