@@ -30,7 +30,7 @@ You can add `.env` file for local customization. See "Configurations" for an exa
 
 ```
 # this executes: cargo install --path "$(dirname "$0")" --force
-./install-release
+./install-release.sh
 
 rudra --crate-type lib tests/unsafe_destructor/normal1.rs  # for single file testing (you need to set library include path, or use `cargo run` instead)
 cargo rudra  # for crate compilation
@@ -101,7 +101,8 @@ Run:
 cd ..
 git clone https://github.com/rust-lang/rust.git rust-nightly-2021-08-20
 cd rust-nightly-2021-08-20
-git checkout bf4342114
+# Can be found with rustc --version
+git checkout 6d64f7f69
 git submodule init
 git submodule update
 ```
