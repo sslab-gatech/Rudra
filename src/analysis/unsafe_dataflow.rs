@@ -1,6 +1,5 @@
 use rustc_hir::{def_id::DefId, BodyId};
 use rustc_middle::mir::Operand;
-use rustc_middle::ty::subst::SubstsRef;
 use rustc_middle::ty::{Instance, ParamEnv, TyKind};
 use rustc_span::{Span, DUMMY_SP};
 
@@ -186,7 +185,7 @@ mod inner {
                             if fn_called_on_copy(
                                 self.rcx,
                                 &self.body,
-                                (callee_did, callee_substs, args),
+                                (callee_did, args),
                                 &[&PTR_READ[..], &PTR_DIRECT_READ[..]],
                             ) {
                                 // read on Copy types is not a lifetime bypass.
@@ -209,7 +208,7 @@ mod inner {
                             if fn_called_on_copy(
                                 self.rcx,
                                 &self.body,
-                                (callee_did, callee_substs, args),
+                                (callee_did, args),
                                 &[&PTR_WRITE[..], &PTR_DIRECT_WRITE[..]],
                             ) {
                                 // writing Copy types is not a lifetime bypass.
@@ -283,7 +282,7 @@ mod inner {
     fn fn_called_on_copy<'tcx>(
         rcx: RudraCtxt<'tcx>,
         caller_body: &ir::Body<'tcx>,
-        (callee_did, callee_substs, callee_args): (DefId, SubstsRef<'tcx>, &Vec<Operand<'tcx>>),
+        (callee_did, callee_args): (DefId, &Vec<Operand<'tcx>>),
         paths: &[&[&str]],
     ) -> bool {
         let tcx = rcx.tcx();
@@ -296,12 +295,7 @@ mod inner {
                         let place_ty = place.ty(caller_body, tcx);
                         if let TyKind::RawPtr(ty_and_mut) = place_ty.ty.kind();
                         let pointed_ty = ty_and_mut.ty;
-                        if tcx.subst_and_normalize_erasing_regions(
-                                callee_substs,
-                                ParamEnv::reveal_all(),
-                                pointed_ty,
-                            )
-                            .is_copy_modulo_regions(tcx.at(DUMMY_SP), tcx.param_env(callee_did));
+                        if pointed_ty.is_copy_modulo_regions(tcx.at(DUMMY_SP), tcx.param_env(callee_did));
                         then {
                             return true;
                         }
