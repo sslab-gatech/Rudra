@@ -3,22 +3,19 @@
 //! more performant, but we are intentionally trying to hide the implementation
 //! detail here.
 
-use rustc_hir::{
-    def_id::{DefId, LOCAL_CRATE},
-    HirId,
-};
+use rustc_hir::def_id::{DefId, LocalDefId};
 
 use crate::prelude::*;
 
 /// Given a trait `DefId`, this iterator returns `HirId` of all local impl blocks
 /// that implements that trait.
 pub struct LocalTraitIter {
-    inner: std::vec::IntoIter<HirId>,
+    inner: std::vec::IntoIter<LocalDefId>,
 }
 
 impl LocalTraitIter {
     pub fn new<'tcx>(rcx: RudraCtxt<'tcx>, trait_def_id: DefId) -> Self {
-        let local_trait_impl_map = rcx.tcx().all_local_trait_impls(LOCAL_CRATE);
+        let local_trait_impl_map = rcx.tcx().all_local_trait_impls(());
         let impl_id_vec = local_trait_impl_map
             .get(&trait_def_id)
             .map(Clone::clone)
@@ -30,7 +27,7 @@ impl LocalTraitIter {
 }
 
 impl Iterator for LocalTraitIter {
-    type Item = HirId;
+    type Item = LocalDefId;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()

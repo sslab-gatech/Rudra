@@ -1,6 +1,6 @@
 # This docker image contains all the steps to analyze the nightly-2020-08-26
 # rustc and standard library.
-FROM rudra:latest
+FROM rudra:2020-08-26
 
 # Install xargo to easily compile rustc and the standard library.
 RUN cargo install xargo

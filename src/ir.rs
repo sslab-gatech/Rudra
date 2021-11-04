@@ -7,7 +7,7 @@ use rustc_hir::def_id::DefId;
 use rustc_index::vec::IndexVec;
 use rustc_middle::{
     mir,
-    ty::{self, subst::SubstsRef, Ty},
+    ty::{subst::SubstsRef, Ty},
 };
 
 #[derive(Debug)]
@@ -28,7 +28,7 @@ pub enum TerminatorKind<'tcx> {
         destination: Option<(mir::Place<'tcx>, usize)>,
     },
     FnPtr {
-        value: ty::ConstKind<'tcx>,
+        value: mir::ConstantKind<'tcx>,
     },
     Unimplemented(Cow<'static, str>),
 }

@@ -18,11 +18,11 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
         if_chain! {
             if let Some(node) = map.find(hir_id);
             if let Node::Item(item) = node;
-            if let ItemKind::Impl {
+            if let ItemKind::Impl(Impl {
                 ref generics,
                 of_trait: Some(ref trait_ref),
                 ..
-            } = item.kind;
+            }) = item.kind;
             if Some(send_trait_def_id) == trait_ref.trait_def_id();
             then {
                 // If `impl Send` doesn't involve generic parameters, don't catch it.
@@ -60,11 +60,11 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
         if_chain! {
             if let Some(node) = map.find(hir_id);
             if let Node::Item(item) = node;
-            if let ItemKind::Impl {
+            if let ItemKind::Impl(Impl {
                 ref generics,
                 of_trait: Some(ref trait_ref),
                 ..
-            } = item.kind;
+            }) = item.kind;
             if Some(sync_trait_def_id) == trait_ref.trait_def_id();
             then {
                 // If `impl Sync` doesn't involve generic parameters, don't catch it.
@@ -105,7 +105,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
 
                             // Check super-traits
                             for p in self.rcx.tcx().super_predicates_of(def_id).predicates {
-                                if let PredicateAtom::Trait(x, _) = p.0.skip_binders() {
+                                if let PredicateKind::Trait(x) = p.0.kind().skip_binder() {
                                     if target_trait_def_ids.contains(&x.trait_ref.def_id) {
                                         return true;
                                     }
@@ -134,7 +134,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                             }
 
                             for p in self.rcx.tcx().super_predicates_of(def_id).predicates {
-                                if let PredicateAtom::Trait(z, _) = p.0.skip_binders() {
+                                if let PredicateKind::Trait(z) = p.0.kind().skip_binder() {
                                     if target_trait_def_ids.contains(&z.trait_ref.def_id) {
                                         return true;
                                     }

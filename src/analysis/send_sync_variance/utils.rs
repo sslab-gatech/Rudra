@@ -12,7 +12,7 @@ pub fn generic_param_idx_mapper<'tcx>(
 
             // We ignore cases where a generic parameter is replaced with a concrete type.
             // e.g. `impl Send for My<A, i32> {}`
-            if let ty::TyKind::Param(param_ty) = ty.kind {
+            if let ty::TyKind::Param(param_ty) = ty.kind() {
                 generic_param_idx_mapper
                     .insert(PreMapIdx(param_ty.index), PostMapIdx(original.index));
             }
@@ -48,7 +48,7 @@ pub fn owned_generic_params_in_ty<'tcx>(
         }
 
         visited.insert(ty);
-        match ty.kind {
+        match ty.kind() {
             ty::TyKind::Param(param_ty) => {
                 owned_generic_params.insert(param_ty.index);
             }
@@ -68,7 +68,7 @@ pub fn owned_generic_params_in_ty<'tcx>(
                         for adt_variant in adt_def.variants.iter() {
                             for adt_field in adt_variant.fields.iter() {
                                 let ty = adt_field.ty(tcx, substs);
-                                if let ty::TyKind::Param(_) = ty.kind {
+                                if let ty::TyKind::Param(_) = ty.kind() {
                                     worklist.push(ty);
                                 }
                             }
@@ -107,7 +107,7 @@ pub fn borrowed_generic_params_in_ty<'tcx>(
         }
 
         visited.insert(ty);
-        match ty.kind {
+        match ty.kind() {
             ty::TyKind::Param(param_ty) => {
                 if borrowed {
                     borrowed_generic_params.insert(param_ty.index);
@@ -127,7 +127,7 @@ pub fn borrowed_generic_params_in_ty<'tcx>(
                         let adt_field_ty = adt_field.ty(tcx, substs);
                         // We peel off just one level of ADT layer when trying to find exposed `&T`.
                         // This helps to limit complexity & rule out Mutex-like FPs.
-                        if let ty::TyKind::Adt(_, _) = adt_field_ty.kind {
+                        if let ty::TyKind::Adt(_, _) = adt_field_ty.kind() {
                         } else {
                             worklist.push((adt_field_ty, borrowed));
                         }
@@ -174,10 +174,10 @@ pub fn find_pseudo_owned_in_fn_ctxt<'tcx>(
         .param_env(fn_did)
         .caller_bounds()
         .iter()
-        .map(|x| x.skip_binders())
+        .map(|x| x.kind().skip_binder())
     {
-        if let PredicateAtom::Trait(trait_predicate, _) = atom {
-            if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind {
+        if let PredicateKind::Trait(trait_predicate) = atom {
+            if let ty::TyKind::Param(param_ty) = trait_predicate.self_ty().kind() {
                 let substs = trait_predicate.trait_ref.substs;
                 let substs_types = substs.types().collect::<Vec<_>>();
 
@@ -186,7 +186,7 @@ pub fn find_pseudo_owned_in_fn_ctxt<'tcx>(
                 //             (param_ty)  (trait_predicate.trait_ref)
                 if PSEUDO_OWNED.contains(&tcx.def_path_str(trait_predicate.def_id()).as_str()) {
                     if substs_types.len() > 1 {
-                        if let ty::TyKind::Param(param_1) = substs_types[1].kind {
+                        if let ty::TyKind::Param(param_1) = substs_types[1].kind() {
                             fn_ctxt_pseudo_owned_param_idx_map
                                 .insert(PreMapIdx(param_ty.index), PreMapIdx(param_1.index));
                         }

@@ -1,7 +1,9 @@
 //! Unsafe destructor detector
 use rustc_hir::def_id::DefId;
 use rustc_hir::intravisit::{self, NestedVisitorMap, Visitor};
-use rustc_hir::{Block, BodyId, Expr, HirId, ImplItemId, ImplItemKind, ItemKind, Node, Unsafety};
+use rustc_hir::{
+    Block, BodyId, Expr, HirId, Impl, ImplItemId, ImplItemKind, ItemKind, Node, Unsafety,
+};
 use rustc_middle::ty::TyCtxt;
 
 use snafu::{Backtrace, OptionExt, Snafu};
@@ -49,12 +51,12 @@ impl<'tcx> UnsafeDestructorChecker<'tcx> {
         let drop_trait_def_id = unwrap_or!(drop_trait_def_id(self.rcx.tcx()) => return);
 
         for impl_item in LocalTraitIter::new(self.rcx, drop_trait_def_id) {
+            let tcx = self.rcx.tcx();
             if inner::UnsafeDestructorVisitor::check_drop_unsafety(
                 self.rcx,
-                impl_item,
+                tcx.hir().local_def_id_to_hir_id(impl_item),
                 drop_trait_def_id,
             ) {
-                let tcx = self.rcx.tcx();
                 rudra_report(Report::with_hir_id(
                     tcx,
                     ReportLevel::Warning,
@@ -100,7 +102,7 @@ mod inner {
             if_chain! {
                 if let Some(node) = map.find(hir_id);
                 if let Node::Item(item) = node;
-                if let ItemKind::Impl { of_trait: Some(ref trait_ref), items, .. } = item.kind;
+                if let ItemKind::Impl(Impl { of_trait: Some(ref trait_ref), items, .. }) = item.kind;
                 if Some(drop_trait_def_id) == trait_ref.trait_def_id();
                 then {
                     // `Drop` trait has only one required function.
@@ -152,9 +154,6 @@ mod inner {
                     intravisit::walk_block(self, block);
                     self.unsafe_nest_level -= 1;
                     return;
-                }
-                BlockCheckMode::PushUnsafeBlock(_) | BlockCheckMode::PopUnsafeBlock(_) => {
-                    log_err!(PushPopBlock);
                 }
             }
             intravisit::walk_block(self, block);

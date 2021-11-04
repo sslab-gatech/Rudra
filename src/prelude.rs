@@ -50,7 +50,7 @@ pub struct TyCtxtExtension<'tcx> {
 
 impl<'tcx> TyCtxtExtension<'tcx> {
     pub fn fn_type_unsafety(self, ty: Ty<'tcx>) -> AnalysisResult<'tcx, Unsafety> {
-        match ty.kind {
+        match ty.kind() {
             ty::FnDef(..) | ty::FnPtr(_) => {
                 let sig = ty.fn_sig(self.tcx);
                 Ok(sig.unsafety())
@@ -78,9 +78,10 @@ impl<'tcx> TyCtxtExtension<'tcx> {
 
     // rustc's `LateContext::get_def_path`
     // This code is compiler version dependent, so it needs to be updated when we upgrade a compiler.
-    // The current version is based on nightly-2020-08-26
+    // The current version is based on nightly-2021-08-20
     pub fn get_def_path(&self, def_id: DefId) -> Vec<Symbol> {
         use rustc_hir::definitions::{DefPathData, DisambiguatedDefPathData};
+        use rustc_middle::ty::print::with_no_trimmed_paths;
         use ty::print::Printer;
 
         pub struct AbsolutePathPrinter<'tcx> {
@@ -110,7 +111,7 @@ impl<'tcx> TyCtxtExtension<'tcx> {
 
             fn print_dyn_existential(
                 self,
-                _predicates: &'tcx ty::List<ty::ExistentialPredicate<'tcx>>,
+                _predicates: &'tcx ty::List<ty::Binder<'tcx, ty::ExistentialPredicate<'tcx>>>,
             ) -> Result<Self::DynExistential, Self::Error> {
                 Ok(())
             }
@@ -120,7 +121,7 @@ impl<'tcx> TyCtxtExtension<'tcx> {
             }
 
             fn path_crate(self, cnum: CrateNum) -> Result<Self::Path, Self::Error> {
-                Ok(vec![self.tcx.original_crate_name(cnum)])
+                Ok(vec![self.tcx.crate_name(cnum)])
             }
 
             fn path_qualified(
@@ -129,16 +130,18 @@ impl<'tcx> TyCtxtExtension<'tcx> {
                 trait_ref: Option<ty::TraitRef<'tcx>>,
             ) -> Result<Self::Path, Self::Error> {
                 if trait_ref.is_none() {
-                    if let ty::Adt(def, substs) = self_ty.kind {
+                    if let ty::Adt(def, substs) = self_ty.kind() {
                         return self.print_def_path(def.did, substs);
                     }
                 }
 
                 // This shouldn't ever be needed, but just in case:
-                Ok(vec![match trait_ref {
-                    Some(trait_ref) => Symbol::intern(&format!("{:?}", trait_ref)),
-                    None => Symbol::intern(&format!("<{}>", self_ty)),
-                }])
+                with_no_trimmed_paths(|| {
+                    Ok(vec![match trait_ref {
+                        Some(trait_ref) => Symbol::intern(&format!("{:?}", trait_ref)),
+                        None => Symbol::intern(&format!("<{}>", self_ty)),
+                    }])
+                })
             }
 
             fn path_append_impl(
@@ -150,15 +153,18 @@ impl<'tcx> TyCtxtExtension<'tcx> {
             ) -> Result<Self::Path, Self::Error> {
                 let mut path = print_prefix(self)?;
 
-                // LateContext's code says "This shouldn't ever be needed, but just in case"
-                // but it seems that we actually need this?
+                // This shouldn't ever be needed, but just in case:
                 path.push(match trait_ref {
-                    Some(trait_ref) => Symbol::intern(&format!(
-                        "<impl {} for {}>",
-                        trait_ref.print_only_trait_path(),
-                        self_ty
-                    )),
-                    None => Symbol::intern(&format!("<impl {}>", self_ty)),
+                    Some(trait_ref) => with_no_trimmed_paths(|| {
+                        Symbol::intern(&format!(
+                            "<impl {} for {}>",
+                            trait_ref.print_only_trait_path(),
+                            self_ty
+                        ))
+                    }),
+                    None => {
+                        with_no_trimmed_paths(|| Symbol::intern(&format!("<impl {}>", self_ty)))
+                    }
                 });
 
                 Ok(path)
@@ -176,7 +182,7 @@ impl<'tcx> TyCtxtExtension<'tcx> {
                     return Ok(path);
                 }
 
-                path.push(disambiguated_data.data.as_symbol());
+                path.push(Symbol::intern(&disambiguated_data.data.to_string()));
                 Ok(path)
             }
 

@@ -1,4 +1,4 @@
-use rustc_hir::hir_id::HirId;
+use rustc_hir::def_id::LocalDefId;
 use rustc_middle::ty::TyCtxt;
 
 use std::borrow::Cow;
@@ -81,27 +81,28 @@ impl Report {
         level: ReportLevel,
         analyzer: T,
         description: U,
-        item_hir_id: HirId,
+        item_hir_id: LocalDefId,
     ) -> Report
     where
         T: Into<Cow<'static, str>>,
         U: Into<Cow<'static, str>>,
     {
         let hir_map = tcx.hir();
+        let item_hir_id = hir_map.local_def_id_to_hir_id(item_hir_id);
         let span = hir_map.span(item_hir_id);
 
         let source_map = tcx.sess.source_map();
         let source = if span.from_expansion() {
             // User-Friendly report for macro-generated code
             rustc_hir_pretty::to_string(hir_map.krate(), |state| {
-                state.print_item(hir_map.item(item_hir_id));
+                state.print_item(hir_map.expect_item(item_hir_id));
             })
         } else {
             source_map
                 .span_to_snippet(span)
                 .unwrap_or_else(|e| format!("unable to get source: {:?}", e))
         };
-        let location = source_map.span_to_string(span);
+        let location = source_map.span_to_diagnostic_string(span);
 
         Report {
             level,
@@ -124,7 +125,7 @@ impl Report {
         U: Into<Cow<'static, str>>,
     {
         let source_map = tcx.sess.source_map();
-        let location = source_map.span_to_string(color_span.main_span());
+        let location = source_map.span_to_diagnostic_string(color_span.main_span());
 
         Report {
             level,
