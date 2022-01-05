@@ -36,6 +36,16 @@ docker-cargo-rudra <directory>
 
 The log and report are printed to stderr by default.
 
+### Run Rudra as GitHub Action
+
+Rudra can be run as a GitHub Action allowing the static analyze to be used in an Action workflow.
+
+```yml
+# Run Rudra
+- name: Rudra
+  uses: sslab-gatech/Rudra@master
+```
+
 ### Run Rudra with different compiler version
 
 Rudra is tied to a specific Rust compiler version,
