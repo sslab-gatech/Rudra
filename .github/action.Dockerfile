@@ -3,5 +3,5 @@
 # users to rebuild the container every time its run
 FROM ghcr.io/sslab-gatech/rudra:master
 
-ENTRYPOINT ["rudra"]
+ENTRYPOINT ["cargo", "rudra"]
 
