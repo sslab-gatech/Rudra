@@ -55,6 +55,15 @@ Check [the version page][version] for all supported versions.
 
 [version]: https://github.com/sslab-gatech/Rudra/pkgs/container/rudra/versions?filters%5Bversion_type%5D=tagged
 
+### Known Issues
+
+- Rudra does not support workspaces (#11).
+  You can install Rudra on your host system (see [DEV.md](./DEV.md))
+  and run analysis in the subdirectories to sidestep the problem for now.
+- Rudra does not support edition 2021 yet (#19).
+- Rudra does not support suppressing warnings in specific locations.
+  This could cause a usability issue when used in CI/CD due to false positives.
+
 ## Bug Types Detected by Rudra
 
 Rudra currently detects the following bug types.
