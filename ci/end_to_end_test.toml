@@ -1,7 +1,0 @@
-[[crates]]
-name = 'lock_api'
-version = '0.4.1'
-expected_reports = [
-    ['SendSyncVariance', 'src/mutex.rs:604:1: 607:2'],
-    ['SendSyncVariance', 'src/rwlock.rs:1517:1: 1520:2']
-]
