@@ -22,7 +22,7 @@ if [[ -z $RUDRA_RUNNER_HOME ]]; then
 fi
 
 if [[ -z $RUDRA_RUSTUP_TOOLCHAIN ]]; then
-    RUDRA_RUSTUP_TOOLCHAIN="nightly-2021-10-20"
+    RUDRA_RUSTUP_TOOLCHAIN="nightly-2021-10-21"
 fi
 
 if [[ -n $2 ]]; then
