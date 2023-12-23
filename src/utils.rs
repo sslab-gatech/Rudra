@@ -1,8 +1,8 @@
 use std::io::Write;
 use std::rc::Rc;
 
-use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
 use rustc_middle::mir::write_mir_pretty;
+use rustc_middle::ty::{Instance, InstanceDef, TyCtxt};
 use rustc_span::{CharPos, Span};
 
 use termcolor::{Buffer, Color, ColorSpec, WriteColor};
