@@ -144,7 +144,6 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
 /// Check Send Trait
 fn send_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
     convert!(tcx
-        // https://github.com/rust-lang/rust/commit/eec856bfbcd79d12352f81b44a9f04e5bb06bda5
         .get_diagnostic_item(sym::Send)
         .context(SendTraitNotFound))
 }
