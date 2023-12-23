@@ -5,7 +5,7 @@ FROM buildpack-deps:buster
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH \
-    RUST_VERSION=nightly-2021-08-20 \
+    RUST_VERSION=nightly-2021-10-21 \
     SCCACHE_VERSION=v0.2.15
 
 ENV RUSTFLAGS="-L ${RUSTUP_HOME}/toolchains/${RUST_VERSION}-x86_64-unknown-linux-gnu/lib" \

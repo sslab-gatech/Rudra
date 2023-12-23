@@ -3,7 +3,7 @@ name = "rudra"
 version = "0.1.0"
 authors = ["Yechan Bae <yechan@gatech.edu>"]
 default-run = "rudra"
-edition = "2018"
+edition = "2021"
 exclude = ["samples"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

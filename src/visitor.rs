@@ -27,7 +27,7 @@ impl<'tcx> RelatedFnCollector<'tcx> {
             hash_map: RelatedItemMap::default(),
         };
 
-        tcx.hir().krate().visit_all_item_likes(&mut collector);
+        tcx.hir().visit_all_item_likes(&mut collector);
 
         collector.hash_map
     }
@@ -139,7 +139,7 @@ pub type AdtImplMap<'tcx> = FxHashMap<DefId, Vec<(LocalDefId, Ty<'tcx>)>>;
 pub fn create_adt_impl_map<'tcx>(tcx: TyCtxt<'tcx>) -> AdtImplMap<'tcx> {
     let mut map = FxHashMap::default();
 
-    for item in tcx.hir().krate().items() {
+    for item in tcx.hir().items() {
         if let ItemKind::Impl(Impl { self_ty, .. }) = item.kind {
             // `Self` type of the given impl block.
             let impl_self_ty = tcx.type_of(self_ty.hir_id.owner);

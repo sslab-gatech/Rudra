@@ -13,13 +13,13 @@ pub fn phantom_indices<'tcx>(tcx: TyCtxt<'tcx>, adt_ty: Ty<'tcx>) -> Vec<u32> {
             for field in &variant.fields {
                 let field_ty = field.ty(tcx, substs);
 
-                let mut walker = field_ty.walk();
+                let mut walker = field_ty.walk(tcx);
                 while let Some(node) = walker.next() {
                     if let GenericArgKind::Type(inner_ty) = node.unpack() {
                         if inner_ty.is_phantom_data() {
                             walker.skip_current_subtree();
 
-                            for x in inner_ty.walk() {
+                            for x in inner_ty.walk(tcx) {
                                 if let GenericArgKind::Type(ph_ty) = x.unpack() {
                                     if let ty::TyKind::Param(ty) = ph_ty.kind() {
                                         in_phantom.insert(ty.index);

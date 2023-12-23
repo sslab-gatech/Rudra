@@ -50,7 +50,7 @@ Rudra can be run as a GitHub Action allowing the static analyze to be used in an
 
 Rudra is tied to a specific Rust compiler version,
 and it can only analyze projects that compiles with this version of the compiler.
-`master` branch uses `nightly-2021-08-20` version of Rust right now.
+`master` branch uses `nightly-2021-10-21` version of Rust right now.
 Check [the version page][version] for all supported versions.
 
 [version]: https://github.com/sslab-gatech/Rudra/pkgs/container/rudra/versions?filters%5Bversion_type%5D=tagged
@@ -60,7 +60,6 @@ Check [the version page][version] for all supported versions.
 - Rudra does not support workspaces (#11).
   You can install Rudra on your host system (see [DEV.md](./DEV.md))
   and run analysis in the subdirectories to sidestep the problem for now.
-- Rudra does not support edition 2021 yet (#19).
 - Rudra does not support suppressing warnings in specific locations.
   This could cause a usability issue when used in CI/CD due to false positives.
 
