@@ -20,6 +20,11 @@ export RUDRA_RUNNER_HOME="<your runner home path - use setup_rudra_runner_home.p
 export RUSTFLAGS="-L $HOME/.rustup/toolchains/${RUDRA_RUST_CHANNEL}-x86_64-unknown-linux-gnu/lib"
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.rustup/toolchains/${RUDRA_RUST_CHANNEL}-x86_64-unknown-linux-gnu/lib"
 
+# Install Rudra
+./install-debug.sh
+# OR
+./install-release.sh
+
 # Test your installation
 python test.py
 ```
