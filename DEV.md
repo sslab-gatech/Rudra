@@ -97,6 +97,7 @@ cargo rudra  # for crate compilation
 ### Setup rust-analyzer
 
 Run:
+
 ```
 cd ..
 git clone https://github.com/rust-lang/rust.git rust-nightly-2021-10-21
@@ -108,6 +109,7 @@ git submodule update
 ```
 
 Then, add this to the workspace setting (`.vscode/settings.json`):
+
 ```
 {
     "rust-analyzer.rustc.source": "<your path to rust-nightly-2021-10-21>/Cargo.toml"
@@ -115,12 +117,16 @@ Then, add this to the workspace setting (`.vscode/settings.json`):
 ```
 
 If you have any issues with `rust-analyzer` and proc-macros:
+
 1. After running the above code, still in the `rust-nightly-2021-10-21` directory, run:
+
 ```
 cd src/tools/rust-analyzer
 cargo build --release
 ```
+
 2. Add this to the workspace setting (`.vscode/settings.json`):
+
 ```
 {
    "rust-analyzer.server.path": "<your path to rust-nightly-2021-10-21>/src/tools/rust-analyzer/target/release/rust-analyzer"
