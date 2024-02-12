@@ -159,7 +159,7 @@ pub(crate) fn adt_behavior<'tcx>(
                                 // We already know the method takes `self` within its first parameter,
                                 // so we only check whether the first parameter contains a reference.
                                 // e.g. `&self`, `Box<&self>`, `Pin<&self>`, ..
-                                let mut walker = fn_sig.inputs()[0].walk();
+                                let mut walker = fn_sig.inputs()[0].walk(tcx);
                                 while let Some(node) = walker.next() {
                                     if let GenericArgKind::Type(ty) = node.unpack() {
                                         if let ty::TyKind::Ref(_, _, Mutability::Not) = ty.kind() {

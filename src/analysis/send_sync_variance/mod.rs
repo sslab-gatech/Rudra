@@ -144,7 +144,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
 /// Check Send Trait
 fn send_trait_def_id<'tcx>(tcx: TyCtxt<'tcx>) -> AnalysisResult<'tcx, DefId> {
     convert!(tcx
-        .get_diagnostic_item(sym::send_trait)
+        .get_diagnostic_item(sym::Send)
         .context(SendTraitNotFound))
 }
 

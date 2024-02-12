@@ -78,7 +78,7 @@ impl<'tcx> TyCtxtExtension<'tcx> {
 
     // rustc's `LateContext::get_def_path`
     // This code is compiler version dependent, so it needs to be updated when we upgrade a compiler.
-    // The current version is based on nightly-2021-08-20
+    // The current version is based on nightly-2021-10-21
     pub fn get_def_path(&self, def_id: DefId) -> Vec<Symbol> {
         use rustc_hir::definitions::{DefPathData, DisambiguatedDefPathData};
         use rustc_middle::ty::print::with_no_trimmed_paths;
