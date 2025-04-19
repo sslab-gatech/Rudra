@@ -19,6 +19,7 @@ to
 */
 // Strong bypasses
 pub const PTR_READ: [&str; 3] = ["core", "ptr", "read"];
+pub const PTR_READ_UNALIGNED: [&str; 3] = ["core", "ptr", "read_unaligned"];
 pub const PTR_DIRECT_READ: [&str; 5] = ["core", "ptr", "const_ptr", "<impl *const T>", "read"];
 
 pub const INTRINSICS_COPY: [&str; 3] = ["core", "intrinsics", "copy"];
@@ -31,6 +32,8 @@ pub const VEC_FROM_RAW_PARTS: [&str; 4] = ["alloc", "vec", "Vec", "from_raw_part
 pub const TRANSMUTE: [&str; 4] = ["core", "intrinsics", "", "transmute"];
 
 pub const PTR_WRITE: [&str; 3] = ["core", "ptr", "write"];
+pub const PTR_WRITE_UNALIGNED: [&str; 3] = ["core", "ptr", "write_unaligned"];
+
 pub const PTR_DIRECT_WRITE: [&str; 5] = ["core", "ptr", "mut_ptr", "<impl *mut T>", "write"];
 
 pub const PTR_AS_REF: [&str; 5] = ["core", "ptr", "const_ptr", "<impl *const T>", "as_ref"];
@@ -78,6 +81,7 @@ pub static SPECIAL_PATH_DISCOVERY: Lazy<PathSet> =
 pub static STRONG_LIFETIME_BYPASS_LIST: Lazy<PathSet> = Lazy::new(move || {
     PathSet::new(&[
         &PTR_READ,
+        &PTR_READ_UNALIGNED,
         &PTR_DIRECT_READ,
         //
         &INTRINSICS_COPY,
@@ -93,6 +97,7 @@ pub static WEAK_LIFETIME_BYPASS_LIST: Lazy<PathSet> = Lazy::new(move || {
         &TRANSMUTE,
         //
         &PTR_WRITE,
+        &PTR_WRITE_UNALIGNED,
         &PTR_DIRECT_WRITE,
         //
         &PTR_AS_REF,
@@ -120,6 +125,7 @@ pub static STRONG_BYPASS_MAP: Lazy<PathMap> = Lazy::new(move || {
 
     hashmap! {
         PTR_READ.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => BehaviorFlag::READ_FLOW,
+        PTR_READ_UNALIGNED.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => BehaviorFlag::READ_FLOW,
         PTR_DIRECT_READ.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => BehaviorFlag::READ_FLOW,
         //
         INTRINSICS_COPY.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => BehaviorFlag::COPY_FLOW,
@@ -138,6 +144,7 @@ pub static WEAK_BYPASS_MAP: Lazy<PathMap> = Lazy::new(move || {
         TRANSMUTE.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => BehaviorFlag::TRANSMUTE,
         //
         PTR_WRITE.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => BehaviorFlag::WRITE_FLOW,
+        PTR_WRITE_UNALIGNED.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => BehaviorFlag::WRITE_FLOW,
         PTR_DIRECT_WRITE.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => BehaviorFlag::WRITE_FLOW,
         //
         PTR_AS_REF.iter().map(|p| Symbol::intern(p)).collect::<Vec<_>>() => BehaviorFlag::PTR_AS_REF,
