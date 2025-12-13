@@ -12,7 +12,7 @@ use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_hir::{
     GenericBound, GenericParam, GenericParamKind, HirId, Impl, ImplPolarity, ItemKind,
-    Mutability, Node, WherePredicate,
+    Mutability, Node, WherePredicate, WherePredicateKind,
 };
 use rustc_middle::ty::{
     self,
