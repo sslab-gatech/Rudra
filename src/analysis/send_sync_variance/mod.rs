@@ -25,6 +25,7 @@ use snafu::{OptionExt, Snafu};
 use crate::analysis::{AnalysisKind, IntoReportLevel};
 use crate::prelude::*;
 use crate::report::{Report, ReportLevel};
+use crate::utils as crate_utils;
 
 use behavior::*;
 pub use phantom::*;
@@ -87,16 +88,18 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                     self.suspicious_send(impl_id, send_trait_did, sync_trait_did, copy_trait_did);
                 if send_sync_analyses.report_level() >= self.rcx.report_level();
                 then {
-                    self.report_map
-                        .entry(adt_def_id)
-                        .or_insert_with(|| Vec::with_capacity(2))
-                        .push(Report::with_hir_id(
-                            tcx,
-                            send_sync_analyses.report_level(),
-                            AnalysisKind::SendSyncVariance(send_sync_analyses),
-                            "Suspicious impl of `Send` found",
-                            impl_id,
-                        ));
+                    if let Some(color_span) = crate_utils::ColorSpan::new(tcx, item.span) {
+                        self.report_map
+                            .entry(adt_def_id)
+                            .or_insert_with(|| Vec::with_capacity(2))
+                            .push(Report::with_color_span(
+                                tcx,
+                                send_sync_analyses.report_level(),
+                                AnalysisKind::SendSyncVariance(send_sync_analyses),
+                                "Suspicious impl of `Send` found",
+                                &color_span,
+                            ));
+                    }
                 }
             }
         }
@@ -121,16 +124,19 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                     self.suspicious_sync(impl_id, send_trait_did, sync_trait_did, copy_trait_did);
                 if send_sync_analyses.report_level() >= self.rcx.report_level();
                 then {
-                    self.report_map
-                        .entry(struct_def_id)
-                        .or_insert_with(|| Vec::with_capacity(2))
-                        .push(Report::with_hir_id(
-                            tcx,
-                            send_sync_analyses.report_level(),
-                            AnalysisKind::SendSyncVariance(send_sync_analyses),
-                            "Suspicious impl of `Sync` found",
-                            impl_id,
-                        ));
+                    // Use ColorSpan for consistent multi-line source display like UnsafeDataflow
+                    if let Some(color_span) = crate_utils::ColorSpan::new(tcx, item.span) {
+                        self.report_map
+                            .entry(struct_def_id)
+                            .or_insert_with(|| Vec::with_capacity(2))
+                            .push(Report::with_color_span(
+                                tcx,
+                                send_sync_analyses.report_level(),
+                                AnalysisKind::SendSyncVariance(send_sync_analyses),
+                                "Suspicious impl of `Sync` found",
+                                &color_span,
+                            ));
+                    }
                 }
             }
         }
