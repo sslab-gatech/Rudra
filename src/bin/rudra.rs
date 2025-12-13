@@ -1,9 +1,10 @@
-#![feature(backtrace)]
 #![feature(rustc_private)]
 
 extern crate rustc_driver;
-extern crate rustc_errors;
+extern crate rustc_hir;
 extern crate rustc_interface;
+extern crate rustc_middle;
+extern crate rustc_session;
 
 #[macro_use]
 extern crate log;
@@ -11,7 +12,10 @@ extern crate log;
 use std::env;
 
 use rustc_driver::Compilation;
-use rustc_interface::{interface::Compiler, Queries};
+use rustc_hir::def_id::LOCAL_CRATE;
+use rustc_interface::interface::Compiler;
+use rustc_middle::ty::TyCtxt;
+use rustc_session::EarlyDiagCtxt;
 
 use rudra::log::Verbosity;
 use rudra::report::{default_report_logger, init_report_logger, ReportLevel};
@@ -31,25 +35,19 @@ impl rustc_driver::Callbacks for RudraCompilerCalls {
     fn after_analysis<'tcx>(
         &mut self,
         compiler: &Compiler,
-        queries: &'tcx Queries<'tcx>,
+        tcx: TyCtxt<'tcx>,
     ) -> Compilation {
-        compiler.session().abort_if_errors();
+        compiler.sess.dcx().abort_if_errors();
 
         rudra::log::setup_logging(self.config.verbosity).expect("Rudra failed to initialize");
 
-        debug!(
-            "Input file name: {}",
-            compiler.input().source_name().prefer_local()
-        );
-        debug!("Crate name: {}", queries.crate_name().unwrap().peek_mut());
+        debug!("Crate name: {}", tcx.crate_name(LOCAL_CRATE));
 
         progress_info!("Rudra started");
-        queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
-            analyze(tcx, self.config);
-        });
+        analyze(tcx, self.config);
         progress_info!("Rudra finished");
 
-        compiler.session().abort_if_errors();
+        compiler.sess.dcx().abort_if_errors();
         Compilation::Stop
     }
 }
@@ -83,7 +81,7 @@ fn run_compiler(
 
     // Invoke compiler, and handle return code.
     let exit_code = rustc_driver::catch_with_exit_code(move || {
-        rustc_driver::RunCompiler::new(&args, callbacks).run()
+        rustc_driver::run_compiler(&args, callbacks);
     });
 
     exit_code
@@ -121,7 +119,11 @@ fn parse_config() -> (RudraConfig, Vec<String>) {
 }
 
 fn main() {
-    rustc_driver::install_ice_hook(); // ICE: Internal Compilation Error
+    // ICE: Internal Compilation Error
+    rustc_driver::install_ice_hook(
+        "https://github.com/AntDroid/Rudra/issues/new",
+        |_| {},
+    );
 
     let exit_code = {
         // initialize the report logger
@@ -130,8 +132,9 @@ fn main() {
         let _logger_handle = init_report_logger(default_report_logger());
 
         // init rustc logger
+        let early_dcx = EarlyDiagCtxt::new(rustc_session::config::ErrorOutputType::default());
         if env::var_os("RUSTC_LOG").is_some() {
-            rustc_driver::init_rustc_env_logger();
+            rustc_driver::init_rustc_env_logger(&early_dcx);
         }
 
         if let Some(sysroot) = compile_time_sysroot() {

@@ -1,5 +1,3 @@
-#![feature(backtrace)]
-
 ///! This implementation is based on `cargo-miri`
 ///! https://github.com/rust-lang/miri/blob/master/src/bin/cargo-miri.rs
 #[macro_use]
@@ -7,16 +5,91 @@ extern crate log as log_crate;
 
 use std::env;
 use std::fmt::Display;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
+use log::LevelFilter;
 use rustc_version::VersionMeta;
-
 use wait_timeout::ChildExt;
 
-use rudra::log::{self, Verbosity};
-use rudra::{progress_error, progress_info};
+// ============================================================================
+// Inline logging utilities (to avoid linking against rustc_private rudra lib)
+// ============================================================================
+
+#[derive(Debug, Clone, Copy)]
+pub enum Verbosity {
+    Normal,
+    Verbose,
+    Trace,
+}
+
+pub fn setup_logging(verbosity: Verbosity) -> Result<(), fern::InitError> {
+    let mut base_config = fern::Dispatch::new();
+
+    base_config = match verbosity {
+        Verbosity::Normal => base_config.level(LevelFilter::Info),
+        Verbosity::Verbose => base_config.level(LevelFilter::Debug),
+        Verbosity::Trace => base_config.level(LevelFilter::Trace),
+    }
+    .level_for(
+        "rudra-progress",
+        if cfg!(debug_assertions) {
+            LevelFilter::Debug
+        } else {
+            LevelFilter::Info
+        },
+    );
+
+    if let Some(log_file_path) = env::var_os("RUDRA_LOG_PATH") {
+        let file_config = fern::Dispatch::new()
+            .filter(|metadata| metadata.target() == "rudra-progress")
+            .format(|out, message, record| {
+                out.finish(format_args!(
+                    "{} |PROGRESS-{:5}| {}",
+                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.6f"),
+                    record.level(),
+                    message
+                ))
+            })
+            .chain(fern::log_file(log_file_path)?);
+
+        base_config = base_config.chain(file_config);
+    }
+
+    let stdout_config = fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "{} |{:5}| [{}] {}",
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.6f"),
+                record.level(),
+                record.target(),
+                message
+            ))
+        })
+        .chain(io::stdout());
+
+    base_config.chain(stdout_config).apply()?;
+
+    Ok(())
+}
+
+macro_rules! progress_info {
+    ($($arg:tt)+) => (
+        ::log::info!(target: "rudra-progress", $($arg)+)
+    )
+}
+
+macro_rules! progress_error {
+    ($($arg:tt)+) => (
+        ::log::error!(target: "rudra-progress", $($arg)+)
+    )
+}
+
+// ============================================================================
+// Main cargo-rudra implementation
+// ============================================================================
 
 const CARGO_RUDRA_HELP: &str = r#"Tests crates with Rudra
 Usage:
@@ -226,6 +299,11 @@ fn clean_package(package_name: &str) {
     }
 }
 
+/// Check if the argument is "rustc" or a path ending with "rustc"
+fn is_rustc_arg(arg: &str) -> bool {
+    arg == "rustc" || arg.ends_with("/rustc") || arg.ends_with("\\rustc")
+}
+
 fn main() {
     // Check for version and help flags even when invoked as `cargo-rudra`.
     if std::env::args().any(|a| a == "--help" || a == "-h") {
@@ -233,16 +311,19 @@ fn main() {
         return;
     }
 
-    log::setup_logging(Verbosity::Normal).expect("Rudra failed to initialize");
+    setup_logging(Verbosity::Normal).expect("Rudra failed to initialize");
 
-    if let Some("rudra") = std::env::args().nth(1).as_ref().map(AsRef::as_ref) {
+    let first_arg = std::env::args().nth(1);
+    let first_arg_str = first_arg.as_deref().unwrap_or("");
+
+    if first_arg_str == "rudra" {
         progress_info!("Running cargo rudra");
         // This arm is for when `cargo rudra` is called. We call `cargo rustc` for each applicable target,
         // but with the `RUSTC` env var set to the `cargo-rudra` binary so that we come back in the other branch,
         // and dispatch the invocations to `rustc` and `rudra`, respectively.
         in_cargo_rudra();
         progress_info!("cargo rudra finished");
-    } else if let Some("rustc") = std::env::args().nth(1).as_ref().map(AsRef::as_ref) {
+    } else if is_rustc_arg(first_arg_str) {
         // This arm is executed when `cargo-rudra` runs `cargo rustc` with the `RUSTC_WRAPPER` env var set to itself:
         // dependencies get dispatched to `rustc`, the final test/binary to `rudra`.
         inside_cargo_rustc();

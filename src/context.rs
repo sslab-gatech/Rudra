@@ -93,7 +93,7 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
             .collect::<Vec<_>>();
 
         let basic_blocks: Vec<_> = body
-            .basic_blocks()
+            .basic_blocks
             .iter()
             .map(|basic_block| self.translate_basic_block(basic_block))
             .collect::<Result<Vec<_>, _>>()?;
@@ -141,29 +141,24 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
                 TerminatorKind::Call {
                     func: func_operand,
                     args,
-                    destination,
-                    cleanup,
+                    target,
                     ..
                 } => {
-                    let cleanup = cleanup.clone().map(|block| block.index());
-                    let destination = destination
-                        .clone()
-                        .map(|(place, block)| (place, block.index()));
+                    let destination = target.map(|block| block.index());
 
                     if let mir::Operand::Constant(box func) = func_operand {
-                        let func_ty = func.literal.ty();
+                        let func_ty = func.const_.ty();
                         match func_ty.kind() {
                             TyKind::FnDef(def_id, callee_substs) => {
                                 ir::TerminatorKind::StaticCall {
                                     callee_did: *def_id,
                                     callee_substs,
                                     args: args.clone(),
-                                    cleanup,
                                     destination,
                                 }
                             }
-                            TyKind::FnPtr(_) => ir::TerminatorKind::FnPtr {
-                                value: func.literal.clone(),
+                            TyKind::FnPtr(..) => ir::TerminatorKind::FnPtr {
+                                value: func.const_.clone(),
                             },
                             _ => panic!("invalid callee of type {:?}", func_ty),
                         }
@@ -171,8 +166,8 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
                         ir::TerminatorKind::Unimplemented("non-constant function call".into())
                     }
                 }
-                TerminatorKind::Drop { .. } | TerminatorKind::DropAndReplace { .. } => {
-                    // TODO: implement Drop and DropAndReplace terminators
+                TerminatorKind::Drop { .. } => {
+                    // TODO: implement Drop terminator
                     ir::TerminatorKind::Unimplemented(
                         format!("TODO terminator: {:?}", terminator).into(),
                     )
@@ -196,7 +191,7 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
     ) -> Result<&'tcx mir::Body<'tcx>, MirInstantiationError> {
         if tcx.is_mir_available(def_id)
             && matches!(
-                tcx.hir().body_const_context(def_id.expect_local()),
+                tcx.hir_body_const_context(def_id.expect_local()),
                 None | Some(ConstContext::ConstFn)
             )
         {
@@ -210,7 +205,7 @@ impl<'tcx> RudraCtxtOwner<'tcx> {
         }
     }
 
-    pub fn index_adt_cache(&self, adt_did: &DefId) -> Option<&Vec<(LocalDefId, Ty)>> {
+    pub fn index_adt_cache(&self, adt_did: &DefId) -> Option<&Vec<(LocalDefId, Ty<'tcx>)>> {
         self.adt_impl_cache.get(adt_did)
     }
 
