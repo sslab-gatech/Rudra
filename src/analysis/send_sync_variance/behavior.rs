@@ -117,17 +117,17 @@ pub(crate) fn adt_behavior<'tcx>(
     // Set of `T`s that appear only as `&T` in return type of APIs.
     let mut deref_generic_params = FxHashSet::default();
 
-    let adt_ty = tcx.type_of(adt_did);
+    let adt_ty = tcx.type_of(adt_did).instantiate_identity();
     // For ADT `Foo<A, B>` => adt_ty_name = `Foo`
     let adt_ty_name = tcx.item_name(adt_did);
 
-    let adt_generic_params = &tcx.generics_of(adt_did).params;
+    let adt_generic_params = &tcx.generics_of(adt_did).own_params;
 
     if let Some(relevant_impls) = rcx.index_adt_cache(&adt_did) {
         // Inspect `impl`s relevant to the given ADT.
         for (impl_hir_id, impl_self_ty) in relevant_impls.iter() {
-            if let ty::TyKind::Adt(impl_self_adt_def, impl_substs) = impl_self_ty.kind() {
-                let impl_self_ty_name = tcx.item_name(impl_self_adt_def.did);
+            if let ty::TyKind::Adt(impl_self_adt_def, impl_args) = impl_self_ty.kind() {
+                let impl_self_ty_name = tcx.item_name(impl_self_adt_def.did());
                 if adt_ty_name != impl_self_ty_name {
                     continue;
                 }
@@ -150,8 +150,8 @@ pub(crate) fn adt_behavior<'tcx>(
                     .filter_map(|assoc_item| {
                         if assoc_item.kind == AssocKind::Fn {
                             let fn_did = assoc_item.def_id;
-                            let fn_sig = tcx.fn_sig(fn_did).skip_binder();
-                            if let rustc_hir::Unsafety::Unsafe = fn_sig.unsafety {
+                            let fn_sig = tcx.fn_sig(fn_did).instantiate_identity().skip_binder();
+                            if fn_sig.safety.is_unsafe() {
                                 return None;
                             }
                             if assoc_item.fn_has_self_parameter {
@@ -159,7 +159,7 @@ pub(crate) fn adt_behavior<'tcx>(
                                 // We already know the method takes `self` within its first parameter,
                                 // so we only check whether the first parameter contains a reference.
                                 // e.g. `&self`, `Box<&self>`, `Pin<&self>`, ..
-                                let mut walker = fn_sig.inputs()[0].walk(tcx);
+                                let mut walker = fn_sig.inputs()[0].walk();
                                 while let Some(node) = walker.next() {
                                     if let GenericArgKind::Type(ty) = node.unpack() {
                                         if let ty::TyKind::Ref(_, _, Mutability::Not) = ty.kind() {
@@ -169,7 +169,7 @@ pub(crate) fn adt_behavior<'tcx>(
                                 }
                             } else {
                                 // Check if the function return type equals `Self`.
-                                if TyS::same_type(fn_sig.output(), adt_ty) {
+                                if fn_sig.output() == adt_ty {
                                     return Some(FnType::ConstructSelf(fn_did));
                                 }
                             }
@@ -180,7 +180,7 @@ pub(crate) fn adt_behavior<'tcx>(
                 // Since each `impl` block may assign different indices to equivalent generic parameters,
                 // We need one translation map per `impl` block.
                 let generic_param_idx_map =
-                    generic_param_idx_mapper(adt_generic_params, impl_substs);
+                    generic_param_idx_mapper(adt_generic_params, impl_args);
 
                 // Inspect selected functions' input/output types to determine `AdtBehavior`.
                 for fn_type in relevant_safe_fns {
@@ -188,10 +188,10 @@ pub(crate) fn adt_behavior<'tcx>(
                         FnType::ConstructSelf(fn_did) => {
                             let fn_ctxt_pseudo_owned_param_idx_map =
                                 find_pseudo_owned_in_fn_ctxt(tcx, fn_did);
-                            let fn_sig = tcx.fn_sig(fn_did).skip_binder();
+                            let fn_sig = tcx.fn_sig(fn_did).instantiate_identity().skip_binder();
                             // Check inputs of the constructor
                             for input_ty in fn_sig.inputs() {
-                                for owned_idx in owned_generic_params_in_ty(tcx, input_ty)
+                                for owned_idx in owned_generic_params_in_ty(tcx, *input_ty)
                                     .into_iter()
                                     .map(|idx| {
                                         *fn_ctxt_pseudo_owned_param_idx_map
@@ -209,7 +209,7 @@ pub(crate) fn adt_behavior<'tcx>(
                         FnType::TakeBorrowedSelf(method_did) => {
                             let fn_ctxt_pseudo_owned_param_idx_map =
                                 find_pseudo_owned_in_fn_ctxt(tcx, method_did);
-                            let fn_sig = tcx.fn_sig(method_did).skip_binder();
+                            let fn_sig = tcx.fn_sig(method_did).instantiate_identity().skip_binder();
 
                             // Check generic parameters that are passed as owned `T`.
                             for ty in fn_sig.inputs_and_output.iter() {

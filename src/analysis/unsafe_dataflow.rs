@@ -1,7 +1,8 @@
 use rustc_hir::{def_id::DefId, BodyId};
 use rustc_middle::mir::Operand;
-use rustc_middle::ty::{Instance, ParamEnv, TyKind};
-use rustc_span::{Span, DUMMY_SP};
+use rustc_middle::ty::{Instance, ParamEnv, TypingEnv, TypingMode, TyKind};
+use rustc_span::source_map::Spanned;
+use rustc_span::Span;
 
 use snafu::{Backtrace, Snafu};
 use termcolor::Color;
@@ -47,7 +48,6 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
 
     pub fn analyze(self) {
         let tcx = self.rcx.tcx();
-        let hir_map = tcx.hir();
 
         // Iterates all (type, related function) pairs
         for (_ty_hir_id, (body_id, related_item_span)) in self.rcx.types_with_related_items() {
@@ -73,13 +73,14 @@ impl<'tcx> UnsafeDataflowChecker<'tcx> {
                         color_span.add_sub_span(Color::Cyan, span);
                     }
 
+                    let body_owner = tcx.hir_body_owner_def_id(body_id);
                     rudra_report(Report::with_color_span(
                         tcx,
                         behavior_flag.report_level(),
                         AnalysisKind::UnsafeDataflow(behavior_flag),
                         format!(
                             "Potential unsafe dataflow issue in `{}`",
-                            tcx.def_path_str(hir_map.body_owner_def_id(body_id).to_def_id())
+                            tcx.def_path_str(body_owner.to_def_id())
                         ),
                         &color_span,
                     ))
@@ -136,17 +137,17 @@ mod inner {
         }
 
         pub fn analyze_body(rcx: RudraCtxt<'tcx>, body_id: BodyId) -> Option<UnsafeDataflowStatus> {
-            let hir_map = rcx.tcx().hir();
-            let body_did = hir_map.body_owner_def_id(body_id).to_def_id();
+            let tcx = rcx.tcx();
+            let body_did = tcx.hir_body_owner_def_id(body_id).to_def_id();
 
-            if rcx.tcx().ext().match_def_path(
+            if tcx.ext().match_def_path(
                 body_did,
                 &["rudra_paths_discovery", "PathsDiscovery", "discover"],
             ) {
                 // Special case for paths discovery
                 trace_calls_in_body(rcx, body_did);
                 None
-            } else if ContainsUnsafe::contains_unsafe(rcx.tcx(), body_id) {
+            } else if ContainsUnsafe::contains_unsafe(tcx, body_id) {
                 match rcx.translate_body(body_did).as_ref() {
                     Err(e) => {
                         // MIR is not available for def - log it and continue
@@ -154,7 +155,7 @@ mod inner {
                         None
                     }
                     Ok(body) => {
-                        let param_env = rcx.tcx().param_env(body_did);
+                        let param_env = tcx.param_env(body_did);
                         let body_analyzer = UnsafeDataflowBodyAnalyzer::new(rcx, param_env, body);
                         Some(body_analyzer.analyze())
                     }
@@ -223,9 +224,13 @@ mod inner {
                                 .push(terminator.original.source_info.span);
                         } else {
                             // Check for unresolvable generic function calls
-                            match Instance::resolve(
+                            let typing_env = TypingEnv {
+                                typing_mode: TypingMode::PostAnalysis,
+                                param_env: self.param_env,
+                            };
+                            match Instance::try_resolve(
                                 self.rcx.tcx(),
-                                self.param_env,
+                                typing_env,
                                 callee_did,
                                 callee_substs,
                             ) {
@@ -256,7 +261,7 @@ mod inner {
 
         fn fn_called_on_copy(
             &self,
-            (callee_did, callee_args): (DefId, &Vec<Operand<'tcx>>),
+            (callee_did, callee_args): (DefId, &[Spanned<Operand<'tcx>>]),
             paths: &[&[&str]],
         ) -> bool {
             let tcx = self.rcx.tcx();
@@ -265,11 +270,14 @@ mod inner {
                 if ext.match_def_path(callee_did, path) {
                     for arg in callee_args.iter() {
                         if_chain! {
-                            if let Operand::Move(place) = arg;
+                            if let Operand::Move(place) = &arg.node;
                             let place_ty = place.ty(self.body, tcx);
-                            if let TyKind::RawPtr(ty_and_mut) = place_ty.ty.kind();
-                            let pointed_ty = ty_and_mut.ty;
-                            if pointed_ty.is_copy_modulo_regions(tcx.at(DUMMY_SP), self.param_env);
+                            if let TyKind::RawPtr(pointed_ty, _mutability) = place_ty.ty.kind();
+                            let typing_env = TypingEnv {
+                                typing_mode: TypingMode::PostAnalysis,
+                                param_env: self.param_env,
+                            };
+                            if tcx.type_is_copy_modulo_regions(typing_env, *pointed_ty);
                             then {
                                 return true;
                             }
@@ -308,15 +316,19 @@ mod inner {
     fn vec_set_len_to_0<'tcx>(
         rcx: RudraCtxt<'tcx>,
         callee_did: DefId,
-        args: &Vec<Operand<'tcx>>,
+        args: &[Spanned<Operand<'tcx>>],
     ) -> bool {
         let tcx = rcx.tcx();
         for arg in args.iter() {
             if_chain! {
-                if let Operand::Constant(c) = arg;
-                if let Some(c_val) = c.literal.try_eval_usize(
+                if let Operand::Constant(c) = &arg.node;
+                let typing_env = TypingEnv {
+                    typing_mode: TypingMode::PostAnalysis,
+                    param_env: tcx.param_env(callee_did),
+                };
+                if let Some(c_val) = c.const_.try_eval_target_usize(
                     tcx,
-                    tcx.param_env(callee_did),
+                    typing_env,
                 );
                 if c_val == 0;
                 then {

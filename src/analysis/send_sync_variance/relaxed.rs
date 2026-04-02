@@ -14,9 +14,9 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
         send_trait_def_id: DefId,
         sync_trait_def_id: DefId,
     ) -> bool {
-        let map = self.rcx.tcx().hir();
+        let tcx = self.rcx.tcx();
+        let node = tcx.hir_node(hir_id);
         if_chain! {
-            if let Some(node) = map.find(hir_id);
             if let Node::Item(item) = node;
             if let ItemKind::Impl(Impl {
                 ref generics,
@@ -32,8 +32,9 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
 
                 // Inspect immediate trait bounds on generic parameters
                 if self.trait_in_imm_relaxed(
+                    tcx,
+                    generics,
                     &[send_trait_def_id, sync_trait_def_id],
-                    generics.params
                 ) {
                     return false;
                 }
@@ -41,7 +42,7 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
                 // Inspect trait bounds in where clauses
                 return !self.trait_in_where_relaxed(
                     &[send_trait_def_id, sync_trait_def_id],
-                    generics.where_clause.predicates
+                    generics.predicates
                 );
             }
         }
@@ -56,9 +57,9 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
         hir_id: HirId,
         sync_trait_def_id: DefId,
     ) -> bool {
-        let map = self.rcx.tcx().hir();
+        let tcx = self.rcx.tcx();
+        let node = tcx.hir_node(hir_id);
         if_chain! {
-            if let Some(node) = map.find(hir_id);
             if let Node::Item(item) = node;
             if let ItemKind::Impl(Impl {
                 ref generics,
@@ -74,15 +75,16 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
 
                 // Inspect immediate trait bounds on generic parameters
                 if self.trait_in_imm_relaxed(
-                   &[sync_trait_def_id],
-                   generics.params
+                    tcx,
+                    generics,
+                    &[sync_trait_def_id],
                 ) {
-                   return false;
+                    return false;
                 }
 
                 return !self.trait_in_where_relaxed(
                     &[sync_trait_def_id],
-                    generics.where_clause.predicates
+                    generics.predicates
                 );
             }
         }
@@ -91,23 +93,28 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
 
     fn trait_in_imm_relaxed(
         &self,
+        tcx: TyCtxt<'tcx>,
+        generics: &rustc_hir::Generics<'_>,
         target_trait_def_ids: &[DefId],
-        generic_params: &[GenericParam],
     ) -> bool {
-        for generic_param in generic_params {
+        for generic_param in generics.params {
             if let GenericParamKind::Type { .. } = generic_param.kind {
-                for bound in generic_param.bounds {
-                    if let GenericBound::Trait(x, ..) = bound {
-                        if let Some(def_id) = x.trait_ref.trait_def_id() {
-                            if target_trait_def_ids.contains(&def_id) {
-                                return true;
-                            }
+                // Use bounds_for_param to get bounds for this parameter
+                let param_def_id = generic_param.def_id;
+                for bound_pred in generics.bounds_for_param(param_def_id) {
+                    for bound in bound_pred.bounds {
+                        if let GenericBound::Trait(poly_trait_ref) = bound {
+                            if let Some(def_id) = poly_trait_ref.trait_ref.trait_def_id() {
+                                if target_trait_def_ids.contains(&def_id) {
+                                    return true;
+                                }
 
-                            // Check super-traits
-                            for p in self.rcx.tcx().super_predicates_of(def_id).predicates {
-                                if let PredicateKind::Trait(x) = p.0.kind().skip_binder() {
-                                    if target_trait_def_ids.contains(&x.trait_ref.def_id) {
-                                        return true;
+                                // Check super-traits
+                                for (clause, _span) in tcx.explicit_super_predicates_of(def_id).skip_binder() {
+                                    if let ty::ClauseKind::Trait(x) = clause.kind().skip_binder() {
+                                        if target_trait_def_ids.contains(&x.trait_ref.def_id) {
+                                            return true;
+                                        }
                                     }
                                 }
                             }
@@ -122,19 +129,20 @@ impl<'tcx> SendSyncVarianceChecker<'tcx> {
     fn trait_in_where_relaxed(
         &self,
         target_trait_def_ids: &[DefId],
-        where_predicates: &[WherePredicate],
+        where_predicates: &[WherePredicate<'_>],
     ) -> bool {
+        let tcx = self.rcx.tcx();
         for where_predicate in where_predicates {
-            if let WherePredicate::BoundPredicate(x) = where_predicate {
+            if let WherePredicateKind::BoundPredicate(x) = where_predicate.kind {
                 for bound in x.bounds {
-                    if let GenericBound::Trait(y, ..) = bound {
-                        if let Some(def_id) = y.trait_ref.trait_def_id() {
+                    if let GenericBound::Trait(poly_trait_ref) = bound {
+                        if let Some(def_id) = poly_trait_ref.trait_ref.trait_def_id() {
                             if target_trait_def_ids.contains(&def_id) {
                                 return true;
                             }
 
-                            for p in self.rcx.tcx().super_predicates_of(def_id).predicates {
-                                if let PredicateKind::Trait(z) = p.0.kind().skip_binder() {
+                            for (clause, _span) in tcx.explicit_super_predicates_of(def_id).skip_binder() {
+                                if let ty::ClauseKind::Trait(z) = clause.kind().skip_binder() {
                                     if target_trait_def_ids.contains(&z.trait_ref.def_id) {
                                         return true;
                                     }
